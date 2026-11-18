@@ -49,7 +49,7 @@ Running 13 simultaneous heavy streams caused the server drop in session `0654f84
 
 ### Wave C: 120 Documentary Style Recipes & AI CLI / DaVinci FCPXML v1.9 / Depth Matte Bridge
 - [x] **C1 (Pillar 3A Styles)**: Upgrade `styles/docBroadcast.tsx` (12 recipes) and `styles/vintageEditorial.tsx` (10 recipes); build `styles/macroTelemetry.tsx` (22 chart recipes) and `styles/forensicExhibits.tsx` (24 primary-source and media-collision stages) — 68 recipes total
-- [ ] **C2 (Pillar 3B Styles)**: Upgrade `styles/dataMaps3D.tsx` (remove WebGL leak, wire `src/maps/`); build `styles/systemSimulators.tsx` (26 mechanical/plumbing simulators) and `styles/uiSatireAndCollage.tsx` (24 household, scrip, and dry-wit stages)
+- [x] **C2 (Pillar 3B Styles)**: Upgrade `styles/dataMaps3D.tsx` (remove WebGL leak, wire `src/maps/`, 6 recipes) + `styles/diagramMetaphor.tsx` (6 recipes); build `styles/systemSimulators.tsx` (26 mechanical/plumbing simulators) and `styles/uiSatireAndCollage.tsx` (24 household, scrip, and dry-wit stages) — 62 recipes total (`130` combined across Suite A + Suite B)
 - [ ] **C3 (Pillars 6, 9, 10, 15 Tooling)**: Build `tools/ai_director.mjs` (DeepSeek, OpenAI, Gemini, Anthropic, Ollama, prompt-pack, and offline deterministic compiler); upgrade `studio/scripts/export-fcpxml.mjs` (V1 punch-in keyframes, V1-V4 Depth Sandwich lanes, A1-A3 stems); build `studio/scripts/master-audio.mjs` (`-14 LUFS`); upgrade `tools/room_object_swap.py` and `tools/OBJECT_SWAP_GUIDE.md`
 - [ ] **Gate C**: `tsc --noEmit` + `eslint` + Git commit & push
 
