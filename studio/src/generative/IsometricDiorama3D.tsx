@@ -77,7 +77,8 @@ function resolveBlockFaceColors(
   const isDarkSurface =
     overFootage ||
     register === "midnight_telemetry" ||
-    register === "drafting_blueprint";
+    register === "drafting_blueprint" ||
+    register === "vintage_newsreel";
 
   if (tone === "crimson") {
     return {
@@ -263,7 +264,8 @@ export const IsometricDiorama3D: React.FC<IsometricDiorama3DProps> = ({
   const isDark =
     overFootage ||
     themeRegister === "midnight_telemetry" ||
-    themeRegister === "drafting_blueprint";
+    themeRegister === "drafting_blueprint" ||
+    themeRegister === "vintage_newsreel";
 
   const surfaceBg = overFootage
     ? "rgba(15, 25, 35, 0.44)"
@@ -271,37 +273,66 @@ export const IsometricDiorama3D: React.FC<IsometricDiorama3DProps> = ({
       ? "#121E2B"
       : themeRegister === "drafting_blueprint"
         ? "#152638"
+        : themeRegister === "vintage_newsreel"
+          ? "#1E1A16"
+          : themeRegister === "archival_parchment"
+            ? "#EFE7D6"
+            : "#FAF8F3";
+
+  const surfaceBorder =
+    themeRegister === "vintage_newsreel" && !overFootage
+      ? "#5C4D3C"
+      : isDark
+        ? "rgba(191, 214, 234, 0.34)"
         : themeRegister === "archival_parchment"
-          ? "#EFE7D6"
-          : "#FAF8F3";
+          ? "#C9BEA8"
+          : "#E1DED5";
 
-  const surfaceBorder = isDark
-    ? "rgba(191, 214, 234, 0.34)"
-    : themeRegister === "archival_parchment"
-      ? "#C9BEA8"
-      : "#E1DED5";
+  const primaryInk =
+    themeRegister === "vintage_newsreel" && !overFootage
+      ? "#EFE6CF"
+      : isDark
+        ? "#FFF6E5"
+        : themeRegister === "archival_parchment"
+          ? "#231D15"
+          : "#1C2B3A";
 
-  const primaryInk = isDark
-    ? "#FFF6E5"
-    : themeRegister === "archival_parchment"
-      ? "#231D15"
-      : "#1C2B3A";
+  const secondaryInk =
+    themeRegister === "vintage_newsreel" && !overFootage
+      ? "#CBBFA4"
+      : isDark
+        ? "#FAECD4"
+        : themeRegister === "archival_parchment"
+          ? "#3B3125"
+          : "#364554";
 
-  const secondaryInk = isDark
-    ? "#FAECD4"
-    : themeRegister === "archival_parchment"
-      ? "#3B3125"
-      : "#364554";
+  const eyebrowInk =
+    themeRegister === "vintage_newsreel" && !overFootage
+      ? "#E6B055"
+      : isDark
+        ? "#BFD6EA"
+        : "#8C2D1E";
 
-  const eyebrowInk = isDark ? "#BFD6EA" : "#8C2D1E";
-
-  const plinthTopFill = isDark
-    ? "#1B2E42"
-    : themeRegister === "archival_parchment"
-      ? "#E5DCC8"
-      : "#F2F0EA";
-  const plinthLeftFill = isDark ? "#142333" : "#E1DDD3";
-  const plinthRightFill = isDark ? "#0F1B28" : "#CFCAC0";
+  const plinthTopFill =
+    themeRegister === "vintage_newsreel" && !overFootage
+      ? "#241F1A"
+      : isDark
+        ? "#1B2E42"
+        : themeRegister === "archival_parchment"
+          ? "#E5DCC8"
+          : "#F2F0EA";
+  const plinthLeftFill =
+    themeRegister === "vintage_newsreel" && !overFootage
+      ? "#1A1613"
+      : isDark
+        ? "#142333"
+        : "#E1DDD3";
+  const plinthRightFill =
+    themeRegister === "vintage_newsreel" && !overFootage
+      ? "#120F0D"
+      : isDark
+        ? "#0F1B28"
+        : "#CFCAC0";
   const gridStroke = isDark
     ? "rgba(191, 214, 234, 0.17)"
     : "rgba(28, 43, 58, 0.12)";

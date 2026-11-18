@@ -48,9 +48,11 @@ export type BlueprintConnectorKind = (typeof BLUEPRINT_CONNECTOR_KINDS)[number];
 
 export const BLUEPRINT_THEME_REGISTERS = [
   "paper_editorial",
+  "page_editorial",
   "midnight_telemetry",
   "drafting_blueprint",
   "archival_parchment",
+  "vintage_newsreel",
 ] as const;
 
 export type BlueprintThemeRegister = (typeof BLUEPRINT_THEME_REGISTERS)[number];
@@ -188,6 +190,8 @@ export interface IsometricBlockSpec {
 
 export interface PropRigData {
   archetype: PropArchetype;
+  /** Optional explicit PropVault ID override (delegates to PropVaultRenderer) */
+  propId?: string;
   eyebrow?: string;
   headline: string;
   metricText?: string;
@@ -532,6 +536,7 @@ export const BlueprintActorSchema = z.object({
   propRig: z
     .object({
       archetype: z.enum(PROP_ARCHETYPES),
+      propId: z.string().optional(),
       eyebrow: z.string().optional(),
       headline: z.string(),
       metricText: z.string().optional(),
