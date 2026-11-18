@@ -1,0 +1,545 @@
+{
+  "schemaVersion": "1.0.0",
+  "channelName": "Reading Room Cinema",
+  "playlistSearchTitle": "AI, National Debt & Global Power Explained",
+  "seasonNumber": 1,
+  "seasonYear": 2027,
+  "targetSeasonEpisodes": 30,
+  "cooldownHalfLifeTau": 2.5,
+  "lookbackWindowEpisodes": 5,
+  "showstopperBounds": {
+    "min": 3,
+    "max": 5
+  },
+  "seasonSlots": [
+    {
+      "episodeNumber": 1,
+      "episodeCode": "S01E01",
+      "status": "locked",
+      "strategyId": "STR-GEN-EXPLAINER",
+      "workingTitle": "The Allowance: AI vs $40.5T Debt",
+      "preferredLutId": "editorial-warm",
+      "preferredMotif": "hydraulic-spillway-and-veto-slash",
+      "reservedShowstoppers": [
+        "sp-ep01-shoe-bom-vaporizer",
+        "sp-ep01-whiteboard-iron-loan-flip",
+        "sp-ep01-port-1955-vs-2034-diptych",
+        "sp-ep01-wattage-10w-to-5gw-ladder",
+        "sp-ep01-walker-veto-allowance-slam"
+      ]
+    },
+    {
+      "episodeNumber": 2,
+      "episodeCode": "S01E02",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-FISHER-ARTIFACT",
+      "workingTitle": "Who Buys America's $40T Debt Now?",
+      "preferredLutId": "archival-parchment",
+      "preferredMotif": "rollover-conveyor-and-treasury-scale",
+      "reservedShowstoppers": [
+        "sp-ep02-tether-vs-tokyo-tbill-shift",
+        "sp-ep02-90day-rollover-conveyor",
+        "sp-ep02-genius-act-statutory-lock",
+        "sp-ep02-interest-overtakes-defense-scale"
+      ]
+    },
+    {
+      "episodeNumber": 3,
+      "episodeCode": "S01E03",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-BOYLE-CHAPTERED",
+      "workingTitle": "Big Tech's $176B AI Profit Trick?",
+      "preferredLutId": "midnight-desk",
+      "preferredMotif": "circular-spv-carousel-and-depreciation-ledger",
+      "reservedShowstoppers": [
+        "sp-ep03-nvidia-coreweave-spv-carousel",
+        "sp-ep03-server-lifespan-3yr-to-6yr-stretch",
+        "sp-ep03-176b-paper-profit-footnote-loupe",
+        "sp-ep03-off-balance-sheet-gpu-collateral-box"
+      ]
+    },
+    {
+      "episodeNumber": 4,
+      "episodeCode": "S01E04",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-HMW-PRIMER",
+      "workingTitle": "How AI Agents Break $2.5T Private Credit",
+      "preferredLutId": "documentary-slate",
+      "preferredMotif": "pik-toggle-valve-and-snowball",
+      "reservedShowstoppers": [
+        "sp-ep04-saas-pik-debt-snowball",
+        "sp-ep04-per-seat-license-evaporator",
+        "sp-ep04-bdc-10q-masked-default-unveil",
+        "sp-ep04-shadow-bank-tranche-cascade"
+      ]
+    },
+    {
+      "episodeNumber": 5,
+      "episodeCode": "S01E05",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-GEN-EXPLAINER",
+      "workingTitle": "How Insurance Breaks $13.4T Mortgages?",
+      "preferredLutId": "austin-august-heat",
+      "preferredMotif": "lidar-roof-scan-and-escrow-thermometer",
+      "reservedShowstoppers": [
+        "sp-ep05-california-lidar-roof-drone",
+        "sp-ep05-fixed-mortgage-variable-escrow-wedge",
+        "sp-ep05-fair-plan-29pct-shock-notice",
+        "sp-ep05-force-placed-zero-equity-trap"
+      ]
+    },
+    {
+      "episodeNumber": 6,
+      "episodeCode": "S01E06",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-FISHER-ARTIFACT",
+      "workingTitle": "China's 2026 Copper Trap for AI Grids",
+      "preferredLutId": "blueprint-cyanotype",
+      "preferredMotif": "transformer-waitlist-and-smelter-funnel",
+      "reservedShowstoppers": [
+        "sp-ep06-transformer-128wk-copper-trap",
+        "sp-ep06-17p5yr-copper-mine-chronometer",
+        "sp-ep06-china-72pct-refining-chokepoint",
+        "sp-ep06-pjm-94gw-deficit-breaker"
+      ]
+    },
+    {
+      "episodeNumber": 7,
+      "episodeCode": "S01E07",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-AIC-SPECULATIVE",
+      "workingTitle": "Why $265B Won't Save Apple From Taiwan",
+      "preferredLutId": "kodak-2383-print",
+      "preferredMotif": "wafer-lithography-and-euv-killswitch",
+      "reservedShowstoppers": [
+        "sp-ep07-taiwan-2nm-euv-killswitch",
+        "sp-ep07-maritime-insurance-monday-pull",
+        "sp-ep07-phoenix-4nm-vs-hsinchu-a16-die-split",
+        "sp-ep07-10t-blockade-market-cap-domino"
+      ]
+    },
+    {
+      "episodeNumber": 8,
+      "episodeCode": "S01E08",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-MAX-ESSAY",
+      "workingTitle": "How $20,000 Drones Break a $1T Budget",
+      "preferredLutId": "clean-room-pop",
+      "preferredMotif": "cost-exchange-scale-and-vls-matrix",
+      "reservedShowstoppers": [
+        "sp-ep08-drone-20k-vs-carrier-vls-drain",
+        "sp-ep08-100-to-1-interceptor-balance-scale",
+        "sp-ep08-96-cell-vls-magazine-depletion",
+        "sp-ep08-multiyear-missile-restock-queue"
+      ]
+    },
+    {
+      "episodeNumber": 9,
+      "episodeCode": "S01E09",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-FISHER-ARTIFACT",
+      "workingTitle": "How 550 Cables Carry $10T a Day",
+      "preferredLutId": "subsea-sodium",
+      "preferredMotif": "bathymetry-trench-and-anchor-sever",
+      "reservedShowstoppers": [
+        "sp-ep09-subsea-550-cable-anchor-cut",
+        "sp-ep09-17mm-garden-hose-core-cutaway",
+        "sp-ep09-swift-10t-daily-settlement-pulse",
+        "sp-ep09-hyperscaler-90pct-atlantic-monopoly"
+      ]
+    },
+    {
+      "episodeNumber": 10,
+      "episodeCode": "S01E10",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-BOYLE-CHAPTERED",
+      "workingTitle": "France's 4.93% Debt Cost vs Greece?",
+      "preferredLutId": "verdict-high-contrast",
+      "preferredMotif": "sovereign-spread-caliper-and-orderbook",
+      "reservedShowstoppers": [
+        "sp-ep10-france-greece-vigilante-flip",
+        "sp-ep10-67bps-spread-inversion-caliper",
+        "sp-ep10-tokyo-237pct-debt-jgb-pressure",
+        "sp-ep10-g7-status-shield-shatter"
+      ]
+    },
+    {
+      "episodeNumber": 11,
+      "episodeCode": "S01E11",
+      "status": "roadmap-packaged",
+      "strategyId": "STR-AIC-SPECULATIVE",
+      "workingTitle": "Why Social Security Runs Dry in 2032",
+      "preferredLutId": "cold-2030-deflation",
+      "preferredMotif": "trust-vault-hourglass-and-payroll-siphon",
+      "reservedShowstoppers": [
+        "sp-ep11-oasi-2032-vault-exhaustion",
+        "sp-ep11-form-941-human-12p4pct-vs-gpu-zero",
+        "sp-ep11-q4-2032-automatic-24pct-guillotine",
+        "sp-ep11-south-korea-0p72-demographic-mirror"
+      ]
+    },
+    {
+      "episodeNumber": 12,
+      "episodeCode": "S01E12",
+      "status": "season-blueprint",
+      "strategyId": "STR-AOTP-LADDER",
+      "workingTitle": "How Eurodollars Built a Shadow Fed",
+      "preferredLutId": "silver-gelatin-1941",
+      "preferredMotif": "split-century-archival-chronometer",
+      "reservedShowstoppers": [
+        "sp-ep12-1957-london-dollar-ledger-rung",
+        "sp-ep12-offshore-repo-collateral-chain",
+        "sp-ep12-fed-swap-line-emergency-valve"
+      ]
+    },
+    {
+      "episodeNumber": 13,
+      "episodeCode": "S01E13",
+      "status": "season-blueprint",
+      "strategyId": "STR-AIC-CLOCKED",
+      "workingTitle": "42 Hours: Inside SVB's $42B Mobile Run",
+      "preferredLutId": "midnight-desk",
+      "preferredMotif": "hydraulic-spillway-and-veto-slash",
+      "reservedShowstoppers": [
+        "sp-ep13-svb-slack-channel-deposit-drain",
+        "sp-ep13-hold-to-maturity-bond-duration-trap",
+        "sp-ep13-fedwire-cutoff-solvency-gate"
+      ]
+    },
+    {
+      "episodeNumber": 14,
+      "episodeCode": "S01E14",
+      "status": "season-blueprint",
+      "strategyId": "STR-MAX-ESSAY",
+      "workingTitle": "Why 3 PBMs Control 80% of US Drug Prices",
+      "preferredLutId": "editorial-warm",
+      "preferredMotif": "pik-toggle-valve-and-snowball",
+      "reservedShowstoppers": [
+        "sp-ep14-pbm-rebate-siphon-spread",
+        "sp-ep14-list-vs-net-insulin-staircase",
+        "sp-ep14-vertical-insurer-pharmacy-loop"
+      ]
+    },
+    {
+      "episodeNumber": 15,
+      "episodeCode": "S01E15",
+      "status": "season-blueprint",
+      "strategyId": "STR-FISHER-ARTIFACT",
+      "workingTitle": "Panama vs Suez: Who Prices World Trade?",
+      "preferredLutId": "subsea-sodium",
+      "preferredMotif": "bathymetry-trench-and-anchor-sever",
+      "reservedShowstoppers": [
+        "sp-ep15-gatun-lake-freshwater-lock-meter",
+        "sp-ep15-cape-of-good-hope-reroute-burn",
+        "sp-ep15-container-slot-auction-bidding-war"
+      ]
+    },
+    {
+      "episodeNumber": 16,
+      "episodeCode": "S01E16",
+      "status": "season-blueprint",
+      "strategyId": "STR-HMW-PRIMER",
+      "workingTitle": "How Private Equity Rolls Up Your Vet",
+      "preferredLutId": "archival-parchment",
+      "preferredMotif": "circular-spv-carousel-and-depreciation-ledger",
+      "reservedShowstoppers": [
+        "sp-ep16-clinic-multiple-arbitrage-stack",
+        "sp-ep16-sale-leaseback-rent-extraction",
+        "sp-ep16-local-brand-camouflage-wall"
+      ]
+    },
+    {
+      "episodeNumber": 17,
+      "episodeCode": "S01E17",
+      "status": "season-blueprint",
+      "strategyId": "STR-BOYLE-CHAPTERED",
+      "workingTitle": "Japan's 35-Year Carry Trade Unwind?",
+      "preferredLutId": "kodak-2383-print",
+      "preferredMotif": "rollover-conveyor-and-treasury-scale",
+      "reservedShowstoppers": [
+        "sp-ep17-yen-borrow-nasdaq-leverage-bridge",
+        "sp-ep17-boj-yield-cap-spring-release",
+        "sp-ep17-mrs-watanabe-fx-margin-cascade"
+      ]
+    },
+    {
+      "episodeNumber": 18,
+      "episodeCode": "S01E18",
+      "status": "season-blueprint",
+      "strategyId": "STR-GEN-EXPLAINER",
+      "workingTitle": "Why Property Taxes Break Fixed Retirees",
+      "preferredLutId": "austin-august-heat",
+      "preferredMotif": "lidar-roof-scan-and-escrow-thermometer",
+      "reservedShowstoppers": [
+        "sp-ep18-municipal-assessment-ratchet",
+        "sp-ep18-paid-off-home-tax-lien-trap",
+        "sp-ep18-school-bond-levy-waterfall"
+      ]
+    },
+    {
+      "episodeNumber": 19,
+      "episodeCode": "S01E19",
+      "status": "season-blueprint",
+      "strategyId": "STR-AOTP-LADDER",
+      "workingTitle": "Why GPS Spoofing Breaks Civil Aviation",
+      "preferredLutId": "blueprint-cyanotype",
+      "preferredMotif": "wafer-lithography-and-euv-killswitch",
+      "reservedShowstoppers": [
+        "sp-ep19-20-watt-satellite-signal-budget",
+        "sp-ep19-inertial-drift-vs-fake-sky-cone",
+        "sp-ep19-black-sea-cockpit-clock-jump"
+      ]
+    },
+    {
+      "episodeNumber": 20,
+      "episodeCode": "S01E20",
+      "status": "season-blueprint",
+      "strategyId": "STR-FISHER-ARTIFACT",
+      "workingTitle": "How 4 Traders Move 70% of World Grain",
+      "preferredLutId": "documentary-slate",
+      "preferredMotif": "transformer-waitlist-and-smelter-funnel",
+      "reservedShowstoppers": [
+        "sp-ep20-abcd-grain-silo-corridor-map",
+        "sp-ep20-fertilizer-natural-gas-feedstock-pipe",
+        "sp-ep20-port-elevator-basis-spread"
+      ]
+    },
+    {
+      "episodeNumber": 21,
+      "episodeCode": "S01E21",
+      "status": "season-blueprint",
+      "strategyId": "STR-AIC-SPECULATIVE",
+      "workingTitle": "When AI Models Run Out of Human Text",
+      "preferredLutId": "clean-room-pop",
+      "preferredMotif": "circular-spv-carousel-and-depreciation-ledger",
+      "reservedShowstoppers": [
+        "sp-ep21-synthetic-data-inbreeding-collapse",
+        "sp-ep21-publisher-paywall-licensing-fortress",
+        "sp-ep21-verifier-compute-scaling-wall"
+      ]
+    },
+    {
+      "episodeNumber": 22,
+      "episodeCode": "S01E22",
+      "status": "season-blueprint",
+      "strategyId": "STR-BOYLE-CHAPTERED",
+      "workingTitle": "America's $1.2T Municipal Pension Hole",
+      "preferredLutId": "silver-gelatin-1941",
+      "preferredMotif": "trust-vault-hourglass-and-payroll-siphon",
+      "reservedShowstoppers": [
+        "sp-ep22-7pct-assumed-return-mirage-bar",
+        "sp-ep22-private-credit-pension-allocation-shift",
+        "sp-ep22-city-service-cut-priority-blade"
+      ]
+    },
+    {
+      "episodeNumber": 23,
+      "episodeCode": "S01E23",
+      "status": "season-blueprint",
+      "strategyId": "STR-MAX-ESSAY",
+      "workingTitle": "Why $800B Auto Loans Hit Record Repo",
+      "preferredLutId": "cold-2030-deflation",
+      "preferredMotif": "pik-toggle-valve-and-snowball",
+      "reservedShowstoppers": [
+        "sp-ep23-84-month-negative-equity-rollover",
+        "sp-ep23-subprime-abs-tranche-delinquency-meter",
+        "sp-ep23-lpr-tow-truck-scan-grid"
+      ]
+    },
+    {
+      "episodeNumber": 24,
+      "episodeCode": "S01E24",
+      "status": "season-blueprint",
+      "strategyId": "STR-GEN-FIELD",
+      "workingTitle": "Inside Virginia's 4 GW Data Center Alley",
+      "preferredLutId": "editorial-warm",
+      "preferredMotif": "transformer-waitlist-and-smelter-funnel",
+      "reservedShowstoppers": [
+        "sp-ep24-loudoun-substation-corridor-walk",
+        "sp-ep24-diesel-backup-generator-row-test",
+        "sp-ep24-residential-ratepayer-transmission-bill"
+      ]
+    },
+    {
+      "episodeNumber": 25,
+      "episodeCode": "S01E25",
+      "status": "season-blueprint",
+      "strategyId": "STR-HMW-PRIMER",
+      "workingTitle": "How Passive Index Funds Lock Up Voting",
+      "preferredLutId": "archival-parchment",
+      "preferredMotif": "sovereign-spread-caliper-and-orderbook",
+      "reservedShowstoppers": [
+        "sp-ep25-big-three-proxy-vote-funnel",
+        "sp-ep25-inelastic-market-multiplier-spring",
+        "sp-ep25-s-and-p-inclusion-liquidity-wave"
+      ]
+    },
+    {
+      "episodeNumber": 26,
+      "episodeCode": "S01E26",
+      "status": "season-blueprint",
+      "strategyId": "STR-AIC-CLOCKED",
+      "workingTitle": "36 Minutes: The 2010 Trillion Flash Crash",
+      "preferredLutId": "verdict-high-contrast",
+      "preferredMotif": "split-century-archival-chronometer",
+      "reservedShowstoppers": [
+        "sp-ep26-e-mini-spoofing-orderbook-avalanche",
+        "sp-ep26-hot-potato-hft-liquidity-vanish",
+        "sp-ep26-stub-quote-one-penny-execution"
+      ]
+    },
+    {
+      "episodeNumber": 27,
+      "episodeCode": "S01E27",
+      "status": "season-blueprint",
+      "strategyId": "STR-FISHER-ARTIFACT",
+      "workingTitle": "Russia's 600-Ship Shadow Oil Tanker Map",
+      "preferredLutId": "subsea-sodium",
+      "preferredMotif": "bathymetry-trench-and-anchor-sever",
+      "reservedShowstoppers": [
+        "sp-ep27-ais-dark-ship-to-ship-transfer",
+        "sp-ep27-g7-price-cap-attestation-loophole",
+        "sp-ep27-danish-straits-uninsured-hull-risk"
+      ]
+    },
+    {
+      "episodeNumber": 28,
+      "episodeCode": "S01E28",
+      "status": "season-blueprint",
+      "strategyId": "STR-AOTP-LADDER",
+      "workingTitle": "Why Enriched Uranium Hitting a Wall?",
+      "preferredLutId": "blueprint-cyanotype",
+      "preferredMotif": "wafer-lithography-and-euv-killswitch",
+      "reservedShowstoppers": [
+        "sp-ep28-gas-centrifuge-swu-cascade-ladder",
+        "sp-ep28-haleu-19p75pct-smr-fuel-gap",
+        "sp-ep28-megatons-to-megawatts-depletion"
+      ]
+    },
+    {
+      "episodeNumber": 29,
+      "episodeCode": "S01E29",
+      "status": "season-blueprint",
+      "strategyId": "STR-BOYLE-CHAPTERED",
+      "workingTitle": "How Buy-Now-Pay-Later Hides Consumer Debt",
+      "preferredLutId": "midnight-desk",
+      "preferredMotif": "pik-toggle-valve-and-snowball",
+      "reservedShowstoppers": [
+        "sp-ep29-phantom-four-installment-stack",
+        "sp-ep29-credit-bureau-blindspot-ledger",
+        "sp-ep29-merchant-discount-fee-squeeze"
+      ]
+    },
+    {
+      "episodeNumber": 30,
+      "episodeCode": "S01E30",
+      "status": "season-blueprint",
+      "strategyId": "STR-GEN-EXPLAINER",
+      "workingTitle": "The 2035 Sovereign Debt Endgame Matrix",
+      "preferredLutId": "kodak-2383-print",
+      "preferredMotif": "rollover-conveyor-and-treasury-scale",
+      "reservedShowstoppers": [
+        "sp-ep30-four-endgame-levers-master-board",
+        "sp-ep30-financial-repression-real-yield-clamp",
+        "sp-ep30-household-real-asset-shield-ledger",
+        "sp-ep30-season-one-callback-synthesis-wall"
+      ]
+    }
+  ],
+  "episodes": [
+    {
+      "episodeNumber": 1,
+      "episodeCode": "S01E01",
+      "title": "The Allowance: AI vs $40.5T Debt",
+      "strategyId": "STR-GEN-EXPLAINER",
+      "recordedAtIso": "2027-01-04T00:00:00.000Z",
+      "styleCounts": {
+        "doc-archive-light-table": 6,
+        "doc-visual-investigation": 5,
+        "doc-split-fact-check": 4,
+        "diagram-hydraulic-plumbing": 5,
+        "diagram-isometric": 3,
+        "data-map-explainer": 3,
+        "vintage-1930s-depression-ledger": 2,
+        "vintage-company-scrip-voucher": 2,
+        "vintage-1941-ration-booklet": 2,
+        "liquid-glass-card": 4,
+        "liquid-glass-dock": 3,
+        "doc-bloomberg-terminal-clean": 3
+      },
+      "motionCombos": {
+        "dossier-slide-desk+loupe-scan-row+fade-out": 6,
+        "hydraulic-press-down+stamp-recoil-hold+curtain-close": 5,
+        "isometric-rise+orthographic-explode-layers+pop-down": 3,
+        "flip-y+card-tilt-3d+slide-left": 2,
+        "path-stroke-draw+sankey-particle-stream+fade-blur-out": 5,
+        "split-push-left+pendulum-tick-1hz+split-barn-doors": 4,
+        "stamp-slam+red-pen-strike+silence-hold": 3,
+        "zoom-punch+radar-sweep-reveal+fade-out": 3
+      },
+      "propIds": [
+        "DebtMonolithWall",
+        "ClaireAustinHouseRig",
+        "RunningShoeExplodedStack",
+        "PaloAltoFlipWhiteboard",
+        "W2WithholdingGuillotine",
+        "SpillwayDam3Tier",
+        "AutonomousPortGantry2034",
+        "IdlePier1955",
+        "GovernorVetoFountainPen",
+        "EmptyAirlineGate14A",
+        "ClosedScripWalletRig",
+        "CoalScripBrassToken1912",
+        "ShenzhenExpiringWallet",
+        "WattageApplianceNode",
+        "NuclearCoolingTowerLock",
+        "BritishRationBook1941"
+      ],
+      "glassPresets": [
+        "card",
+        "dock",
+        "pill",
+        "magnifier-card",
+        "timeline-scrubber",
+        "verdict-seal"
+      ],
+      "typographyModes": [
+        "cold-open-thesis-lock",
+        "ledger-tabular-rollup",
+        "chisel-highlighter-sweep",
+        "burstiness-staccato-cuts",
+        "court-syllabus-italic",
+        "veto-fountain-strike",
+        "debt-odometer-inline",
+        "silent-black-aphorism"
+      ],
+      "lutId": "editorial-warm",
+      "musicStems": [
+        "02-ledger-investigation",
+        "04-clockwork-mechanism",
+        "05-sovereign-tension",
+        "11-verdict-drone"
+      ],
+      "showstopperBlueprints": [
+        "sp-ep01-shoe-bom-vaporizer",
+        "sp-ep01-whiteboard-iron-loan-flip",
+        "sp-ep01-port-1955-vs-2034-diptych",
+        "sp-ep01-wattage-10w-to-5gw-ladder",
+        "sp-ep01-walker-veto-allowance-slam"
+      ],
+      "visualSignature": {
+        "signatureId": "sig-ep01-milk-editorial-warm-hydraulic-veto",
+        "primaryRegister": "milk-page-editorial",
+        "secondaryRegister": "archival-light-table",
+        "lutId": "editorial-warm",
+        "primaryMechanicalMotif": "hydraulic-spillway-and-veto-slash",
+        "scorePalette": [
+          "02-ledger-investigation",
+          "04-clockwork-mechanism",
+          "05-sovereign-tension",
+          "11-verdict-drone"
+        ]
+      }
+    }
+  ]
+}

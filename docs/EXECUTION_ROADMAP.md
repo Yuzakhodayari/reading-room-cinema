@@ -42,7 +42,7 @@ Running 13 simultaneous heavy streams caused the server drop in session `0654f84
 
 ### Wave B: Procedural Audio/LUTs, 30-Episode Vault, Generative Set-Pieces & Equalizer Compiler
 - [x] **B1 (Pillars 6 & 7 Audio/Color)**: Upgrade `generate-sfx.mjs` and synthesize 96 studio 48kHz WAVs; build `generate-music.mjs` and synthesize 12 seamless documentary stems; build `generate-luts.mjs` and generate 12 `.cube` LUTs; wire `SfxCue.tsx`, `MusicBed.tsx`, and `audio/soundRegistry.ts`
-- [ ] **B2 (Pillar 14 Novelty & Continuity)**: Build `novelty/continuityEngine.ts`, `novelty/episodeVault.ts`, `novelty/seasonRoadmap.ts` (Season 1 Episodes 1 to 11), `novelty/index.ts`, and seed `studio/episodes-vault.json`
+- [x] **B2 (Pillar 14 Novelty & Continuity)**: Build `novelty/continuityEngine.ts`, `novelty/episodeVault.ts`, `novelty/seasonRoadmap.ts` (Season 1 Episodes 1 to 11 + 30-slot blueprint), `novelty/index.ts`, and seed `studio/episodes-vault.json`
 - [ ] **B3 (Pillar 13 Generative Sandbox)**: Build `generative/SceneBlueprintRenderer.tsx`, `generative/presetSetPieces.ts` (24 flagship Episode 1 + Season 1 animated contraption set-pieces), and `generative/index.ts`
 - [ ] **B4 (Pillar 15 Equalizer Compiler)**: Build `equalizer/scriptLock.ts`, `equalizer/storyboardIR.ts`, `equalizer/schemaPruner.ts` (with Creativity Escalator), `equalizer/viterbiChoreographer.ts`, `equalizer/qualityGateAndHealer.ts` (35-gate critic + two-tier auto-healer), `equalizer/exemplars.ts`, `equalizer/index.ts`, plus root `AGENTS.md`, `CLAUDE.md`, and `DEEPSEEK_EQUALIZER.md`
 - [ ] **Gate B**: `tsc --noEmit` + `eslint` + asset verification (96 WAVs, 12 music stems, 12 LUTs) + Git commit & push
