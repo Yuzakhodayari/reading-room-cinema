@@ -1,77 +1,340 @@
-# Style Catalog & System Module Index
+# Style Worlds & Composable Creative Inventory
 
-Line-by-line code index mapping all **24 Reading Room visual styles** (matching our 24-style design grid and `STYLE_CATALOG` planner recipes) plus all **11 core system modules**.
+`studio/src/styles/index.ts` unifies **162 renderable style recipes** across **10 named Style Worlds**. `studio/src/registry/catalog.ts` indexes **1,451 unique addressable creative elements** across 15 typed element kinds, alongside **434 motion alias tokens** (`661` total resolvable motion tokens when combined with canonical self-tokens).
 
-All repository paths link directly to exact component and planner line ranges.
-
----
-
-## Part 1: All 24 Visual Styles (Line-by-Line)
-
-### A. Tactile & Optical Liquid Glass (`3` Styles)
-
-| # | Style | Planner Recipe ID | Implementation & Exact Lines | Beat Renderer Dispatch | Upstream Reference |
-|---|---|---|---|---|---|
-| 1 | **Sticker Explainer** | `diagram-sticker` ([`planner.ts`](../studio/src/director/planner.ts#L214-L222)) | [`StickerCutout`](../studio/src/styles/diagramMetaphor.tsx#L20-L64) (`10px` white sticker border + `sticker-pop` spring) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1333-L1348) | [mg-styles-15 (`19-paperclip`)](https://github.com/Vincentwei1021/mg-styles-15) |
-| 2 | **Collage** | `vintage-collage` ([`planner.ts`](../studio/src/director/planner.ts#L180-L189)) | [`CollageCutout`](../studio/src/styles/vintageEditorial.tsx#L243-L289) (torn scissor edges + stepped stop-motion) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1315-L1331) | [mg-styles-15 (`06-collage`)](https://github.com/Vincentwei1021/mg-styles-15) · [lemo-opuscar (`vintage-collage`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/vintage-collage) |
-| 3 | **Aurora & Glassmorphism -> Liquid Glass** | `liquid-glass-card` ([`#L31-L41`](../studio/src/director/planner.ts#L31-L41)), `liquid-glass-dock` ([`#L43-L53`](../studio/src/director/planner.ts#L43-L53)), `liquid-glass-toast` ([`#L55-L65`](../studio/src/director/planner.ts#L55-L65)) | Core [`LiquidGlassObject`](../studio/src/components/glass/LiquidGlassObject.tsx#L91-L316) + 6 presets in [`LiquidGlassPresets.tsx`](../studio/src/components/glass/LiquidGlassPresets.tsx#L121-L1257): `GlassCard` ([`#L121-L328`](../studio/src/components/glass/LiquidGlassPresets.tsx#L121-L328)), `GlassCornerPill` ([`#L343-L458`](../studio/src/components/glass/LiquidGlassPresets.tsx#L343-L458)), `GlassBottomDock` ([`#L478-L630`](../studio/src/components/glass/LiquidGlassPresets.tsx#L478-L630)), `GlassFloatingToolbar` ([`#L650-L797`](../studio/src/components/glass/LiquidGlassPresets.tsx#L650-L797)), `GlassToastAlert` ([`#L838-L973`](../studio/src/components/glass/LiquidGlassPresets.tsx#L838-L973)), `GlassSplitModal` ([`#L1129-L1257`](../studio/src/components/glass/LiquidGlassPresets.tsx#L1129-L1257)) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L854-L1045) | [mg-styles-15 (`12-aurora-glass`)](https://github.com/Vincentwei1021/mg-styles-15) |
+Every original commit `534d89a` style ID from `studio/src/director/planner.ts` (`24` legacy IDs) resolves directly through `STYLE_RECIPE_BY_ID`, `resolveStyleRecipe()`, and `renderStyleRecipe()`.
 
 ---
 
-### B. Edit & Documentary (`8` Styles)
+## 1. Verified Inventory Counts (`getCatalogSummary()` & `verifyCatalogIntegrity()`)
 
-| # | Style | Planner Recipe ID | Implementation & Exact Lines | Beat Renderer Dispatch | Upstream Reference |
-|---|---|---|---|---|---|
-| 4 | **`news-package`** | `doc-news-package` ([`planner.ts`](../studio/src/director/planner.ts#L69-L78)) | [`NewsPackageLowerThird`](../studio/src/styles/docBroadcast.tsx#L24-L163) (smoked-navy glass bar + `#1C2B3A`/`#A3402E` chips) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1048-L1061) | [lemo-opuscar (`news-package`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/news-package) |
-| 5 | **`caption-news`** | `doc-caption-news` ([`planner.ts`](../studio/src/director/planner.ts#L80-L89)) | [`CaptionNewsCard`](../studio/src/styles/docBroadcast.tsx#L175-L248) (`Page` `#FAF8F3` editorial summary card) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1063-L1075) | [lemo-opuscar (`caption-news`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/caption-news) |
-| 6 | **`visual-investigation`** | `doc-visual-investigation` ([`planner.ts`](../studio/src/director/planner.ts#L91-L101)) | [`VisualInvestigationBoard`](../studio/src/styles/docBroadcast.tsx#L259-L444) (evidence desk, `#F8ECE8`/`#E6C3B9` flagged row, soft 4-frame dip) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1077-L1096) | [lemo-opuscar (`visual-investigation`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/visual-investigation) |
-| 7 | **`archive-lighttable`** | `doc-archive-light-table` ([`planner.ts`](../studio/src/director/planner.ts#L103-L112)) | [`ArchiveLightTable`](../studio/src/styles/docBroadcast.tsx#L453-L486) (backlit milk desk + `PagePaperCard` foreground layer) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1144-L1172) | [lemo-opuscar (`archive-lighttable`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/archive-lighttable) |
-| 8 | **`countdown`** | `doc-live-countdown-split` ([`planner.ts`](../studio/src/director/planner.ts#L114-L123)) | [`LiveCountdownSplit`](../studio/src/styles/docBroadcast.tsx#L500-L641) (split baseline vs projected horizon year counter) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1098-L1110) | [lemo-opuscar (`countdown`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/countdown) |
-| 9 | **`telestrator`** | `doc-telestrator` ([`planner.ts`](../studio/src/director/planner.ts#L125-L134)) | [`TelestratorOverlay`](../studio/src/styles/docBroadcast.tsx#L654-L759) (animated SVG ring/arrow + `#1C2B3A` callout pill) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1112-L1123) | [lemo-opuscar (`telestrator`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/telestrator) |
-| 10 | **`kino-montage`** | `doc-kino-montage` ([`planner.ts`](../studio/src/director/planner.ts#L136-L145)) | [`KinoMontageStrip`](../studio/src/styles/docBroadcast.tsx#L773-L996) (constructivist editorial slab & geometric composition) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1125-L1142) | [lemo-opuscar (`kino-montage`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/kino-montage) |
-| 11 | **`city-symphony`** | `doc-city-symphony` ([`planner.ts`](../studio/src/director/planner.ts#L147-L155)) | [`CitySymphonyFrame`](../studio/src/styles/docBroadcast.tsx#L1001-L1041) (crop marks, timecode frame + chapter card) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1174-L1205) | [lemo-opuscar (`city-symphony`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/city-symphony) |
+| Pillar / Catalog `kind` | Source Module | Blueprint Minimum | Actual Count | Notes |
+|---|---|---:|---:|---|
+| `motion-primitive` | `studio/src/motion/primitives.ts` | `216` | **234** | 58 entries, 42 exits, 98 in-place loops, 36 camera/physics moves |
+| *(Motion Aliases)* | `studio/src/motion/primitives.ts` | — | **434** | Tracked outside `CREATIVE_CATALOG` (`661` total resolvable tokens) |
+| `style-recipe` | `studio/src/styles/index.ts` | `120` | **162** | Spanning 10 Style Worlds; includes all 24 legacy `534d89a` IDs |
+| `prop-contraption` | `studio/src/registry/props/index.tsx` | `520` | **545** | 25 bespoke hero contraptions + 520 parametric domain blueprints |
+| `geo-country` | `studio/src/maps/index.ts` | `195` | **211** | Offline NaturalEarth / ISO numeric, alpha-2, and alpha-3 polygons |
+| `geo-us-state` | `studio/src/maps/index.ts` | `50` | **51** | 50 U.S. states + District of Columbia (`us-atlas` FIPS geometry) |
+| `geo-corridor` | `studio/src/maps/index.ts` | `24` | **24** | Chokepoint, grid, subsea cable, and sovereign flow corridors |
+| `sfx-cue` | `studio/src/audio/soundRegistry.ts` | `96` | **96** | 8 acoustic families x 12 procedural foley WAV cues (`72ms` guard) |
+| `music-stem` | `studio/src/audio/soundRegistry.ts` | `12` | **12** | Loopable 60 BPM documentary score stems with speech ducking |
+| `color-lut` | `studio/src/audio/soundRegistry.ts` | `12` | **12** | 17³ `.cube` 3D LUTs paired to optical substrate registers |
+| `typography-mode` | `studio/src/typography/KineticText.tsx` | `32` | **32** | Whisper word-level prosody-synced kinetic & stenography modes |
+| `glass-stage` | `studio/src/components/glass/LiquidGlassPresets.tsx` | `18` | **18** | Smoked-navy Apple Liquid Glass presets in presenter-safe zones |
+| `depth-stage` | `studio/src/components/glass/PresenterDepthStage.tsx` | `8` | **8** | 5-plane presenter matte occlusion depth-sandwich presets |
+| `color-register` | `studio/src/design/tokens.ts` | `5` | **6** | 5 WCAG AAA (`>= 7.0:1`) page substrates + `over_footage` glass |
+| `camera-trajectory` | `studio/src/design/optics.tsx` + `equalizer/viterbiChoreographer.ts` | `12` | **16** | 9 2.5D stage optical moves + 7 Viterbi choreographer trajectories |
+| `set-piece` | `studio/src/generative/presetSetPieces.ts` | `24` | **24** | Declarative `SP01`–`SP24` spatial-solver & 2D physics contraptions |
+| **Total Unique Elements** | `studio/src/registry/catalog.ts` | **`1,380`** | **`1,451`** | Zero duplicate `(kind, id)` keys verified at runtime |
 
----
+### Domain Tag Distribution (`countsByDomain`)
 
-### C. Vintage, Archival & Diagrammatic (`7` Styles)
-
-| # | Style | Planner Recipe ID | Implementation & Exact Lines | Beat Renderer Dispatch | Upstream Reference |
-|---|---|---|---|---|---|
-| 12 | **`newsreel`** | `vintage-newsreel` ([`planner.ts`](../studio/src/director/planner.ts#L159-L168)) | [`Newsreel1920s`](../studio/src/styles/vintageEditorial.tsx#L18-L153) (`1.37:1` gate, sepia flicker, grain & projector click) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1276-L1299) | [lemo-opuscar (`newsreel`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/newsreel) |
-| 13 | **`silent-film`** | `vintage-silent-film` ([`planner.ts`](../studio/src/director/planner.ts#L170-L178)) | [`SilentFilmCard`](../studio/src/styles/vintageEditorial.tsx#L163-L231) (ornate 1920s intertitle plate) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1301-L1306) | [lemo-opuscar (`silent-film`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/silent-film) |
-| 14 | **`spy-titles`** | `vintage-spy-titles` ([`planner.ts`](../studio/src/director/planner.ts#L191-L200)) | [`SpyTitleSequence`](../studio/src/styles/vintageEditorial.tsx#L299-L374) (`#0F1923`/`#1C2B3A` dossier cover + soft blue accent) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1308-L1313) | [lemo-opuscar (`spy-titles`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/spy-titles) |
-| 15 | **`stained-glass`** | `vintage-stained-glass` ([`planner.ts`](../studio/src/director/planner.ts#L202-L210)) | [`StainedGlassFrame`](../studio/src/styles/vintageEditorial.tsx#L378-L462) (`#FAF8F3`, `#A9C4DE`, `#F8ECE8` panes, `#1C2B3A` lead lines + `PagePaperCard`) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1207-L1243) | [lemo-opuscar (`stained-glass`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/stained-glass) |
-| 16 | **`stick-explainer`** | `diagram-stick-figure` ([`planner.ts`](../studio/src/director/planner.ts#L224-L233)) | [`StickFigureStage`](../studio/src/styles/diagramMetaphor.tsx#L84-L200) (5 articulated SVG poses including `crushed-by-debt`) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1333-L1348) | [lemo-opuscar (`stick-explainer`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/stick-explainer) |
-| 17 | **`instruction-manual`** | `diagram-instruction-manual` ([`planner.ts`](../studio/src/director/planner.ts#L235-L244)) | [`InstructionManualCard`](../studio/src/styles/diagramMetaphor.tsx#L212-L333) (IKEA-style step diagram with `leftLabel`/`rightLabel` boxes) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1350-L1364) | [lemo-opuscar (`instruction-manual`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/instruction-manual) |
-| 18 | **`isometric-picture-book`** | `diagram-isometric` ([`planner.ts`](../studio/src/director/planner.ts#L246-L254)) | [`IsometricScene`](../studio/src/styles/diagramMetaphor.tsx#L338-L370) (rotated isometric grid stage + newspaper cutout headline) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1245-L1273) | [lemo-opuscar (`isometric-picture-book`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/isometric-picture-book) |
-
----
-
-### D. Data, Quantitative Charts & Maps (`6` Styles)
-
-| # | Style | Planner Recipe ID | Implementation & Exact Lines | Beat Renderer / Composition Dispatch | Upstream Reference |
-|---|---|---|---|---|---|
-| 19 | **`map-explainer`** | `data-map-explainer` ([`planner.ts`](../studio/src/director/planner.ts#L258-L267)) | [`MapExplainer`](../studio/src/styles/dataMaps3D.tsx#L26-L306) (D3 `geoAlbersUsa` / `geoNaturalEarth1` + TopoJSON `#1C2B3A` region fill + focus card) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1367-L1381) (`resolveLocationConfig` [`#L447-L496`](../studio/src/compositions/DirectorBeatRenderer.tsx#L447-L496)) | [lemo-opuscar (`map-explainer`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/map-explainer) |
-| 20 | **`transit-map`** | Shares `data-map-explainer` ([`planner.ts`](../studio/src/director/planner.ts#L258-L267)) | Route-arc & corridor pin layer inside [`MapExplainer`](../studio/src/styles/dataMaps3D.tsx#L26-L306): corridor curve computation ([`#L105-L185`](../studio/src/styles/dataMaps3D.tsx#L105-L185)) + animated dashed arc & pulsing pin ([`#L229-L257`](../studio/src/styles/dataMaps3D.tsx#L229-L257)) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1367-L1381) (`routeTone`: `#2F8F8B` teal or `#A3402E` alert) | [lemo-opuscar (`transit-map`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/transit-map) |
-| 21 | **`data-physical`** | `data-physical-card` ([`planner.ts`](../studio/src/director/planner.ts#L269-L278)) | [`DataPhysicalCard`](../studio/src/styles/dataMaps3D.tsx#L319-L480) (isometric `#1C2B3A` vs `#A3402E` comparison pillars, crisp `rx=0` geometry) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1383-L1413) | [lemo-opuscar (`data-physical`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/data-physical) |
-| 22 | **`white-model`** | `data-white-model-3d` ([`planner.ts`](../studio/src/director/planner.ts#L280-L289)) | [`WhiteModel3D`](../studio/src/styles/dataMaps3D.tsx#L489-L578) (Three.js orbital architectural white/navy/brick massing) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1415-L1420) | [lemo-opuscar (`white-model`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/white-model) |
-| 23 | **`dataviz`** | Shared across [`DataPhysicalCard`](../studio/src/director/planner.ts#L269-L278), `DataTicker`, & standalone compositions | Full ledger scene [`TreasuryTable9Scene`](../studio/src/compositions/TreasuryTable9Scene.tsx#L13-L696), Over-Footage readout [`TreasuryOverlayCard`](../studio/src/compositions/TreasuryOverlayCard.tsx#L23-L310), animated counter [`DataTicker`](../studio/src/typography/DataTicker.tsx#L37-L197), and isometric pillars [`DataPhysicalCard`](../studio/src/styles/dataMaps3D.tsx#L319-L480) | [`Root.tsx`](../studio/src/Root.tsx#L34-L51) & [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1429-L1490) | [lemo-opuscar (`dataviz`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/dataviz) |
-| 24 | **`pip-simulation`** | `data-blob-simulation` ([`planner.ts`](../studio/src/director/planner.ts#L291-L300)) | [`BlobSimulation`](../studio/src/styles/dataMaps3D.tsx#L583-L658) (capacity bottleneck particle flow card) | [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1422-L1427) | [lemo-opuscar (`pip-simulation`)](https://github.com/lemomo-ai/lemo-opuscar/tree/main/styles/pip-simulation) |
+Entries carry one or more of the 9 canonical semantic domain tags:
+`geopolitics` (**495**), `fiscal` (**413**), `legal` (**276**), `household` (**259**), `ai-compute` (**223**), `history` (**204**), `energy-grid` (**191**), `labor` (**167**), and `comedy-gag` (**42**).
 
 ---
 
-## Part 2: All 11 Core System Modules
+## 2. The 10 Style Worlds (`STYLE_WORLDS`)
 
-| # | System Module | Files & Exact Line Ranges | Responsibility |
+| # | Style World ID | Recipes | Default Substrate | Primary Module | Purpose |
+|---|---|---:|---|---|---|
+| 1 | `liquid-glass` | **19** | `over_footage` | `components/glass/LiquidGlassPresets.tsx` | Smoked-navy optical glass cards, docks, magnifiers, and ProRes 4444 overlays |
+| 2 | `doc-broadcast` | **14** | `page_editorial` | `styles/docBroadcast.tsx` | Broadcast lower-thirds, contact light tables, telestrators, and kinetic statements |
+| 3 | `vintage-editorial` | **10** | `archival_parchment` | `styles/vintageEditorial.tsx` | 1912–1971 nitrate newsreels, silent intertitles, cotton ledgers, and microfiche |
+| 4 | `macro-telemetry` | **23** | `midnight_telemetry` | `styles/macroTelemetry.tsx` | Quantitative jaws, FCF waterfalls, maturity walls, pyramids, and ticker monoliths |
+| 5 | `forensic-exhibits` | **25** | `archival_parchment` | `styles/forensicExhibits.tsx` | SEC 10-K footnotes, Supreme Court syllabi, Form 941 splits, and Treasury Table 9 |
+| 6 | `diagram-metaphor` | **6** | `page_editorial` | `styles/diagramMetaphor.tsx` | Assembly manuals, patent exploded views, isometric grids, and articulated figures |
+| 7 | `data-maps-3d` | **7** | `page_editorial` | `styles/dataMaps3D.tsx` | Offline D3 world/state cartography, transit arcs, and isometric 3D strata |
+| 8 | `system-simulators` | **26** | `drafting_blueprint` | `styles/systemSimulators.tsx` | Tax-plumbing guillotines, hydraulic spillways, SPV loops, and 60Hz droop governors |
+| 9 | `ui-satire-collage` | **24** | `page_editorial` | `styles/uiSatireAndCollage.tsx` | Longitudinal household dossiers, scrip wallets, thermal rolls, and DTI modals |
+| 10 | `generative-setpiece` | **8** | `page_editorial` | `generative/SceneBlueprintRenderer.tsx` | Physics-solved BOM vaporizers, torque scales, 3D dioramas, and depth sandwiches |
+
+---
+
+## 3. Complete 162 Style Recipe ID Reference
+
+### World 1: `liquid-glass` (`19` Recipes)
+
+| Recipe ID | Component | Mode | Legacy / Aliases |
 |---|---|---|---|
-| 1 | **Dual-Palette Tokens, Fonts & Choreography** | [`tokens.ts`](../studio/src/design/tokens.ts#L1-L252) (`PAGE_PALETTE` `#L10-L24`, `OVER_FOOTAGE_PALETTE` `#L26-L46`, `STYLE_FAMILIES` `#L87-L202`, `SPRINGS` `#L209-L252`), [`fonts.ts`](../studio/src/design/fonts.ts#L1-L48), [`choreography.ts`](../studio/src/design/choreography.ts#L1-L391) | Color tokens (`Page` vs `Over Footage`), Google font loading (`Inter`, `IBM Plex Mono`, `Newsreader`, `Space Grotesk`, `Oswald`), and keyframed layer lifecycles |
-| 2 | **Stage & Smoked-Navy Liquid Glass** | [`CameraPreviewStage.tsx`](../studio/src/components/glass/CameraPreviewStage.tsx#L30-L327), [`LiquidGlassObject.tsx`](../studio/src/components/glass/LiquidGlassObject.tsx#L91-L316), [`LiquidGlassPresets.tsx`](../studio/src/components/glass/LiquidGlassPresets.tsx#L1-L1257), [`EditorialBackdrop.tsx`](../studio/src/components/EditorialBackdrop.tsx#L11-L88) | Multi-mode camera/editorial stages, GPU `blur(12px) saturate(165%) brightness(0.66)` glass shells, and 6 glass card/pill/dock/toast/modal presets |
-| 3 | **Multi-Object Layer Stage** | [`ObjectLayerStage.tsx`](../studio/src/components/layers/ObjectLayerStage.tsx#L42-L144) | Coordinates multiple simultaneous floating cards and badges across a continuous composition timeline |
-| 4 | **Motion Vocabulary (`57` Primitives)** | [`primitives.ts`](../studio/src/motion/primitives.ts#L1-L693) (`21` entries `#L4-L28`, `12` exits `#L30-L45`, `24` in-place `#L47-L74`), [`ObjectAnimator.tsx`](../studio/src/motion/ObjectAnimator.tsx#L44-L212) | Deterministic `spring()` / `interpolate()` motion transforms and `readingDuration()` pacing helper |
-| 5 | **Typography Engine** | [`KineticText.tsx`](../studio/src/typography/KineticText.tsx#L55-L449), [`DataTicker.tsx`](../studio/src/typography/DataTicker.tsx#L37-L197), [`EditorialHeadline.tsx`](../studio/src/typography/EditorialHeadline.tsx#L35-L410) | 7 kinetic reveal modes, animated numeric counters with delta badges, and 4 editorial headline layouts |
-| 6 | **Procedural SFX & Music Ducking** | [`MusicBed.tsx`](../studio/src/components/MusicBed.tsx#L56-L168), [`SfxCue.tsx`](../studio/src/components/SfxCue.tsx#L37-L85), [`generate-sfx.mjs`](../studio/scripts/generate-sfx.mjs) | 20 procedural WAV cues under `studio/public/sfx/` and cosine speech-attack/release volume ducking |
-| 7 | **Source Citation Badges** | [`SourceBadge.tsx`](../studio/src/components/SourceBadge.tsx#L13-L83) | Persistent lower-left primary source badge with dynamic document references |
-| 8 | **Director Brain & Plan Validator** | [`schema.ts`](../studio/src/director/schema.ts#L1-L111), [`planner.ts`](../studio/src/director/planner.ts#L1-L1570) (`STYLE_CATALOG` `#L28-L301`, `buildDraftDirectorPlan` `#L972-L1391`, `validateDirectorPlan` `#L1392-L1570`), [`plan-edit.mjs`](../studio/scripts/plan-edit.mjs) | Transcript-to-beat classification, `paletteMode` enforcement, anti-repetition rotation, hero-peak placement, and retention validation |
-| 9 | **Remotion Root & Beat Compositions** | [`Root.tsx`](../studio/src/Root.tsx#L30-L79), [`DirectorBeatRenderer.tsx`](../studio/src/compositions/DirectorBeatRenderer.tsx#L1637-L1732), [`StudioShowcase.tsx`](../studio/src/compositions/StudioShowcase.tsx#L39-L514), [`TreasuryTable9Scene.tsx`](../studio/src/compositions/TreasuryTable9Scene.tsx#L13-L696), [`TreasuryOverlayCard.tsx`](../studio/src/compositions/TreasuryOverlayCard.tsx#L23-L310) | Registers `TreasuryTable9-Full`, `TreasuryTable9-Overlay`, `StudioShowcase`, and parameterized `DirectorBeat` compositions |
-| 10 | **Render, Prep & DaVinci FCPXML Scripts** | [`prep-aroll.mjs`](../studio/scripts/prep-aroll.mjs), [`render-overlays.mjs`](../studio/scripts/render-overlays.mjs#L1-L267), [`export-fcpxml.mjs`](../studio/scripts/export-fcpxml.mjs), [`benchmark-exam.mjs`](../studio/scripts/benchmark-exam.mjs) | 30 fps CFR + LUT grading + LUFS audio prep, pre-bundled H.264/VP9/ProRes4444 batch rendering, DaVinci FCPXML export, and Exams 1–6 |
-| 11 | **Python Media & Orchestration Tools** | [`run_pipeline.mjs`](../tools/run_pipeline.mjs#L1-L277), [`transcribe.py`](../tools/transcribe.py), [`room_object_swap.py`](../tools/room_object_swap.py#L1-L1148), [`benchmark_media.py`](../tools/benchmark_media.py#L1-L1340) | End-to-end CLI pipeline, `faster-whisper` word alignment, MediaPipe/Gemini room object swapping, and pixel/readability/FCPXML/E2E audits |
+| `liquid-glass-card` | `GlassCard` | `over-footage` | **Legacy 24**, `card`, `LiquidGlassObject:card` |
+| `liquid-glass-corner-pill` | `GlassCornerPill` | `over-footage` | `corner-pill`, `liquid-glass-pill`, `pill` |
+| `liquid-glass-dock` | `GlassBottomDock` | `over-footage` | **Legacy 24**, `bottom-dock`, `liquid-glass-bottom-dock`, `dock` |
+| `liquid-glass-floating-toolbar` | `GlassFloatingToolbar` | `over-footage` | `floating-toolbar` |
+| `liquid-glass-toast` | `GlassToastAlert` | `over-footage` | **Legacy 24**, `toast-alert`, `liquid-glass-toast-alert`, `toast` |
+| `liquid-glass-split-modal` | `GlassSplitModal` | `over-footage` | `split-modal`, `LiquidGlassObject:split-modal` |
+| `liquid-glass-dossier-stack` | `GlassDossierStack` | `over-footage` | `dossier-stack` |
+| `liquid-glass-evidence-rail` | `GlassEvidenceRail` | `over-footage` | `evidence-rail` |
+| `liquid-glass-magnifier-card` | `GlassMagnifierCard` | `over-footage` | `magnifier-card`, `liquid-glass-footnote-loupe` |
+| `liquid-glass-telemetry-strip` | `GlassTelemetryStrip` | `over-footage` | `telemetry-strip`, `liquid-glass-ledger-ribbon` |
+| `liquid-glass-verdict-seal` | `GlassVerdictSeal` | `over-footage` | `verdict-seal` |
+| `liquid-glass-compare-scale` | `GlassCompareScale` | `over-footage` | `compare-scale` |
+| `liquid-glass-timeline-scrubber` | `GlassTimelineScrubber` | `over-footage` | `timeline-scrubber` |
+| `liquid-glass-receipt-ticker` | `GlassReceiptTicker` | `over-footage` | `receipt-ticker` |
+| `liquid-glass-terminal-console` | `GlassTerminalConsole` | `over-footage` | `terminal-console`, `doc-bloomberg-terminal-clean` |
+| `liquid-glass-map-callout` | `GlassMapCallout` | `over-footage` | `map-callout` |
+| `liquid-glass-stat-triptych` | `GlassStatTriptych` | `over-footage` | `stat-triptych`, `liquid-glass-metric-triptych` |
+| `liquid-glass-quote-citation` | `GlassQuoteCitation` | `over-footage` | `quote-citation` |
+| `liquid-glass-treasury-overlay` | `TreasuryOverlayCard` | `over-footage` | `treasury-overlay-card`, `TreasuryTable9-Overlay` |
+
+### World 2: `doc-broadcast` (`14` Recipes)
+
+| Recipe ID | Component | Mode | Legacy / Aliases |
+|---|---|---|---|
+| `doc-news-package` | `NewsPackageLowerThird` | `over-footage` | **Legacy 24** |
+| `doc-caption-news` | `CaptionNewsCard` | `over-footage` | **Legacy 24** |
+| `doc-visual-investigation` | `VisualInvestigationBoard` | `page` | **Legacy 24** |
+| `doc-archive-light-table` | `ArchiveLightTable` | `page` | **Legacy 24**, `archive-lighttable` |
+| `doc-live-countdown-split` | `LiveCountdownSplit` | `page` | **Legacy 24** |
+| `doc-telestrator` | `TelestratorOverlay` | `over-footage` | **Legacy 24** |
+| `doc-kino-montage` | `KinoMontageStrip` | `page` | **Legacy 24** |
+| `doc-city-symphony` | `CitySymphonyFrame` | `over-footage` | **Legacy 24** |
+| `doc-split-screen-frame` | `SplitScreenFrame` | `page` | `doc-split-fact-check` |
+| `doc-quote-highlight` | `QuoteHighlightCard` | `page` | `QuoteHighlightCard` |
+| `doc-data-callout-lower-third` | `DataCalloutLowerThird` | `over-footage` | `DataCalloutLowerThird` |
+| `doc-breaking-banner` | `BreakingBanner` | `over-footage` | `BreakingBanner` |
+| `doc-kinetic-statement` | `KineticText` | `page` | `kinetic-statement`, `kinetic-thesis` |
+| `doc-chapter-headline-card` | `EditorialHeadline` | `page` | `chapter-headline-card` |
+
+### World 3: `vintage-editorial` (`10` Recipes)
+
+| Recipe ID | Component | Mode | Legacy / Aliases |
+|---|---|---|---|
+| `vintage-newsreel` | `Newsreel1920s` | `page` | **Legacy 24** |
+| `vintage-silent-film` | `SilentFilmCard` | `page` | **Legacy 24** |
+| `vintage-collage` | `CollageCutout` | `over-footage` | **Legacy 24** |
+| `vintage-spy-titles` | `SpyTitleSequence` | `page` | **Legacy 24** |
+| `vintage-stained-glass` | `StainedGlassFrame` | `page` | **Legacy 24** |
+| `vintage-1930s-depression-ledger` | `DepressionLedger1930s` | `page` | `DepressionLedger1930s` |
+| `vintage-company-scrip-voucher` | `CompanyScripVoucher` | `page` | `CompanyScripVoucher` |
+| `vintage-bretton-woods-cable` | `BrettonWoodsCable` | `page` | `BrettonWoodsCable` |
+| `vintage-broadsheet-frontpage` | `BroadsheetFrontpage` | `page` | `BroadsheetFrontpage` |
+| `vintage-microfiche-reader` | `MicroficheReaderStage` | `page` | `MicroficheReaderStage` |
+
+### World 4: `macro-telemetry` (`23` Recipes)
+
+| Recipe ID | Component | Mode |
+|---|---|---|
+| `macro-diverging-jaws` | `DivergingJawsChart` | `page` |
+| `macro-negative-fcf-waterfall` | `NegativeFcfWaterfall` | `page` |
+| `macro-wealth-decile-monoliths` | `WealthDecileMonoliths` | `page` |
+| `macro-auction-price-shockwave` | `AuctionPriceShockwave` | `page` |
+| `macro-jevons-deflation-curve` | `JevonsDeflationCurve` | `page` |
+| `macro-sovereign-spread-flip` | `SovereignSpreadFlip` | `page` |
+| `macro-debt-deflation-jaws-1933` | `DebtDeflationJaws1933` | `page` |
+| `macro-gold-vs-fiat-corridor` | `GoldVsFiatFedCorridor` | `page` |
+| `macro-generational-horizon-rule` | `GenerationalHorizonRule` | `page` |
+| `macro-stacked-share-shift` | `StackedShareShift` | `page` |
+| `macro-capex-vs-depreciation-gap` | `CapexVsDepreciationGap` | `page` |
+| `macro-foreign-holder-rollover` | `ForeignHolderRollover` | `page` |
+| `macro-reserve-attestation-bar` | `ReserveAttestationBar` | `page` |
+| `macro-trust-fund-depletion-curve` | `TrustFundDepletionCurve` | `page` |
+| `macro-demographic-cliff-pyramid` | `DemographicCliffPyramid` | `page` |
+| `macro-cost-exchange-ratio-bar` | `CostExchangeRatioBar` | `page` |
+| `macro-bandwidth-concentration-bar` | `BandwidthConcentrationBar` | `page` |
+| `macro-escrow-shock-breakdown` | `EscrowShockBreakdown` | `page` |
+| `macro-mineral-refining-dominance` | `MineralRefiningDominance` | `page` |
+| `macro-waitlist-queue-histogram` | `WaitlistQueueHistogram` | `page` |
+| `macro-real-vs-nominal-shrink` | `RealVsNominalShrink` | `page` |
+| `macro-margin-bid-comparison` | `MarginBidComparison` | `page` |
+| `macro-data-ticker-monolith` | `DataTicker` | `page` |
+
+### World 5: `forensic-exhibits` (`25` Recipes)
+
+| Recipe ID | Component | Mode | Legacy / Aliases |
+|---|---|---|---|
+| `forensic-fiscal-ledger-table` | `FiscalLedgerTableStage` | `page` | `FiscalLedgerTableStage` |
+| `forensic-claim-vs-reality-collision` | `ClaimVsRealityCollision` | `page` | `ClaimVsRealityCollision` |
+| `forensic-supreme-court-syllabus` | `SupremeCourtSyllabusStage` | `page` | `SupremeCourtSyllabusStage` |
+| `forensic-escape-hatch-switchboard` | `EscapeHatchSwitchboard` | `page` | `EscapeHatchSwitchboard` |
+| `forensic-archival-ration-book-1941` | `ArchivalRationBook1941` | `page` | `vintage-1941-ration-booklet` |
+| `forensic-foia-redaction-declassify` | `FoiaRedactionDeclassify` | `page` | `FoiaRedactionDeclassify` |
+| `forensic-sec-10k-footnote-stretch` | `Sec10KFootnoteStretch` | `page` | `Sec10KFootnoteStretch` |
+| `forensic-bdc-pik-schedule` | `BdcPikScheduleExhibit` | `page` | `BdcPikScheduleExhibit` |
+| `forensic-statutory-clause-highlighter` | `StatutoryClauseHighlighter` | `page` | `StatutoryClauseHighlighter` |
+| `forensic-insurance-rate-hike-notice` | `InsuranceRateHikeNotice` | `page` | `InsuranceRateHikeNotice` |
+| `forensic-irs-form-941-fica-split` | `IrsForm941FicaSplit` | `page` | `IrsForm941FicaSplit` |
+| `forensic-subsea-sabotage-incident-log` | `SubseaSabotageIncidentLog` | `page` | `SubseaSabotageIncidentLog` |
+| `forensic-congressional-hearing-slate` | `CongressionalHearingSlate` | `page` | `CongressionalHearingSlate` |
+| `forensic-treasury-tic-ledger` | `TreasuryTicLedgerExhibit` | `page` | `TreasuryTicLedgerExhibit` |
+| `forensic-spv-circular-flow` | `SpvCircularFlowSheet` | `page` | `SpvCircularFlowSheet` |
+| `forensic-fannie-mae-covenant` | `FannieMaeCovenantExhibit` | `page` | `FannieMaeCovenantExhibit` |
+| `forensic-redline-contract-diff` | `RedlineContractDiffStage` | `page` | `RedlineContractDiffStage` |
+| `forensic-patent-filing-1910` | `PatentFiling1910Stage` | `page` | `PatentFiling1910Stage` |
+| `forensic-bank-call-report-t-account` | `BankCallReportTAccount` | `page` | `BankCallReportTAccount` |
+| `forensic-veto-pen-budget-ledger` | `VetoPenBudgetLedger` | `page` | `VetoPenBudgetLedger` |
+| `forensic-ach-autopay-draft-receipt` | `AchAutopayDraftReceipt` | `page` | `AchAutopayDraftReceipt` |
+| `forensic-credit-rating-downgrade-memo` | `CreditRatingDowngradeMemo` | `page` | `CreditRatingDowngradeMemo` |
+| `forensic-antitrust-market-exhibit` | `AntitrustMarketExhibit` | `page` | `AntitrustMarketExhibit` |
+| `forensic-evidence-corkboard-chronology` | `EvidenceCorkboardChronology` | `page` | `EvidenceCorkboardChronology` |
+| `forensic-treasury-table-9` | `TreasuryTable9Scene` | `page` | `treasury-table-9`, `TreasuryTable9-Full`, `dataviz` |
+
+### World 6: `diagram-metaphor` (`6` Recipes)
+
+| Recipe ID | Component | Mode | Legacy / Aliases |
+|---|---|---|---|
+| `diagram-sticker` | `StickerCutout` | `over-footage` | **Legacy 24**, `sticker-cutout` |
+| `diagram-stick-figure` | `StickFigureStage` | `page` | **Legacy 24**, `stick-figure-stage`, `stick-explainer` |
+| `diagram-instruction-manual` | `InstructionManualCard` | `page` | **Legacy 24**, `instruction-manual-card`, `instruction-manual` |
+| `diagram-collage-cutout` | `DiagramCollageCutout` | `over-footage` | `collage-cutout` |
+| `diagram-isometric` | `IsometricScene` | `page` | **Legacy 24**, `isometric-scene`, `isometric-picture-book` |
+| `patent-exploded-diagram` | `PatentExplodedDiagram` | `page` | `diagram-patent-exploded` |
+
+### World 7: `data-maps-3d` (`7` Recipes)
+
+| Recipe ID | Component | Mode | Legacy / Aliases |
+|---|---|---|---|
+| `data-map-explainer` | `MapExplainer` | `page` | **Legacy 24**, `map-explainer` |
+| `data-transit-map` | `MapExplainer` | `page` | `transit-map` |
+| `data-physical-card` | `DataPhysicalCard` | `over-footage` | **Legacy 24**, `data-physical` |
+| `data-white-model-3d` | `WhiteModel3D` | `over-footage` | **Legacy 24**, `white-model-3d`, `white-model` |
+| `data-blob-simulation` | `BlobSimulation` | `over-footage` | **Legacy 24**, `blob-simulation`, `pip-simulation` |
+| `corridor-arc-matrix-card` | `CorridorArcMatrixCard` | `page` | `data-corridor-arc-matrix` |
+| `isometric-strata-cutaway-3d` | `IsometricStrataCutaway3D` | `page` | `data-isometric-strata-3d` |
+
+### World 8: `system-simulators` (`26` Recipes)
+
+| Recipe ID | Component | Mode | Aliases |
+|---|---|---|---|
+| `supply-chain-bom-strip` | `SupplyChainBomStrip` | `page` | `SupplyChainBomStrip` |
+| `palo-alto-whiteboard-flip` | `PaloAltoWhiteboardFlip` | `page` | `PaloAltoWhiteboardFlip` |
+| `dual-tax-plumbing-schematic` | `DualTaxPlumbingSchematic` | `page` | `diagram-hydraulic-plumbing` |
+| `sovereign-priority-spillway` | `SovereignPrioritySpillway` | `page` | `SovereignPrioritySpillway` |
+| `split-era-strike-diptych` | `SplitEraStrikeDiptych` | `page` | `SplitEraStrikeDiptych` |
+| `logarithmic-wattage-ladder` | `LogarithmicWattageLadder` | `page` | `LogarithmicWattageLadder` |
+| `velocity-mismatch-chronometer` | `VelocityMismatchChronometer` | `page` | `VelocityMismatchChronometer` |
+| `circular-accounting-loop` | `CircularAccountingLoop` | `page` | `CircularAccountingLoop` |
+| `asymmetric-exchange-simulator` | `AsymmetricExchangeSimulator` | `page` | `AsymmetricExchangeSimulator` |
+| `subsea-cable-cross-section` | `SubseaCableCrossSection` | `page` | `SubseaCableCrossSection` |
+| `lithography-node-lock` | `LithographyNodeLock` | `page` | `LithographyNodeLock` |
+| `cantilever-balance-scale` | `CantileverBalanceScale` | `page` | `CantileverBalanceScale` |
+| `transformer-queue-bottleneck` | `TransformerQueueBottleneck` | `page` | `TransformerQueueBottleneck` |
+| `water-cooling-evaporation-tower` | `WaterCoolingEvaporationTower` | `page` | `WaterCoolingEvaporationTower` |
+| `container-chokepoint-lock` | `ContainerChokepointLock` | `page` | `ContainerChokepointLock` |
+| `strategic-reserve-caverns` | `StrategicReserveCaverns` | `page` | `StrategicReserveCaverns` |
+| `grid-frequency-droop-governor` | `GridFrequencyDroopGovernor` | `page` | `GridFrequencyDroopGovernor` |
+| `flywheel-momentum-clutch` | `FlywheelMomentumClutch` | `over-footage` | `FlywheelMomentumClutch` |
+| `hydraulic-siphon-valve` | `HydraulicSiphonValve` | `over-footage` | `HydraulicSiphonValve` |
+| `margin-call-domino-cascade` | `MarginCallDominoCascade` | `page` | `MarginCallDominoCascade` |
+| `escapement-ratchet-pawn` | `EscapementRatchetPawn` | `over-footage` | `EscapementRatchetPawn` |
+| `eurodollar-offshore-funnel` | `EurodollarOffshoreFunnel` | `page` | `EurodollarOffshoreFunnel` |
+| `mineral-refining-bottleneck` | `MineralRefiningBottleneck` | `page` | `MineralRefiningBottleneck` |
+| `demographic-dependency-pyramid` | `DemographicDependencyPyramid` | `page` | `DemographicDependencyPyramid` |
+| `insurance-risk-pool-overflow` | `InsuranceRiskPoolOverflow` | `page` | `InsuranceRiskPoolOverflow` |
+| `municipal-bond-tollgate` | `MunicipalBondTollgate` | `over-footage` | `MunicipalBondTollgate` |
+
+### World 9: `ui-satire-collage` (`24` Recipes)
+
+| Recipe ID | Component | Mode |
+|---|---|---|
+| `longitudinal-household-dossier` | `LongitudinalHouseholdDossier` | `page` |
+| `perishable-seat-vs-compute-split` | `PerishableSeatVsComputeSplit` | `page` |
+| `closed-compute-scrip-wallet` | `ClosedComputeScripWallet` | `page` |
+| `coal-scrip-vs-digital-yuan` | `CoalScripVsDigitalYuan` | `page` |
+| `fountain-pen-veto-slash` | `FountainPenVetoSlash` | `page` |
+| `unwritten-truce-to-allowance` | `UnwrittenTruceToAllowance` | `page` |
+| `roof-drone-escrow-shock` | `RoofDroneEscrowShock` | `over-footage` |
+| `thermal-receipt-inflation-roll` | `ThermalReceiptInflationRoll` | `over-footage` |
+| `refinance-denial-modal` | `RefinanceDenialModal` | `over-footage` |
+| `hinged-brass-jaw-cutout` | `HingedBrassJawCutout` | `over-footage` |
+| `viewer-game-quiz-card` | `ViewerGameQuizCard` | `page` |
+| `terms-of-service-scroll-trap` | `TermsOfServiceScrollTrap` | `over-footage` |
+| `dynamic-surge-meter-tag` | `DynamicSurgeMeterTag` | `over-footage` |
+| `four-escape-hatches-board` | `FourEscapeHatchesBoard` | `page` |
+| `subscription-trap-stack` | `SubscriptionTrapStack` | `over-footage` |
+| `algorithmic-credit-score-drop` | `AlgorithmicCreditScoreDrop` | `over-footage` |
+| `company-town-store-ledger` | `CompanyTownStoreLedger` | `page` |
+| `geo-fenced-spend-map-card` | `GeoFencedSpendMapCard` | `over-footage` |
+| `expiration-countdown-toast` | `ExpirationCountdownToast` | `over-footage` |
+| `automated-cobra-severance-form` | `AutomatedCobraSeveranceForm` | `page` |
+| `buy-now-pay-later-micro-ledger` | `BuyNowPayLaterMicroLedger` | `over-footage` |
+| `captive-partner-catalog-grid` | `CaptivePartnerCatalogGrid` | `page` |
+| `programmable-rule-builder-ui` | `ProgrammableRuleBuilderUI` | `page` |
+| `civic-dossier-redaction-plate` | `CivicDossierRedactionPlate` | `page` |
+
+### World 10: `generative-setpiece` (`8` Recipes)
+
+| Recipe ID | Component | Mode | Default Blueprint / Preset |
+|---|---|---|---|
+| `setpiece-bom-vaporizer` | `SceneBlueprintRenderer` | `page` | `SP01_SHOE_LABOR_VAPORIZER` |
+| `setpiece-torque-balance` | `SceneBlueprintRenderer` | `page` | `SP02_PALO_ALTO_WHITEBOARD_FLIP` |
+| `setpiece-hydraulic-spillway` | `SceneBlueprintRenderer` | `page` | `SP07_SOVEREIGN_BOND_SPILLWAY` |
+| `setpiece-circular-spv-carousel` | `SceneBlueprintRenderer` | `page` | `SP16_NVIDIA_COREWEAVE_SPV_LOOP` |
+| `setpiece-wattage-scale-ladder` | `SceneBlueprintRenderer` | `page` | `SP11_10W_TO_5GW_POWER_LADDER` |
+| `setpiece-subsea-tension-snap` | `SceneBlueprintRenderer` | `page` | `SP22_550_SUBSEA_CABLE_ANCHOR` |
+| `setpiece-isometric-diorama-3d` | `IsometricDiorama3D` | `page` | `DEFAULT_DIORAMA_BLOCKS` |
+| `setpiece-presenter-depth-sandwich` | `PresenterDepthStage` | `over-footage` | `behind-shoulder-billboard` |
+
+---
+
+## 4. Query & Composition Examples
+
+### Resolving & Rendering Style Recipes (`studio/src/styles/index.ts`)
+
+```tsx
+import {
+  getStyleCountsByWorld,
+  getStyleRecipeCount,
+  renderStyleRecipe,
+  resolveStyleRecipe,
+  StyleRecipeRenderer,
+} from "./styles";
+
+// Resolves canonical IDs, legacy 534d89a IDs, and component hints
+const totalStyles = getStyleRecipeCount(); // 162
+const countsByWorld = getStyleCountsByWorld();
+const legacyResolved = resolveStyleRecipe("diagram-sticker"); // -> StickerCutout recipe
+
+// Direct JSX component or functional helper
+const element = renderStyleRecipe("macro-diverging-jaws", {
+  eyebrow: "BLS PRODUCTIVITY VS. PAY",
+  title: "Output Rose 20.4% While Real Pay Flatlined",
+  metric: "-8.2% GAP",
+  sourceCitation: "Bureau of Labor Statistics Major Sector Productivity",
+});
+
+export const ExampleBeat = () => (
+  <StyleRecipeRenderer
+    styleId="forensic-irs-form-941-fica-split"
+    title="15.3% Human FICA vs. 0% API Compute"
+    metric="84.1% SHARE"
+  />
+);
+```
+
+### Searching & Bundling Creative Elements (`studio/src/registry/catalog.ts`)
+
+```ts
+import {
+  getCatalogSummary,
+  recommendBeatBundle,
+  searchCatalog,
+  verifyCatalogIntegrity,
+} from "./registry/catalog";
+
+// 1. Boot-time zero-duplicate & pillar threshold check
+const report = verifyCatalogIntegrity(); // ok: true, totalElements: 1451
+
+// 2. Multi-filter semantic search with anti-repetition exclusions
+const guillotineMatches = searchCatalog({
+  query: "withholding guillotine",
+  domain: "fiscal",
+  visualWeight: "showstopper",
+  excludeIds: ["doc-archive-light-table"],
+  limit: 5,
+});
+
+// 3. Full multi-pillar beat recommendation (style + motion + prop + audio + LUT + set-piece)
+const bundle = recommendBeatBundle({
+  query: "PJM grid capacity auction spike",
+  spokenText: "Wholesale capacity prices jumped 833 percent in a single summer auction.",
+  domain: "energy-grid",
+  emotionalBeat: "hard-reveal",
+  framing: "page",
+  isPeakBeat: true,
+});
+
+const summary = getCatalogSummary();
+// summary.totalElements === 1451, summary.unifiedMotionAliasMapKeys === 434
+```

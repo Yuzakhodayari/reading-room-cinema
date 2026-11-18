@@ -53,8 +53,8 @@ Running 13 simultaneous heavy streams caused the server drop in session `0654f84
 - [x] **C3 (Pillars 6, 9, 10, 15 Tooling)**: Build `tools/ai_director.mjs` (DeepSeek, OpenAI, Gemini, Anthropic, Ollama, prompt-pack, and offline deterministic compiler); upgrade `studio/scripts/export-fcpxml.mjs` (V1 punch-in keyframes, V1-V4 Depth Sandwich lanes, A1-A3 stems); build `studio/scripts/master-audio.mjs` (`-14 LUFS`); upgrade `tools/room_object_swap.py` and `tools/OBJECT_SWAP_GUIDE.md`
 - [x] **Gate C**: `tsc --noEmit` + `eslint` + Git commit & push
 
-### Wave D: Grand Unification, 1,380+ Semantic Catalog, Showrunner & 4K Cinema Exam
-- [ ] **D1 (`src/registry/catalog.ts`)**: Unified semantic catalog indexing all 1,380+ composable elements across all 16 pillars with domain/mood/weight search and inventory verification
+### Wave D: Grand Unification, 1,451-Element Semantic Catalog, Showrunner & 4K Cinema Exam
+- [x] **D1 (`src/registry/catalog.ts` & `src/styles/index.ts`)**: Unified semantic catalog indexing 1,451 unique composable elements (+ 434 motion aliases) across all 16 pillars and 162 style recipes across 10 Style Worlds (`verifyCatalogIntegrity() => ok: true`)
 - [ ] **D2 (Pillar 8 Showrunner & `DirectorBeatRenderer.tsx`)**: Unify `director/schema.ts` + `director/planner.ts` + `scripts/plan-edit.mjs` onto TypeScript + Zod, wire all 120 style recipes, 18 glass rigs, 32 kinetic modes, 220 motion primitives, 525 props, `SceneBlueprintRenderer`, `PresenterDepthStage`, and `episodes-vault.json` into `DirectorBeatRenderer.tsx` and `Root.tsx` (including standalone 4K/1080p full-episode compositor)
 - [ ] **D3 (Pillar 11 & 16 Pipeline + Visual Exam)**: Upgrade `tools/run_pipeline.mjs`, build `studio/scripts/cinema-exam.mjs` (contact sheets + Episode 01 full compilation & 35-gate verification `>= 96/100`), and update root `README.md`
 - [ ] **Gate D (Final Release Verification)**: Full `tsc` + `eslint` + Episode 01 plan compilation + Remotion PNG/MP4/FCPXML render proof + final Git commit & push to `Yuzakhodayari/reading-room-cinema`
