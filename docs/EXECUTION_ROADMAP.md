@@ -37,7 +37,7 @@ Running 13 simultaneous heavy streams caused the server drop in session `0654f84
 - [x] **A1 (Pillar 1 & 10 Optics)**: `design/tokens.ts` (5 registers + OKLCH dissolve + contrast), `design/fitText.ts` (quadratic line breaker + binary-search sizing), `design/optics.tsx` (`ReadingRoomStage`, `CameraRig25D`, `OpticalLoupe`, `HighlighterStroke`), `LiquidGlassPresets.tsx` (18 presets), `PresenterDepthStage.tsx`, `EditorialBackdrop.tsx`, `LiquidGlassObject.tsx`, `ObjectLayerStage.tsx`
 - [x] **A2 (Pillar 2 Motion)**: Expand `motion/primitives.ts` to 234 deterministic primitives and 434+ aliases (`661` total resolvable tokens) with `MOTION_PRIMITIVE_CATALOG`, wire 3D perspective/clip wipes into `motion/ObjectAnimator.tsx`, verify progressive sub-beats in `design/choreography.ts`
 - [ ] **A3 (Pillar 12 Prop Vault)**: Expand `registry/props/heroContraptions.tsx` to 40+ multi-part animated rigs, build `registry/props/domainCatalogs.ts` (485+ parametric vector schematics), and export unified `PROP_VAULT` (`525+` items) in `registry/props/index.tsx`
-- [ ] **A4 (Pillar 3 Cartography)**: Build `maps/geoDatabase.ts`, `maps/atlasResolver.ts`, `maps/CinemaMapStage.tsx`, and `maps/index.ts` covering ~177 world countries, 50 US states + D.C., and 24 named geopolitical corridors with zero false Austin fallbacks
+- [x] **A4 (Pillar 3 Cartography)**: Build `maps/geoDatabase.ts`, `maps/atlasResolver.ts`, `maps/CinemaMapStage.tsx`, and `maps/index.ts` covering 211 countries/territories, 51 US states + D.C., and 24 named geopolitical corridors with zero false Austin fallbacks
 - [ ] **Gate A**: `tsc --noEmit` + `eslint` + Git commit & push
 
 ### Wave B: Procedural Audio/LUTs, 30-Episode Vault, Generative Set-Pieces & Equalizer Compiler
