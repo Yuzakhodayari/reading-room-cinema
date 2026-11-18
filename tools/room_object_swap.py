@@ -20,6 +20,7 @@ import base64
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -28,8 +29,22 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-from scipy.ndimage import laplace
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore[assignment]
+try:
+    from scipy.ndimage import laplace
+except ImportError:
+    laplace = None  # type: ignore[assignment]
+
+
+def require_numpy() -> None:
+    if np is None:
+        raise RuntimeError(
+            "numpy is required for frame/matte pixel processing. "
+            "Run with tools/.venv/Scripts/python.exe or install numpy & opencv-python."
+        )
 
 TOOLS_DIR = Path(__file__).resolve().parent
 DEFAULT_SEGMENTER_MODEL = TOOLS_DIR / "models" / "selfie_segmenter.tflite"
@@ -129,6 +144,9 @@ def probe_video(ffprobe_bin: str, video_path: Path) -> dict[str, Any]:
 
 
 def score_frame_sharpness(gray: np.ndarray) -> float:
+    """Compute Laplacian variance with mild highlight/shadow clipping penalty."""
+    require_numpy()
+    assert laplace is not None
     """Compute Laplacian variance with mild highlight/shadow clipping penalty."""
     f = gray.astype(np.float32) / 255.0
     lap_var = float(np.var(laplace(f)))
@@ -433,6 +451,7 @@ def soft_sigmoid_mask(prob: np.ndarray, threshold: float, softness: float) -> np
 
 
 def cmd_auto_person_mask(args: argparse.Namespace) -> None:
+    require_numpy()
     import cv2
 
     video_path = Path(args.input_video).resolve()
@@ -900,6 +919,538 @@ def cmd_omni_edit(args: argparse.Namespace) -> None:
     print(f"Completed Omni swap -> {out_mp4}")
 
 
+def cmd_export_person_matte(args: argparse.Namespace) -> None:
+    """Export a temporally smoothed RGBA alpha presenter video (.webm VP9 or ProRes 4444 .mov)."""
+
+    video_path = Path(args.input_video).resolve()
+    if not args.dry_run and not video_path.exists():
+        raise FileNotFoundError(f"Input video not found: {video_path}")
+
+    ffmpeg_bin = find_media_bin("ffmpeg")
+    ffprobe_bin = find_media_bin("ffprobe")
+    meta = (
+        probe_video(ffprobe_bin, video_path)
+        if video_path.exists()
+        else {
+            "width": 1920,
+            "height": 1080,
+            "fps": 30.0,
+            "durationSec": 10.0,
+            "nbFrames": 300,
+            "hasAudio": True,
+        }
+    )
+    w, h = meta["width"], meta["height"]
+    fps = meta["fps"]
+
+    codec = args.codec
+    if codec == "auto":
+        if args.out and str(args.out).lower().endswith(".mov"):
+            codec = "prores"
+        else:
+            codec = "webm"
+
+    default_name = "aroll_person_alpha.mov" if codec == "prores" else "aroll_person_alpha.webm"
+    out_alpha = Path(args.out).resolve() if args.out else video_path.with_name(default_name)
+    out_alpha.parent.mkdir(parents=True, exist_ok=True)
+
+    start_sec = max(0.0, float(args.start))
+    dur_sec = float(args.duration) if args.duration is not None else None
+
+    if codec == "prores":
+        codec_args = [
+            "-c:v",
+            "prores_ks",
+            "-profile:v",
+            "4444",
+            "-pix_fmt",
+            "yuva444p10le",
+            "-vendor",
+            "apl0",
+            "-bits_per_mb",
+            "8000",
+        ]
+    else:
+        codec_args = [
+            "-c:v",
+            "libvpx-vp9",
+            "-pix_fmt",
+            "yuva420p",
+            "-b:v",
+            "0",
+            "-crf",
+            "22",
+            "-row-mt",
+            "1",
+            "-deadline",
+            "good",
+            "-cpu-used",
+            "2",
+            "-auto-alt-ref",
+            "0",
+        ]
+
+    audio_input_args: list[str] = []
+    audio_map_args: list[str] = ["-an"]
+    if args.keep_audio and meta["hasAudio"]:
+        if start_sec > 0:
+            audio_input_args.extend(["-ss", f"{start_sec:.3f}"])
+        if dur_sec is not None:
+            audio_input_args.extend(["-t", f"{dur_sec:.3f}"])
+        audio_input_args.extend(["-i", str(video_path)])
+        audio_map_args = [
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:a",
+            "pcm_s16le" if codec == "prores" else "libopus",
+            "-shortest",
+        ]
+
+    encode_cmd = [
+        ffmpeg_bin,
+        "-y",
+        "-v",
+        "warning",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgra",
+        "-s",
+        f"{w}x{h}",
+        "-r",
+        f"{fps:.6f}",
+        "-i",
+        "-",
+        *audio_input_args,
+        *codec_args,
+        *audio_map_args,
+        str(out_alpha),
+    ]
+
+    if args.dry_run:
+        plan = {
+            "command": "export-person-matte",
+            "inputVideo": str(video_path),
+            "outputAlphaVideo": str(out_alpha),
+            "codec": codec,
+            "resolution": f"{w}x{h}",
+            "fps": round(fps, 3),
+            "temporalSmooth": args.temporal_smooth,
+            "featherSigma": args.feather,
+            "keepAudio": bool(args.keep_audio),
+            "ffmpegEncodeCommand": encode_cmd,
+        }
+        print("=== Alpha Presenter Matte Export (Dry Run) ===")
+        print(json.dumps(plan, indent=2))
+        return
+
+    require_numpy()
+    import cv2
+
+    backend = args.backend
+    segmenter = None
+    mp = None
+    if backend in {"auto", "mediapipe"}:
+        try:
+            import mediapipe as mp_mod
+            from mediapipe.tasks import python as mp_python
+            from mediapipe.tasks.python import vision
+
+            model_path = ensure_segmenter_model(Path(args.model_path).resolve())
+            opts = vision.ImageSegmenterOptions(
+                base_options=mp_python.BaseOptions(model_asset_path=str(model_path)),
+                running_mode=vision.RunningMode.VIDEO,
+                output_confidence_masks=True,
+                output_category_mask=False,
+            )
+            segmenter = vision.ImageSegmenter.create_from_options(opts)
+            mp = mp_mod
+            backend = "mediapipe"
+        except Exception as exc:
+            if backend == "mediapipe":
+                raise RuntimeError(f"MediaPipe segmenter initialization failed: {exc}") from exc
+            print(
+                f"[warn] MediaPipe unavailable ({exc}); falling back to OpenCV diff segmenter.",
+                file=sys.stderr,
+            )
+            backend = "diff"
+
+    seg_w = min(w, max(128, int(args.seg_width)))
+    seg_h = max(64, int(round((h * seg_w / max(1, w)) / 2.0) * 2))
+
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Failed to open video stream via OpenCV: {video_path}")
+
+    ref_bg_small: np.ndarray | None = None
+    if backend == "diff":
+        if args.ref_plate:
+            rp = Path(args.ref_plate).resolve()
+            if not rp.exists():
+                raise FileNotFoundError(f"Reference plate not found: {rp}")
+            ref_img = cv2.imread(str(rp), cv2.IMREAD_COLOR)
+            if ref_img is not None:
+                ref_bg_small = cv2.resize(
+                    ref_img, (seg_w, seg_h), interpolation=cv2.INTER_AREA
+                ).astype(np.float32)
+        if ref_bg_small is None:
+            samples_list: list[np.ndarray] = []
+            total_est = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 30
+            idxs = np.linspace(0, max(0, total_est - 1), num=min(9, max(1, total_est)), dtype=int)
+            for idx in idxs:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
+                ok, fr = cap.read()
+                if ok:
+                    samples_list.append(cv2.resize(fr, (seg_w, seg_h), interpolation=cv2.INTER_AREA))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            if samples_list:
+                ref_bg_small = np.median(np.stack(samples_list, axis=0), axis=0).astype(np.float32)
+
+    if start_sec > 0:
+        cap.set(cv2.CAP_PROP_POS_MSEC, start_sec * 1000.0)
+    max_frames = int(round(dur_sec * fps)) if dur_sec is not None else None
+
+    ff_proc = subprocess.Popen(encode_cmd, stdin=subprocess.PIPE)
+    assert ff_proc.stdin is not None
+
+    ema_alpha = max(0.05, min(1.0, 1.0 - float(args.temporal_smooth)))
+    prev_mask_small: np.ndarray | None = None
+    morph_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    dilate_px = max(0, int(args.dilate))
+    dilate_kernel = (
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate_px * 2 + 1, dilate_px * 2 + 1))
+        if dilate_px > 0
+        else None
+    )
+    feather_sigma = max(0.0, float(args.feather))
+    despill = max(0.0, min(0.5, float(args.despill)))
+
+    frame_idx = 0
+    print(
+        f"Exporting alpha presenter matte ({w}x{h} @ {fps:.2f}fps, codec={codec}, backend={backend}) -> {out_alpha}..."
+    )
+    try:
+        while True:
+            if max_frames is not None and frame_idx >= max_frames:
+                break
+            ok, bgr = cap.read()
+            if not ok:
+                break
+
+            small_bgr = cv2.resize(bgr, (seg_w, seg_h), interpolation=cv2.INTER_AREA)
+            if backend == "mediapipe" and segmenter is not None and mp is not None:
+                small_rgb = cv2.cvtColor(small_bgr, cv2.COLOR_BGR2RGB)
+                mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=small_rgb)
+                ts_ms = int(round((frame_idx * 1000.0) / max(1.0, fps)))
+                res = segmenter.segment_for_video(mp_img, ts_ms)
+                conf = res.confidence_masks[0].numpy_view().squeeze().astype(np.float32)
+                raw_mask = soft_sigmoid_mask(conf, args.threshold, args.softness)
+            else:
+                assert ref_bg_small is not None
+                diff = np.linalg.norm(small_bgr.astype(np.float32) - ref_bg_small, axis=2)
+                raw_mask = np.clip((diff - 18.0) / 28.0, 0.0, 1.0).astype(np.float32)
+
+            binary_u8 = (raw_mask * 255.0).astype(np.uint8)
+            binary_u8 = cv2.morphologyEx(binary_u8, cv2.MORPH_CLOSE, morph_kernel)
+            if dilate_kernel is not None:
+                binary_u8 = cv2.dilate(binary_u8, dilate_kernel, iterations=1)
+            cleaned = np.maximum(raw_mask, binary_u8.astype(np.float32) / 255.0 * 0.85)
+
+            smoothed = (
+                cleaned
+                if prev_mask_small is None
+                else ema_alpha * cleaned + (1.0 - ema_alpha) * prev_mask_small
+            )
+            prev_mask_small = smoothed
+
+            full_mask = cv2.resize(smoothed, (w, h), interpolation=cv2.INTER_LINEAR)
+            if feather_sigma > 0.0:
+                full_mask = cv2.GaussianBlur(
+                    full_mask, (0, 0), sigmaX=feather_sigma, sigmaY=feather_sigma
+                )
+
+            alpha_u8 = np.clip(np.round(full_mask * 255.0), 0, 255).astype(np.uint8)
+            fg_bgr = bgr
+            if despill > 0.0:
+                edge_band = ((full_mask > 0.04) & (full_mask < 0.72)).astype(np.float32)
+                atten = 1.0 - despill * edge_band[..., None]
+                fg_bgr = np.clip(bgr.astype(np.float32) * atten, 0, 255).astype(np.uint8)
+
+            bgra = np.dstack((fg_bgr, alpha_u8))
+            ff_proc.stdin.write(bgra.tobytes())
+            frame_idx += 1
+    finally:
+        cap.release()
+        if segmenter is not None:
+            segmenter.close()
+        if ff_proc.stdin:
+            ff_proc.stdin.close()
+        ret = ff_proc.wait()
+        if ret != 0:
+            raise RuntimeError(f"ffmpeg alphapresenter encoding failed with exit code {ret}")
+
+    print(
+        f"Alpha presenter matte exported ({frame_idx} frames): {out_alpha}\n"
+        f"  Ready for Remotion <PresenterDepthStage presenterAlphaSrc=\"{out_alpha.name}\"> "
+        f"and DaVinci 'export-fcpxml.mjs --person-alpha {out_alpha.name}'."
+    )
+
+
+READING_ROOM_PROP_THEMES: list[dict[str, Any]] = [
+    {
+        "id": "sovereign-fiscal-ledger",
+        "title": "Sovereign Debt & Treasury Ledger",
+        "lut": "editorial-warm",
+        "keywords": [
+            r"treasury",
+            r"table\s*9",
+            r"national\s+debt",
+            r"bondholders?",
+            r"withholding",
+            r"40\.5\s*trillion",
+            r"2\.1\s*trillion",
+        ],
+        "bookshelfProps": [
+            "cloth-bound U.S. Treasury Monthly Statement & CBO Forecast volumes",
+            "aged brass banker's balance scale on middle walnut shelf",
+            "linen archival box files labeled 'FISCAL RECEIPTS'",
+        ],
+        "deskProps": ["fountain pen resting beside a cream ledger pad"],
+    },
+    {
+        "id": "household-mortgage-balance",
+        "title": "Household Balance Sheet & Fixed Debt",
+        "lut": "austin-august-heat",
+        "keywords": [
+            r"claire",
+            r"mortgage",
+            r"3,?400",
+            r"thirty-year\s+loan",
+            r"irving\s+fisher",
+            r"debt\s+deflation",
+            r"escrow",
+            r"underwater",
+        ],
+        "bookshelfProps": [
+            "architectural timber house elevation model on middle walnut shelf",
+            "1933 Irving Fisher 'Debt-Deflation' hardcover monograph",
+            "framed vintage residential plat blueprint",
+        ],
+        "deskProps": ["cast-iron house key weight on cream blotter corner"],
+    },
+    {
+        "id": "statutory-dividend-court",
+        "title": "Statutory Dividend & Judicial Veto",
+        "lut": "archival-parchment",
+        "keywords": [
+            r"alaska",
+            r"permanent\s+fund",
+            r"veto\s+pen",
+            r"wielechowski",
+            r"supreme\s+court",
+            r"escape\s+hatch\s+number\s+one",
+            r"social\s+security",
+        ],
+        "bookshelfProps": [
+            "buckram-bound state reporter legal volumes (Alaska & Federal)",
+            "turned walnut judicial gavel on brass cradle",
+            "vertical archival statute binders",
+        ],
+        "deskProps": ["uncapped black ebonite fountain pen on blotting paper"],
+    },
+    {
+        "id": "compute-scrip-wallets",
+        "title": "Compute Credits & Company Scrip History",
+        "lut": "midnight-desk",
+        "keywords": [
+            r"universal\s+basic\s+compute",
+            r"tokens?",
+            r"uber",
+            r"cloud\s+credits?",
+            r"scrip",
+            r"paint\s+creek",
+            r"island\s+creek",
+            r"shenzhen",
+        ],
+        "bookshelfProps": [
+            "matte anodized server heatsink fin module beside hardcover books",
+            "shadow-box display of 1912 West Virginia brass coal scrip tokens",
+            "1938 Fair Labor Standards Act archival volume",
+        ],
+        "deskProps": ["stacked brass tokens beside a brushed aluminum SSD sled"],
+    },
+    {
+        "id": "grid-watts-transformers",
+        "title": "Physical Power Grid, Substations & Rationing",
+        "lut": "blueprint-cyanotype",
+        "keywords": [
+            r"gigawatts?",
+            r"terawatt-hours?",
+            r"\bpjm\b",
+            r"269\.92",
+            r"833\s*percent",
+            r"three\s+mile\s+island",
+            r"transformers?",
+            r"copper",
+            r"ration\s+points",
+        ],
+        "bookshelfProps": [
+            "vintage glass-dome analog induction watt-hour meter on walnut shelf",
+            "coiled heavy-gauge bare copper busbar specimen",
+            "1941 UK Ministry of Food cloth ration ledger",
+        ],
+        "deskProps": ["ceramic high-voltage porcelain insulator paperweight"],
+    },
+    {
+        "id": "epilogue-reading-room-verdict",
+        "title": "The Reading Room Verdict & Synthesis",
+        "lut": "kodak-2383-print",
+        "keywords": [
+            r"allowance",
+            r"two\s+hundred\s+years",
+            r"unwritten\s+truce",
+            r"one\s+signature",
+            r"next\s+video",
+        ],
+        "bookshelfProps": [
+            "warm walnut library shelf of classic economic history hardcovers",
+            "soft warm-brass library banker's lamp glow (2700K)",
+            "closed archival leather portfolio",
+        ],
+        "deskProps": ["closed moleskine notebook and brass bookmark"],
+    },
+]
+
+
+def format_mmss(seconds: float) -> str:
+    s = max(0, int(round(seconds)))
+    return f"{s // 60:02d}:{s % 60:02d}"
+
+
+def score_prop_theme(text: str) -> dict[str, Any]:
+    best = READING_ROOM_PROP_THEMES[0]
+    best_hits = -1
+    for theme in READING_ROOM_PROP_THEMES:
+        hits = sum(len(re.findall(pat, text, flags=re.IGNORECASE)) for pat in theme["keywords"])
+        if hits > best_hits:
+            best_hits = hits
+            best = theme
+    return best
+
+
+def split_script_into_acts(raw_text: str, target_acts: int = 6) -> list[dict[str, Any]]:
+    cleaned = raw_text.replace("\r\n", "\n").strip()
+    heading_matches = list(re.finditer(r"^#{1,3}\s+(.+)$", cleaned, flags=re.MULTILINE))
+    if len(heading_matches) >= 2:
+        acts: list[dict[str, Any]] = []
+        for idx, m in enumerate(heading_matches):
+            start = m.end()
+            end = heading_matches[idx + 1].start() if idx + 1 < len(heading_matches) else len(cleaned)
+            body = cleaned[start:end].strip()
+            if body:
+                acts.append({"heading": m.group(1).strip(), "text": body})
+        if acts:
+            return acts
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", cleaned) if p.strip()]
+    if not paragraphs:
+        return []
+
+    act_count = max(1, min(target_acts, len(paragraphs)))
+    chunk_size = max(1, round(len(paragraphs) / act_count))
+    acts = []
+    for idx in range(act_count):
+        p_start = idx * chunk_size
+        p_end = len(paragraphs) if idx == act_count - 1 else min(len(paragraphs), (idx + 1) * chunk_size)
+        if p_start >= len(paragraphs):
+            break
+        slice_paras = paragraphs[p_start:p_end]
+        acts.append(
+            {
+                "heading": f"Act {idx + 1} (Paragraphs {p_start + 1}-{p_end})",
+                "text": "\n\n".join(slice_paras),
+                "paragraphRange": [p_start + 1, p_end],
+            }
+        )
+    return acts
+
+
+def cmd_suggest_props(args: argparse.Namespace) -> None:
+    """Analyze script act breaks to recommend chapter-specific Reading Room prop swaps."""
+    script_arg = args.script or args.script_pos
+    if not script_arg:
+        raise ValueError("Provide --script <path> (e.g., --script scripts/video_01_the_allowance.md).")
+
+    script_path = Path(script_arg).resolve()
+    if not script_path.exists():
+        raise FileNotFoundError(f"Script file not found: {script_path}")
+
+    raw_text = script_path.read_text(encoding="utf-8")
+    wpm = max(80, int(args.wpm))
+    acts = split_script_into_acts(raw_text, target_acts=max(2, int(args.acts)))
+
+    cursor_sec = 0.0
+    recommendations: list[dict[str, Any]] = []
+
+    for i, act in enumerate(acts):
+        words = act["text"].split()
+        dur_sec = (len(words) / wpm) * 60.0
+        theme = score_prop_theme(act["text"])
+        shelf_str = ", ".join(theme["bookshelfProps"][:2])
+        prompt = (
+            f"Replace the background appliance on the right with a warm walnut wooden Reading Room "
+            f"bookshelf holding {shelf_str}. Keep the speaker, desk, wall color, shadows, and "
+            f"2700K key lighting identical."
+        )
+        recommendations.append(
+            {
+                "chapter": i + 1,
+                "actLabel": act["heading"],
+                "timeWindow": f"{format_mmss(cursor_sec)} - {format_mmss(cursor_sec + dur_sec)}",
+                "startSec": round(cursor_sec, 1),
+                "endSec": round(cursor_sec + dur_sec, 1),
+                "wordCount": len(words),
+                "themeId": theme["id"],
+                "themeTitle": theme["title"],
+                "recommendedLut": theme["lut"],
+                "recommendedSwapBox": "0.55,0.0,0.45,1.0",
+                "bookshelfProps": theme["bookshelfProps"],
+                "deskProps": theme["deskProps"],
+                "geminiPlatePrompt": prompt,
+            }
+        )
+        cursor_sec += dur_sec
+
+    payload = {
+        "script": str(script_path),
+        "estimatedDuration": format_mmss(cursor_sec),
+        "wpm": wpm,
+        "chapters": recommendations,
+    }
+
+    if args.out:
+        out_json = Path(args.out).resolve()
+        out_json.parent.mkdir(parents=True, exist_ok=True)
+        out_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return
+
+    print(f"=== Reading Room Chapter Prop Recommendations ({script_path.name}) ===")
+    print(f"Estimated Runtime: {format_mmss(cursor_sec)} @ {wpm} WPM | Chapters: {len(recommendations)}\n")
+    for rec in recommendations:
+        print(f"[Chapter {rec['chapter']}] {rec['timeWindow']} — {rec['themeTitle']} ({rec['actLabel']})")
+        print(f"  LUT & Swap Box : {rec['recommendedLut']}.cube | --swap-box {rec['recommendedSwapBox']}")
+        print(f"  Bookshelf Props: {'; '.join(rec['bookshelfProps'])}")
+        print(f"  Desk Accent    : {'; '.join(rec['deskProps'])}")
+        print(f"  Plate Prompt   : --prompt \"{rec['geminiPlatePrompt']}\"\n")
+    if args.out:
+        print(f"Saved JSON prop manifest -> {Path(args.out).resolve()}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Background object-swap workflow for Yuza's studio A-roll (GTX 1650 safe)."
@@ -1135,6 +1686,145 @@ def main() -> None:
         help="Execute ffmpeg clip prep and Gemini Omni 1.2 Flash edit immediately.",
     )
     p_omni.set_defaults(func=cmd_omni_edit)
+
+    # 6. export-person-matte
+    p_alpha = sub.add_parser(
+        "export-person-matte",
+        help="Export a temporally smoothed RGBA alpha presenter video (.webm VP9 or ProRes 4444 .mov) for Depth Sandwich.",
+    )
+    p_alpha.add_argument("input_video", help="Source locked-off tripod A-roll video.")
+    p_alpha.add_argument(
+        "--out",
+        default=None,
+        help="Output alpha video path (default: aroll_person_alpha.webm or .mov).",
+    )
+    p_alpha.add_argument(
+        "--codec",
+        choices=["auto", "webm", "prores"],
+        default="auto",
+        help="Alpha codec: webm (VP9 yuva420p) or prores (ProRes 4444 yuva444p10le). Default: auto.",
+    )
+    p_alpha.add_argument(
+        "--backend",
+        choices=["auto", "mediapipe", "diff"],
+        default="auto",
+        help="Segmentation backend: mediapipe, diff, or auto (default: auto).",
+    )
+    p_alpha.add_argument(
+        "--model-path",
+        default=str(DEFAULT_SEGMENTER_MODEL),
+        help="Path to MediaPipe selfie_segmenter.tflite (git-ignored, auto-downloaded if missing).",
+    )
+    p_alpha.add_argument(
+        "--ref-plate",
+        default=None,
+        help="Optional clean background plate PNG for diff fallback.",
+    )
+    p_alpha.add_argument(
+        "--seg-width",
+        type=int,
+        default=512,
+        help="Internal segmentation width in pixels (default: 512).",
+    )
+    p_alpha.add_argument(
+        "--threshold",
+        type=float,
+        default=0.45,
+        help="Foreground confidence midpoint in [0, 1] (default: 0.45).",
+    )
+    p_alpha.add_argument(
+        "--softness",
+        type=float,
+        default=0.18,
+        help="Smoothstep transition band around threshold (default: 0.18).",
+    )
+    p_alpha.add_argument(
+        "--temporal-smooth",
+        type=float,
+        default=0.68,
+        help="Temporal EMA smoothing factor in [0, 0.95] (default: 0.68).",
+    )
+    p_alpha.add_argument(
+        "--feather",
+        type=float,
+        default=3.5,
+        help="Spatial Gaussian edge feather sigma in pixels (default: 3.5).",
+    )
+    p_alpha.add_argument(
+        "--dilate",
+        type=int,
+        default=2,
+        help="Foreground dilation radius in inference pixels (default: 2).",
+    )
+    p_alpha.add_argument(
+        "--despill",
+        type=float,
+        default=0.15,
+        help="Edge halo attenuation factor in [0, 0.5] (default: 0.15).",
+    )
+    p_alpha.add_argument(
+        "--start",
+        type=float,
+        default=0.0,
+        help="Optional start offset in seconds (default: 0.0).",
+    )
+    p_alpha.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help="Optional duration cap in seconds (default: full video).",
+    )
+    p_alpha.add_argument(
+        "--keep-audio",
+        action="store_true",
+        help="Include source audio stream (default: muted so V3 presenter track never double-plays A1).",
+    )
+    p_alpha.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print FFmpeg alpha encoding pipeline without running segmentation.",
+    )
+    p_alpha.set_defaults(func=cmd_export_person_matte)
+
+    # 7. suggest-props
+    p_props = sub.add_parser(
+        "suggest-props",
+        help="Analyze script act breaks to recommend chapter-specific Reading Room bookshelf/desk prop swaps.",
+    )
+    p_props.add_argument(
+        "script_pos",
+        nargs="?",
+        default=None,
+        help="Optional positional path to spoken script (.md / .txt).",
+    )
+    p_props.add_argument(
+        "--script",
+        default=None,
+        help="Path to spoken script (.md / .txt).",
+    )
+    p_props.add_argument(
+        "--acts",
+        type=int,
+        default=6,
+        help="Target chapter count when script has no markdown headings (default: 6).",
+    )
+    p_props.add_argument(
+        "--wpm",
+        type=int,
+        default=150,
+        help="Estimated speaking rate in words per minute (default: 150).",
+    )
+    p_props.add_argument(
+        "--out",
+        default=None,
+        help="Optional output JSON manifest path.",
+    )
+    p_props.add_argument(
+        "--json",
+        action="store_true",
+        help="Print raw JSON output to stdout.",
+    )
+    p_props.set_defaults(func=cmd_suggest_props)
 
     args = parser.parse_args()
     try:
