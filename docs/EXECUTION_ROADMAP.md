@@ -31,10 +31,10 @@ Running 13 simultaneous heavy streams caused the server drop in session `0654f84
 ### Checkpoint 0: Recovery Snapshot & GitHub Initialization
 - [x] Recover all 5 architectural specs and Wave 4 contracts into `docs/specs/`
 - [x] Fix 3 unused imports and 7 lint issues across recovered files (`0` TS errors, `0` ESLint errors)
-- [ ] Create `Yuzakhodayari/reading-room-cinema` and push Commit 1 (`chore(recovery)`)
+- [x] Create `Yuzakhodayari/reading-room-cinema` and push Commit 1 (`6f4e804`) + Handoff Notes (`61721ff`)
 
 ### Wave A: Optics, 220 Motion Primitives, 525 Props & World/US Cartography
-- [ ] **A1 (Pillar 1 & 10 Optics)**: `design/tokens.ts` (5 registers + OKLCH dissolve + contrast), `design/fitText.ts` (quadratic line breaker + binary-search sizing), `design/optics.tsx` (`ReadingRoomStage`, `CameraRig25D`, `OpticalLoupe`, `HighlighterStroke`), `LiquidGlassPresets.tsx` (18 presets), `PresenterDepthStage.tsx`, `EditorialBackdrop.tsx`, `LiquidGlassObject.tsx`, `ObjectLayerStage.tsx`
+- [x] **A1 (Pillar 1 & 10 Optics)**: `design/tokens.ts` (5 registers + OKLCH dissolve + contrast), `design/fitText.ts` (quadratic line breaker + binary-search sizing), `design/optics.tsx` (`ReadingRoomStage`, `CameraRig25D`, `OpticalLoupe`, `HighlighterStroke`), `LiquidGlassPresets.tsx` (18 presets), `PresenterDepthStage.tsx`, `EditorialBackdrop.tsx`, `LiquidGlassObject.tsx`, `ObjectLayerStage.tsx`
 - [ ] **A2 (Pillar 2 Motion)**: Expand `motion/primitives.ts` to 220+ deterministic primitives and 350+ aliases with `MOTION_PRIMITIVE_CATALOG`, wire 3D perspective/clip wipes into `motion/ObjectAnimator.tsx`, verify progressive sub-beats in `design/choreography.ts`
 - [ ] **A3 (Pillar 12 Prop Vault)**: Expand `registry/props/heroContraptions.tsx` to 40+ multi-part animated rigs, build `registry/props/domainCatalogs.ts` (485+ parametric vector schematics), and export unified `PROP_VAULT` (`525+` items) in `registry/props/index.tsx`
 - [ ] **A4 (Pillar 3 Cartography)**: Build `maps/geoDatabase.ts`, `maps/atlasResolver.ts`, `maps/CinemaMapStage.tsx`, and `maps/index.ts` covering ~177 world countries, 50 US states + D.C., and 24 named geopolitical corridors with zero false Austin fallbacks

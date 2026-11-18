@@ -3,6 +3,7 @@ import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import {
   LayerKeyframe,
   LayerLifecyclePlan,
+  LayerState,
   resolveLayerLifecycle,
 } from "../../design/choreography";
 import { OVER_FOOTAGE_PALETTE } from "../../design/tokens";
@@ -36,6 +37,12 @@ export interface LiquidGlassObjectProps {
   displacementScale?: number;
   roughness?: number;
   blurAmount?: number;
+  /** Perimeter curved optical bevel ring thickness in px (default 10) */
+  bevelWidth?: number;
+  /** Optional explicit specular rim light angle in degrees */
+  specularTrackingDeg?: number;
+  /** Specular caustic edge multiplier in [0, 2] (default 1.0) */
+  causticIntensity?: number;
 }
 
 const NAVY_GLASS_BASE = {
@@ -48,7 +55,13 @@ const NAVY_GLASS_BASE = {
 
 const TINT_STYLES: Record<
   GlassTint,
-  { bg: string; border: string; innerHairline: string; glow: string; isDark: boolean }
+  {
+    bg: string;
+    border: string;
+    innerHairline: string;
+    glow: string;
+    isDark: boolean;
+  }
 > = {
   "navy-glass": NAVY_GLASS_BASE,
   navy: NAVY_GLASS_BASE,
@@ -83,9 +96,28 @@ const TINT_STYLES: Record<
   },
 };
 
+const STEADY_DEFAULT_STATE: LayerState = {
+  stage: "enter",
+  x: 0,
+  y: 0,
+  scale: 1,
+  opacity: 1,
+  highlightProgress: 0,
+  focusGlow: 0,
+  rotate: 0,
+  rotateX: 0,
+  rotateY: 0,
+  skewX: 0,
+  blurPx: 0,
+  clipInsetTop: 0,
+  clipInsetRight: 0,
+  clipInsetBottom: 0,
+  clipInsetLeft: 0,
+};
+
 /**
  * Apple Liquid Glass Object (Over Footage — Silky Smoked-Navy Optical Crystal)
- * - Smooth optical blur(12px) saturate(165%) brightness(0.66) (zero noisy feTurbulence ripples)
+ * - Smooth optical blur(12px) saturate(165%) brightness(0.66)
  * - Multi-stop perimeter curved glass bevel, top-edge silk highlight & 1px specular caustic rim
  */
 export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
@@ -107,6 +139,9 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
   displacementScale: _displacementScale = 18,
   roughness: _roughness = 0.006,
   blurAmount = 12,
+  bevelWidth = 10,
+  specularTrackingDeg,
+  causticIntensity = 1.0,
 }) => {
   void _displacementScale;
   void _roughness;
@@ -119,15 +154,7 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
   // 1. Resolve dynamic motion lifecycle
   const state = lifecycle
     ? resolveLayerLifecycle(frame, fps, lifecycle)
-    : {
-        stage: "enter" as const,
-        x: 0,
-        y: 0,
-        scale: 1,
-        opacity: 1,
-        highlightProgress: 0,
-        focusGlow: 0,
-      };
+    : STEADY_DEFAULT_STATE;
 
   if (state.opacity <= 0.001) {
     return null;
@@ -135,14 +162,23 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
 
   const tintConfig = TINT_STYLES[tint];
 
-  // Specular rim light angle oscillation + smooth diagonal glint sweep
-  const specularAngle = 128 + Math.sin(frame * 0.035) * 26;
-  const specularIntensity = 0.45 + state.focusGlow * 0.4;
+  // Specular rim light angle tracking + smooth diagonal glint sweep
+  const motionAngleBias = (state.x * 0.08 + state.rotateY * 1.4) % 45;
+  const specularAngle =
+    specularTrackingDeg ?? 128 + Math.sin(frame * 0.035) * 26 + motionAngleBias;
+  const clampedCaustic = Math.max(0, Math.min(2, causticIntensity));
+  const specularIntensity = (0.45 + state.focusGlow * 0.4) * clampedCaustic;
   const glintCycle = (frame % 90) / 90;
   const glintSweepX =
     state.highlightProgress > 0
-      ? interpolate(state.highlightProgress, [0, 1], [-65, 165])
-      : interpolate(glintCycle, [0, 1], [-70, 170]);
+      ? interpolate(state.highlightProgress, [0, 1], [-65, 165], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        })
+      : interpolate(glintCycle, [0, 1], [-70, 170], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
 
   let enterFrame: number | undefined;
   let dockFrame: number | undefined;
@@ -153,6 +189,36 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
     dockFrame = lifecycle.dockFrame;
     exitFrame = lifecycle.exitFrame;
   }
+
+  const has3DRot =
+    Math.abs(state.rotateX) > 0.01 || Math.abs(state.rotateY) > 0.01;
+  const transformParts: string[] = [];
+  if (has3DRot) transformParts.push("perspective(1200px)");
+  transformParts.push(
+    `translate3d(${state.x.toFixed(2)}px, ${state.y.toFixed(2)}px, 0)`
+  );
+  transformParts.push(`scale(${state.scale.toFixed(4)})`);
+  if (Math.abs(state.rotate) > 0.01) {
+    transformParts.push(`rotate(${state.rotate.toFixed(2)}deg)`);
+  }
+  if (Math.abs(state.rotateX) > 0.01) {
+    transformParts.push(`rotateX(${state.rotateX.toFixed(2)}deg)`);
+  }
+  if (Math.abs(state.rotateY) > 0.01) {
+    transformParts.push(`rotateY(${state.rotateY.toFixed(2)}deg)`);
+  }
+  if (Math.abs(state.skewX) > 0.01) {
+    transformParts.push(`skewX(${state.skewX.toFixed(2)}deg)`);
+  }
+
+  const hasClip =
+    state.clipInsetTop > 0.05 ||
+    state.clipInsetRight > 0.05 ||
+    state.clipInsetBottom > 0.05 ||
+    state.clipInsetLeft > 0.05;
+
+  const rimAlphaPrimary = Math.min(0.95, 0.78 * clampedCaustic).toFixed(2);
+  const rimAlphaSecondary = Math.min(0.9, 0.62 * clampedCaustic).toFixed(2);
 
   return (
     <>
@@ -179,8 +245,16 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
           position: "relative",
           width,
           height,
-          transform: `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`,
+          transform: transformParts.join(" "),
           opacity: state.opacity,
+          filter: state.blurPx > 0.15 ? `blur(${state.blurPx.toFixed(2)}px)` : undefined,
+          clipPath: hasClip
+            ? `inset(${state.clipInsetTop.toFixed(1)}% ${state.clipInsetRight.toFixed(
+                1
+              )}% ${state.clipInsetBottom.toFixed(1)}% ${state.clipInsetLeft.toFixed(
+                1
+              )}% round ${borderRadius}px)`
+            : undefined,
           transformOrigin: "center center",
           ...style,
         }}
@@ -219,15 +293,16 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
           />
 
           {/* 4b. Multi-Stop Curved Bevel Ring (perimeter-only optical edge depth, flat clear interior) */}
-          {enableOpticalRefraction && (
+          {enableOpticalRefraction && bevelWidth > 0 && (
             <div
               style={{
                 position: "absolute",
                 inset: 0,
                 borderRadius,
-                padding: "10px",
-                background:
-                  "linear-gradient(150deg, rgba(255, 250, 240, 0.16) 0%, rgba(169, 196, 222, 0.06) 45%, rgba(15, 25, 35, 0.12) 100%)",
+                padding: `${Math.max(2, bevelWidth)}px`,
+                background: `linear-gradient(${(specularAngle + 22).toFixed(
+                  1
+                )}deg, rgba(255, 250, 240, 0.18) 0%, rgba(169, 196, 222, 0.07) 45%, rgba(15, 25, 35, 0.14) 100%)`,
                 WebkitMask:
                   "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
                 WebkitMaskComposite: "xor",
@@ -260,7 +335,9 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
                   inset: 0,
                   borderRadius,
                   padding: "1px",
-                  background: `linear-gradient(${specularAngle}deg, rgba(255, 250, 240, 0.78) 0%, rgba(169, 196, 222, 0.22) 48%, rgba(255, 250, 240, 0.62) 100%)`,
+                  background: `linear-gradient(${specularAngle.toFixed(
+                    1
+                  )}deg, rgba(255, 250, 240, ${rimAlphaPrimary}) 0%, rgba(169, 196, 222, 0.22) 48%, rgba(255, 250, 240, ${rimAlphaSecondary}) 100%)`,
                   WebkitMask:
                     "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
                   WebkitMaskComposite: "xor",
@@ -274,8 +351,10 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
                   position: "absolute",
                   inset: 0,
                   borderRadius,
-                  background: `linear-gradient(115deg, transparent 34%, rgba(255, 250, 240, ${(0.10 * specularIntensity).toFixed(2)}) 50%, transparent 66%)`,
-                  transform: `translate3d(${glintSweepX}%, 0, 0)`,
+                  background: `linear-gradient(115deg, transparent 34%, rgba(255, 250, 240, ${(
+                    0.1 * specularIntensity
+                  ).toFixed(3)}) 50%, transparent 66%)`,
+                  transform: `translate3d(${glintSweepX.toFixed(2)}%, 0, 0)`,
                   pointerEvents: "none",
                   zIndex: 3,
                 }}
