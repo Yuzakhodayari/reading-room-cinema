@@ -36,9 +36,9 @@ Running 13 simultaneous heavy streams caused the server drop in session `0654f84
 ### Wave A: Optics, 220 Motion Primitives, 525 Props & World/US Cartography
 - [x] **A1 (Pillar 1 & 10 Optics)**: `design/tokens.ts` (5 registers + OKLCH dissolve + contrast), `design/fitText.ts` (quadratic line breaker + binary-search sizing), `design/optics.tsx` (`ReadingRoomStage`, `CameraRig25D`, `OpticalLoupe`, `HighlighterStroke`), `LiquidGlassPresets.tsx` (18 presets), `PresenterDepthStage.tsx`, `EditorialBackdrop.tsx`, `LiquidGlassObject.tsx`, `ObjectLayerStage.tsx`
 - [x] **A2 (Pillar 2 Motion)**: Expand `motion/primitives.ts` to 234 deterministic primitives and 434+ aliases (`661` total resolvable tokens) with `MOTION_PRIMITIVE_CATALOG`, wire 3D perspective/clip wipes into `motion/ObjectAnimator.tsx`, verify progressive sub-beats in `design/choreography.ts`
-- [ ] **A3 (Pillar 12 Prop Vault)**: Expand `registry/props/heroContraptions.tsx` to 40+ multi-part animated rigs, build `registry/props/domainCatalogs.ts` (485+ parametric vector schematics), and export unified `PROP_VAULT` (`525+` items) in `registry/props/index.tsx`
+- [x] **A3 (Pillar 12 Prop Vault)**: Expand `registry/props/heroContraptions.tsx` to 45 multi-part animated rigs, build `registry/props/domainCatalogs.ts` (500 parametric vector schematics), and export unified `PROP_VAULT` (`545` items) in `registry/props/index.tsx`
 - [x] **A4 (Pillar 3 Cartography)**: Build `maps/geoDatabase.ts`, `maps/atlasResolver.ts`, `maps/CinemaMapStage.tsx`, and `maps/index.ts` covering 211 countries/territories, 51 US states + D.C., and 24 named geopolitical corridors with zero false Austin fallbacks
-- [ ] **Gate A**: `tsc --noEmit` + `eslint` + Git commit & push
+- [x] **Gate A**: `tsc --noEmit` + `eslint` + Git commits pushed to `origin/main`
 
 ### Wave B: Procedural Audio/LUTs, 30-Episode Vault, Generative Set-Pieces & Equalizer Compiler
 - [x] **B1 (Pillars 6 & 7 Audio/Color)**: Upgrade `generate-sfx.mjs` and synthesize 96 studio 48kHz WAVs; build `generate-music.mjs` and synthesize 12 seamless documentary stems; build `generate-luts.mjs` and generate 12 `.cube` LUTs; wire `SfxCue.tsx`, `MusicBed.tsx`, and `audio/soundRegistry.ts`
@@ -48,7 +48,7 @@ Running 13 simultaneous heavy streams caused the server drop in session `0654f84
 - [ ] **Gate B**: `tsc --noEmit` + `eslint` + asset verification (96 WAVs, 12 music stems, 12 LUTs) + Git commit & push
 
 ### Wave C: 120 Documentary Style Recipes & AI CLI / DaVinci FCPXML v1.9 / Depth Matte Bridge
-- [ ] **C1 (Pillar 3A Styles)**: Upgrade `styles/docBroadcast.tsx` and `styles/vintageEditorial.tsx`; build `styles/macroTelemetry.tsx` (22 chart recipes) and `styles/forensicExhibits.tsx` (24 primary-source and media-collision stages)
+- [x] **C1 (Pillar 3A Styles)**: Upgrade `styles/docBroadcast.tsx` (12 recipes) and `styles/vintageEditorial.tsx` (10 recipes); build `styles/macroTelemetry.tsx` (22 chart recipes) and `styles/forensicExhibits.tsx` (24 primary-source and media-collision stages) — 68 recipes total
 - [ ] **C2 (Pillar 3B Styles)**: Upgrade `styles/dataMaps3D.tsx` (remove WebGL leak, wire `src/maps/`); build `styles/systemSimulators.tsx` (26 mechanical/plumbing simulators) and `styles/uiSatireAndCollage.tsx` (24 household, scrip, and dry-wit stages)
 - [ ] **C3 (Pillars 6, 9, 10, 15 Tooling)**: Build `tools/ai_director.mjs` (DeepSeek, OpenAI, Gemini, Anthropic, Ollama, prompt-pack, and offline deterministic compiler); upgrade `studio/scripts/export-fcpxml.mjs` (V1 punch-in keyframes, V1-V4 Depth Sandwich lanes, A1-A3 stems); build `studio/scripts/master-audio.mjs` (`-14 LUFS`); upgrade `tools/room_object_swap.py` and `tools/OBJECT_SWAP_GUIDE.md`
 - [ ] **Gate C**: `tsc --noEmit` + `eslint` + Git commit & push

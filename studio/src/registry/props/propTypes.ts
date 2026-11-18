@@ -358,9 +358,27 @@ export type ParametricGeometryParams =
   | ChartInstrumentParams
   | TelestratorAnnotationParams;
 
+export const PROP_DOMAIN_SLUGS = [
+  "fiscal",
+  "ai-compute",
+  "energy-grid",
+  "labor",
+  "legal",
+  "geopolitics",
+  "household",
+  "history",
+  "maritime-defense",
+  "editorial-annotation",
+] as const;
+
+export const PropDomainSlugSchema = z.enum(PROP_DOMAIN_SLUGS);
+export type PropDomainSlug = z.infer<typeof PropDomainSlugSchema>;
+
 export interface ParametricPropBlueprint {
   id: string;
   title: string;
+  label?: string;
+  domain?: PropDomainSlug;
   category: PropCategory;
   episodeTags: string[];
   keywords: string[];
@@ -373,11 +391,15 @@ export interface ParametricPropBlueprint {
   geometry: ParametricGeometryParams;
 }
 
+export type ParametricSpec = ParametricPropBlueprint;
+
 export const PropMetadataSchema = z.object({
   id: z.string().min(2),
   title: z.string().min(2),
+  label: z.string().optional(),
   componentName: z.string().optional(),
   kind: PropKindSchema,
+  domain: PropDomainSlugSchema.optional(),
   category: PropCategorySchema,
   episodeTags: z.array(z.string()),
   keywords: z.array(z.string()).min(2),
@@ -390,8 +412,10 @@ export const PropMetadataSchema = z.object({
 export interface PropVaultEntry {
   id: string;
   title: string;
+  label?: string;
   componentName?: string;
   kind: PropKind;
+  domain?: PropDomainSlug;
   category: PropCategory;
   episodeTags: string[];
   keywords: string[];
@@ -404,6 +428,7 @@ export interface PropVaultEntry {
 }
 
 export interface PropSearchOptions {
+  domain?: PropDomainSlug;
   category?: PropCategory;
   kind?: PropKind;
   episodeTag?: string;
