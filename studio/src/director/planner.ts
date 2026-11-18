@@ -1,72 +1,469 @@
 import {
   BeatCategory,
   CameraFraming,
+  CinemaRegister,
+  DepthSandwichSpec,
   DirectorAudit,
   DirectorBeat,
+  DirectorBeatDataPayload,
+  DirectorExhibitData,
   DirectorOptions,
   DirectorPlan,
+  DirectorSeriesPoint,
   DirectorSfxCue,
+  DirectorTableRow,
+  GlassPreset,
   MusicEnergy,
   PaletteMode,
   StyleEngineFamily,
   StyleRecipe,
+  StyleWorldId,
   TranscriptSegment,
 } from "./schema";
+import { resolveGeoQuery } from "../maps/atlasResolver";
+import {
+  CANONICAL_GLASS_PRESET_IDS,
+  CANONICAL_TYPOGRAPHY_MODE_IDS,
+  STRATEGY_PRESETS,
+  StrategyPresetId,
+  StrategyPresetIdSchema,
+  createEpisode01ContinuityEngine,
+  filterRecipesByStrategyGuardrails,
+} from "../novelty";
+import {
+  AnyTimedWord,
+  TimedWord,
+  connectWhisperWordsToBeat,
+  synthesizeTimedWords,
+} from "../typography/prosodySync";
+
+export const CINEMA_10_STYLE_WORLDS: readonly StyleWorldId[] = [
+  "liquid-glass",
+  "doc-broadcast",
+  "vintage-editorial",
+  "macro-telemetry",
+  "forensic-exhibits",
+  "diagram-metaphor",
+  "data-maps-3d",
+  "system-simulators",
+  "ui-satire-collage",
+  "generative-setpiece",
+];
+
+export interface SignatureSetPieceRule {
+  id: string;
+  blueprintKey: string;
+  title: string;
+  styleWorld: StyleWorldId;
+  styleFamily: StyleEngineFamily;
+  componentHint: string;
+  register: CinemaRegister;
+  typographyMode: string;
+  sfxPrimary: string;
+  sfxSecondary: string;
+  propIds: string[];
+  pattern: RegExp;
+}
+
+export const SIGNATURE_SET_PIECES: readonly SignatureSetPieceRule[] = [
+  {
+    id: "sp-ep01-shoe-bom-vaporizer",
+    blueprintKey: "SP01_SHOE_LABOR_VAPORIZER",
+    title: "$120 Running Shoe 80% Labor Vaporizer",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "page_editorial",
+    typographyMode: "blueprint-dimension-callout",
+    sfxPrimary: "pneumatic-servo",
+    sfxSecondary: "data-tick",
+    propIds: ["RunningShoeExplodedStack"],
+    pattern: /running shoes|dental x-ray|unit costs drop/i,
+  },
+  {
+    id: "sp-ep01-whiteboard-iron-loan-flip",
+    blueprintKey: "SP02_PALO_ALTO_WHITEBOARD_FLIP",
+    title: "Palo Alto Whiteboard 180° Flip to Cast-Iron Loan",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    register: "page_editorial",
+    typographyMode: "antithesis-split-lock",
+    sfxPrimary: "anvil-iron-clank",
+    sfxSecondary: "marker-sweep",
+    propIds: ["PaloAltoFlipWhiteboard"],
+    pattern: /whiteboard in palo alto|thirty-year loan/i,
+  },
+  {
+    id: "sp-ep01-claire-longitudinal-house",
+    blueprintKey: "SP03_CLAIRE_LONGITUDINAL_HOUSE",
+    title: "Claire Longitudinal 2025-2036 House Ledger",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "StickFigureStage",
+    register: "archival_parchment",
+    typographyMode: "ledger-tabular-rollup",
+    sfxPrimary: "calculator-ribbon-print",
+    sfxSecondary: "audit-row-lock",
+    propIds: ["ClaireAustinHouseRig"],
+    pattern: /claire.{0,45}3,400|austin.{0,30}2025|austin august/i,
+  },
+  {
+    id: "sp-ep01-w2-guillotine-tax-plumbing",
+    blueprintKey: "SP04_W2_GUILLOTINE_TAX_PLUMBING",
+    title: "W-2 Guillotine vs Ireland Tax Plumbing",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "drafting_blueprint",
+    typographyMode: "ledger-tabular-rollup",
+    sfxPrimary: "guillotine-slice",
+    sfxSecondary: "blueprint-unroll",
+    propIds: ["W2WithholdingGuillotine"],
+    pattern: /tax plumbing|withholding.{0,40}payroll|route intellectual-property/i,
+  },
+  {
+    id: "sp-ep01-port-1955-vs-2034-diptych",
+    blueprintKey: "SP05_1955_PIER_VS_2034_PORT",
+    title: "1955 Silent Pier vs 2034 Robotic Port",
+    styleWorld: "system-simulators",
+    styleFamily: "doc-broadcast",
+    componentHint: "LiveCountdownSplit",
+    register: "midnight_telemetry",
+    typographyMode: "solari-split-flap",
+    sfxPrimary: "pneumatic-servo",
+    sfxSecondary: "anchor-chain-scrape",
+    propIds: ["IdlePier1955", "AutonomousPortGantry2034"],
+    pattern: /dockworkers in rotterdam|robotic cranes unload|every machine keeps running/i,
+  },
+  {
+    id: "sp-ep01-alaska-veto-slash",
+    blueprintKey: "SP06_ALASKA_WALKER_VETO_SLASH",
+    title: "Alaska Gov. Walker Fountain-Pen Veto Slash",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "ArchiveLightTable",
+    register: "archival_parchment",
+    typographyMode: "veto-fountain-strike",
+    sfxPrimary: "fountain-pen-slash",
+    sfxSecondary: "gavel-wood-hit",
+    propIds: ["GovernorVetoFountainPen", "SupremeCourtBenchGavel"],
+    pattern: /bill walker|veto pen|wielechowski/i,
+  },
+  {
+    id: "sp-ep01-bond-priority-spillway",
+    blueprintKey: "SP07_SOVEREIGN_BOND_SPILLWAY",
+    title: "Federal $2.1T Bond Priority Spillway",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    register: "drafting_blueprint",
+    typographyMode: "debt-odometer-inline",
+    sfxPrimary: "vault-bolt-lock",
+    sfxSecondary: "hydraulic-press",
+    propIds: ["SpillwayDam3Tier", "DebtMonolithWall"],
+    pattern: /bondholders always get paid first|debt-ceiling standoff/i,
+  },
+  {
+    id: "sp-ep01-uber-4mo-token-burn",
+    blueprintKey: "SP08_UBER_4MONTH_TOKEN_BURN",
+    title: "Uber 4-Month AI Budget Burnout",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "CaptionNewsCard",
+    register: "midnight_telemetry",
+    typographyMode: "stock-ticker-crawl",
+    sfxPrimary: "server-rack-hum",
+    sfxSecondary: "alert-ping",
+    propIds: ["TokenDeflationFurnace"],
+    pattern: /uber burned through|1,500 per engineer/i,
+  },
+  {
+    id: "sp-ep01-empty-gate-14a-compute",
+    blueprintKey: "SP09_EMPTY_GATE_14A_PERISHABLE",
+    title: "Empty Gate 14A vs Expiring Tuesday Compute",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    register: "page_editorial",
+    typographyMode: "erosion-decay-fade",
+    sfxPrimary: "jet-gate-retract",
+    sfxSecondary: "pendulum-escapement-tick",
+    propIds: ["EmptyAirlineGate14A"],
+    pattern: /spoils on the clock|plane pushes back|idle server time in a jar/i,
+  },
+  {
+    id: "sp-ep01-closed-scrip-wallet",
+    blueprintKey: "SP10_CLOSED_SCRIP_20PCT_TOLL",
+    title: "Closed Scrip Wallet 20% Exit Toll vs 1912 Coal Scrip",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "Newsreel1920s",
+    register: "archival_parchment",
+    typographyMode: "statute-clause-box",
+    sfxPrimary: "coin-brass-clink",
+    sfxSecondary: "nsf-decline-buzz",
+    propIds: ["ClosedScripWalletRig", "CoalScripBrassToken1912"],
+    pattern: /twenty percent fee|island creek coal|paint creek|shenzhen/i,
+  },
+  {
+    id: "sp-ep01-wattage-10w-to-5gw-ladder",
+    blueprintKey: "SP11_10W_TO_5GW_POWER_LADDER",
+    title: "10W Charger to 5GW AI Campus Power Ladder",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    register: "drafting_blueprint",
+    typographyMode: "blueprint-dimension-callout",
+    sfxPrimary: "watt-meter-whir",
+    sfxSecondary: "substation-60hz-buzz",
+    propIds: ["WattageApplianceNode", "HighVoltageSubstationRig"],
+    pattern: /phone charger draws ten watts|five gigawatts on a single ai campus/i,
+  },
+  {
+    id: "sp-ep01-agent-vs-grid-permitting-race",
+    blueprintKey: "SP12_6MO_AGENT_VS_10YR_GRID",
+    title: "6-Month Agent vs 10-Year Grid Permitting Race",
+    styleWorld: "system-simulators",
+    styleFamily: "doc-broadcast",
+    componentHint: "LiveCountdownSplit",
+    register: "midnight_telemetry",
+    typographyMode: "solari-split-flap",
+    sfxPrimary: "ratchet-winch-click",
+    sfxSecondary: "high-voltage-arc-snap",
+    propIds: ["Transformer128WeekQueue"],
+    pattern: /six months.{0,60}five to ten years|gap between software speed and construction speed/i,
+  },
+  {
+    id: "sp-ep01-1941-uk-ration-counter",
+    blueprintKey: "SP13_1941_UK_16PT_RATION_BOOK",
+    title: "1941 UK 16-Point Ration Counter",
+    styleWorld: "vintage-editorial",
+    styleFamily: "vintage-editorial",
+    componentHint: "Newsreel1920s",
+    register: "vintage_newsreel",
+    typographyMode: "typewriter-1941-ribbon",
+    sfxPrimary: "paper-tear-crisp",
+    sfxSecondary: "typewriter-strike",
+    propIds: ["BritishRationBook1941"],
+    pattern: /december 1, 1941|ministry of food|sixteen ration points/i,
+  },
+  {
+    id: "sp-ep01-walker-veto-allowance-slam",
+    blueprintKey: "SP14_FRIDAY_TRUCE_TO_ALLOWANCE",
+    title: "200-Year Friday Truce to Allowance Verdict",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "SilentFilmCard",
+    register: "page_editorial",
+    typographyMode: "verdict-anvil-slam",
+    sfxPrimary: "fountain-pen-slash",
+    sfxSecondary: "resolve-chord-warm",
+    propIds: ["GovernorVetoFountainPen"],
+    pattern: /we call that an allowance|zero power to negotiate|it'?s an allowance/i,
+  },
+  {
+    id: "sp-ep02-tether-vs-tokyo-tbill-shift",
+    blueprintKey: "SP15_TETHER_VS_TOKYO_TBILL",
+    title: "Tether vs Tokyo T-Bill Shift",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    register: "archival_parchment",
+    typographyMode: "ledger-tabular-rollup",
+    sfxPrimary: "balance-scale-creak",
+    sfxSecondary: "map-whoosh",
+    propIds: ["TreasuryBondVault"],
+    pattern: /tether|stablecoin.{0,40}treasury|tokyo.{0,40}t-bill/i,
+  },
+  {
+    id: "sp-ep03-nvidia-coreweave-spv-carousel",
+    blueprintKey: "SP16_NVIDIA_COREWEAVE_SPV_LOOP",
+    title: "Nvidia-CoreWeave Circular SPV Carousel",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "midnight_telemetry",
+    typographyMode: "footnote-loupe-zoom",
+    sfxPrimary: "pneumatic-servo",
+    sfxSecondary: "glass-loupe-click",
+    propIds: ["CircularGpuSpvCarousel", "GpuServerRackTower"],
+    pattern: /coreweave|special purpose vehicle|circular.{0,30}gpu/i,
+  },
+  {
+    id: "sp-ep04-saas-pik-debt-snowball",
+    blueprintKey: "SP17_SAAS_PIK_DEBT_SNOWBALL",
+    title: "SaaS PIK Debt Snowball",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "BlobSimulation",
+    register: "midnight_telemetry",
+    typographyMode: "debt-odometer-inline",
+    sfxPrimary: "hydraulic-press",
+    sfxSecondary: "warning-thud",
+    propIds: ["PikDebtSnowball"],
+    pattern: /payment-in-kind|\bpik\b|private credit/i,
+  },
+  {
+    id: "sp-ep05-california-lidar-roof-drone",
+    blueprintKey: "SP18_CA_ROOF_SCAN_DRONE",
+    title: "California Roof-Scan Insurance Drone",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "archival_parchment",
+    typographyMode: "telestrator-grease-math",
+    sfxPrimary: "drone-pass-by",
+    sfxSecondary: "camera-shutter",
+    propIds: ["RoofScanInsuranceDrone"],
+    pattern: /fair plan|homeowners insurance|roof.{0,25}drone/i,
+  },
+  {
+    id: "sp-ep06-transformer-128wk-copper-trap",
+    blueprintKey: "SP19_128WK_TRANSFORMER_COPPER",
+    title: "128-Week Transformer & Copper Bottleneck",
+    styleWorld: "system-simulators",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    register: "drafting_blueprint",
+    typographyMode: "blueprint-dimension-callout",
+    sfxPrimary: "substation-60hz-buzz",
+    sfxSecondary: "breaker-trip-clunk",
+    propIds: ["Transformer128WeekQueue", "CopperOpenPitClock"],
+    pattern: /128-week|copper wire, high-voltage transformers/i,
+  },
+  {
+    id: "sp-ep07-taiwan-2nm-euv-killswitch",
+    blueprintKey: "SP20_TAIWAN_2NM_EUV_KILLSWITCH",
+    title: "Taiwan 2nm Blockade & ASML EUV Kill-Switch",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    register: "midnight_telemetry",
+    typographyMode: "redacted-declassify",
+    sfxPrimary: "euv-laser-pulse",
+    sfxSecondary: "breaker-trip-clunk",
+    propIds: ["AsmlEuvKillSwitchRig", "SiliconWaferNodeCompare"],
+    pattern: /\basml\b|\beuv\b|taiwan.{0,30}2nm/i,
+  },
+  {
+    id: "sp-ep08-drone-20k-vs-carrier-vls-drain",
+    blueprintKey: "SP21_20K_DRONE_VS_13B_CARRIER",
+    title: "$20k Drone vs $13B Carrier VLS Drain",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    register: "drafting_blueprint",
+    typographyMode: "antithesis-split-lock",
+    sfxPrimary: "vls-launch-whoosh",
+    sfxSecondary: "drone-pass-by",
+    propIds: ["CarrierVsDroneExchange"],
+    pattern: /vls|aircraft carrier.{0,40}drone|20,000 drone/i,
+  },
+  {
+    id: "sp-ep09-subsea-550-cable-anchor-cut",
+    blueprintKey: "SP22_550_SUBSEA_CABLE_ANCHOR",
+    title: "550 Subsea Cable Anchor Cut",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    register: "drafting_blueprint",
+    typographyMode: "whisper-focus-spotlight",
+    sfxPrimary: "subsea-cable-snap",
+    sfxSecondary: "radar-sonar-ping",
+    propIds: ["SubseaCableAnchorCut"],
+    pattern: /subsea cable|undersea cable|550 cables/i,
+  },
+  {
+    id: "sp-ep10-france-greece-vigilante-flip",
+    blueprintKey: "SP23_FRANCE_GREECE_SPREAD_FLIP",
+    title: "France vs Greece Bond Vigilante Flip",
+    styleWorld: "macro-telemetry",
+    styleFamily: "doc-broadcast",
+    componentHint: "VisualInvestigationBoard",
+    register: "midnight_telemetry",
+    typographyMode: "antithesis-split-lock",
+    sfxPrimary: "basis-point-blip",
+    sfxSecondary: "balance-scale-creak",
+    propIds: ["BondVigilanteScale"],
+    pattern: /france.{0,35}greece|bond vigilante/i,
+  },
+  {
+    id: "sp-ep11-oasi-2032-vault-exhaustion",
+    blueprintKey: "SP24_OASI_2032_TRUST_EXHAUSTION",
+    title: "Q4 2032 Social Security Vault Exhaustion",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "ArchiveLightTable",
+    register: "archival_parchment",
+    typographyMode: "debt-odometer-inline",
+    sfxPrimary: "vault-bolt-lock",
+    sfxSecondary: "pendulum-escapement-tick",
+    propIds: ["SocialSecurity2032Dial"],
+    pattern: /social security.{0,40}2032|oasi trust/i,
+  },
+];
 
 /**
- * Complete 24-style catalog aligned with studio/src/components & studio/src/styles:
- * - 3 Over-Footage Apple Liquid Glass live camera overlay styles (card, dock, toast; tint="navy-glass" default)
- * - 8 Document & Broadcast styles (src/styles/docBroadcast.tsx — Page milk canvas or Over-Footage navy glass)
- * - 5 Vintage Editorial styles (src/styles/vintageEditorial.tsx)
- * - 4 Diagram & Metaphor styles (src/styles/diagramMetaphor.tsx)
- * - 4 Data & Maps 3D styles (src/styles/dataMaps3D.tsx)
- *
- * Every motionAction uses valid composable primitives.ts tokens in
- * `enterAction -> inPlaceAction -> exitAction` order with calm editorial pacing
- * (zero glitch-jitter or harsh strobe flashes).
+ * Expanded 60-recipe Cinema Style Catalog spanning all 10 Style Worlds:
+ * - Preserves all 24 original commit 534d89a recipes (indices 0..23)
+ * - Adds 36 flagship cinema recipes across macro-telemetry, forensic-exhibits,
+ *   system-simulators, ui-satire-collage, generative-setpiece, liquid-glass rigs,
+ *   vintage archival press, and war-room cartography.
  */
 export const STYLE_CATALOG: StyleRecipe[] = [
-  // 1-3: Over-Footage Crystal Smoked-Navy Apple Liquid Glass (live over A-roll camera)
+  // 1-3: Legacy Over-Footage Liquid Glass
   {
     id: "liquid-glass-card",
+    styleWorld: "liquid-glass",
     styleFamily: "liquid-glass",
     componentHint: "LiquidGlassObject:card",
     framing: "talking-head-with-glass",
     motionAction: "slide-left -> glow-rim -> fade-blur-out",
     glassPreset: "card",
+    glassRig: "card",
     typographyMode: "marker-sweep",
     defaultSfx: "glass-enter",
     secondarySfx: "glass-dock",
     paceProfile: "balanced",
+    register: "over_footage",
+    depthSandwichEligible: true,
   },
   {
     id: "liquid-glass-dock",
+    styleWorld: "liquid-glass",
     styleFamily: "liquid-glass",
     componentHint: "LiquidGlassObject:dock",
     framing: "talking-head-with-glass",
     motionAction: "slide-up -> highlight-sweep -> fade-out",
     glassPreset: "dock",
+    glassRig: "bottom-dock",
     typographyMode: "split-lines",
     defaultSfx: "glass-dock",
     secondarySfx: "marker-sweep",
     paceProfile: "balanced",
+    register: "over_footage",
   },
   {
     id: "liquid-glass-toast",
+    styleWorld: "liquid-glass",
     styleFamily: "liquid-glass",
     componentHint: "LiquidGlassObject:toast",
     framing: "talking-head-punch-in",
     motionAction: "pop-out -> nudge -> pop-down",
     glassPreset: "toast",
+    glassRig: "toast-alert",
     typographyMode: "red-correction",
     defaultSfx: "glass-enter",
     secondarySfx: "alert-ping",
     paceProfile: "snappy",
+    register: "over_footage",
   },
 
-  // 4-11: Document & Broadcast (8 styles)
+  // 4-11: Legacy Document & Broadcast
   {
     id: "doc-news-package",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "NewsPackageLowerThird",
     framing: "talking-head-with-glass",
@@ -75,9 +472,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "glass-enter",
     secondarySfx: "data-tick",
     paceProfile: "balanced",
+    register: "over_footage",
   },
   {
     id: "doc-caption-news",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "CaptionNewsCard",
     framing: "fullscreen-cutaway",
@@ -86,9 +485,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "paper-slide",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
   {
     id: "doc-visual-investigation",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "VisualInvestigationBoard",
     framing: "fullscreen-cutaway",
@@ -98,9 +499,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     secondarySfx: "warning-thud",
     paceProfile: "calm-hold",
     peakOnly: true,
+    register: "midnight_telemetry",
   },
   {
     id: "doc-archive-light-table",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "ArchiveLightTable",
     framing: "fullscreen-cutaway",
@@ -109,9 +512,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "paper-slide",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "archival_parchment",
   },
   {
     id: "doc-live-countdown-split",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "LiveCountdownSplit",
     framing: "split-screen",
@@ -120,9 +525,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "data-tick",
     secondarySfx: "riser-subtle",
     paceProfile: "balanced",
+    register: "midnight_telemetry",
   },
   {
     id: "doc-telestrator",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "TelestratorOverlay",
     framing: "split-screen",
@@ -131,9 +538,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "telestrator-draw",
     secondarySfx: "marker-sweep",
     paceProfile: "balanced",
+    register: "over_footage",
   },
   {
     id: "doc-kino-montage",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "KinoMontageStrip",
     framing: "fullscreen-cutaway",
@@ -142,9 +551,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "flash-cut",
     secondarySfx: "chapter-chime",
     paceProfile: "snappy",
+    register: "page_editorial",
   },
   {
     id: "doc-city-symphony",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "CitySymphonyFrame",
     framing: "fullscreen-cutaway",
@@ -152,11 +563,13 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     typographyMode: "split-lines",
     defaultSfx: "camera-shutter",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
 
-  // 12-16: Vintage Editorial (5 styles)
+  // 12-16: Legacy Vintage Editorial
   {
     id: "vintage-newsreel",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "Newsreel1920s",
     framing: "fullscreen-cutaway",
@@ -165,9 +578,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "newsreel-click",
     secondarySfx: "paper-slide",
     paceProfile: "calm-hold",
+    register: "vintage_newsreel",
   },
   {
     id: "vintage-silent-film",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "SilentFilmCard",
     framing: "fullscreen-cutaway",
@@ -175,9 +590,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     typographyMode: "split-lines",
     defaultSfx: "chapter-chime",
     paceProfile: "balanced",
+    register: "vintage_newsreel",
   },
   {
     id: "vintage-collage",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "CollageCutout",
     framing: "fullscreen-cutaway",
@@ -186,9 +603,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "paper-flip-fast",
     secondarySfx: "sticker-pop",
     paceProfile: "snappy",
+    register: "archival_parchment",
   },
   {
     id: "vintage-spy-titles",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "SpyTitleSequence",
     framing: "fullscreen-cutaway",
@@ -197,9 +616,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "flash-cut",
     secondarySfx: "type-click",
     paceProfile: "balanced",
+    register: "midnight_telemetry",
   },
   {
     id: "vintage-stained-glass",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "StainedGlassFrame",
     framing: "split-screen",
@@ -207,11 +628,13 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     typographyMode: "split-lines",
     defaultSfx: "chapter-chime",
     paceProfile: "calm-hold",
+    register: "archival_parchment",
   },
 
-  // 17-20: Diagram & Metaphor (4 styles)
+  // 17-20: Legacy Diagram & Metaphor
   {
     id: "diagram-sticker",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "StickerCutout",
     framing: "talking-head-punch-in",
@@ -219,9 +642,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     typographyMode: "word-pop",
     defaultSfx: "sticker-pop",
     paceProfile: "snappy",
+    register: "over_footage",
   },
   {
     id: "diagram-stick-figure",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "StickFigureStage",
     framing: "fullscreen-cutaway",
@@ -230,9 +655,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "sticker-pop",
     secondarySfx: "paper-slide",
     paceProfile: "balanced",
+    register: "page_editorial",
   },
   {
     id: "diagram-instruction-manual",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "InstructionManualCard",
     framing: "fullscreen-cutaway",
@@ -241,9 +668,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "paper-slide",
     secondarySfx: "telestrator-draw",
     paceProfile: "balanced",
+    register: "page_editorial",
   },
   {
     id: "diagram-isometric",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "IsometricScene",
     framing: "fullscreen-cutaway",
@@ -251,11 +680,13 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     typographyMode: "word-pop",
     defaultSfx: "data-tick",
     paceProfile: "calm-hold",
+    register: "drafting_blueprint",
   },
 
-  // 21-24: Data & Maps 3D (4 styles)
+  // 21-24: Legacy Data & Maps 3D
   {
     id: "data-map-explainer",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "MapExplainer",
     framing: "fullscreen-cutaway",
@@ -264,9 +695,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "map-whoosh",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
   {
     id: "data-physical-card",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "DataPhysicalCard",
     framing: "fullscreen-cutaway",
@@ -275,9 +708,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "data-tick",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
   {
     id: "data-white-model-3d",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "WhiteModel3D",
     framing: "fullscreen-cutaway",
@@ -286,9 +721,11 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "riser-subtle",
     secondarySfx: "data-tick",
     paceProfile: "calm-hold",
+    register: "drafting_blueprint",
   },
   {
     id: "data-blob-simulation",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "BlobSimulation",
     framing: "fullscreen-cutaway",
@@ -297,95 +734,615 @@ export const STYLE_CATALOG: StyleRecipe[] = [
     defaultSfx: "ambient-tension-drone",
     secondarySfx: "data-tick",
     paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+
+  // 25-30: Extended Liquid Glass Rigs & Depth-Sandwich Stages (World 1)
+  {
+    id: "glass-dossier-stack",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:card",
+    framing: "talking-head-with-glass",
+    motionAction: "dossier-slide-desk -> glow-rim -> fade-blur-out",
+    glassPreset: "card",
+    glassRig: "dossier-stack",
+    typographyMode: "cascading-evidence-stack",
+    defaultSfx: "glass-frosted-slide",
+    secondarySfx: "paper-slide",
+    paceProfile: "balanced",
+    register: "over_footage",
+    depthSandwichEligible: true,
+  },
+  {
+    id: "glass-magnifier-card",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:card",
+    framing: "talking-head-with-glass",
+    motionAction: "loupe-pop-focus -> loupe-scan-row -> fade-blur-out",
+    glassPreset: "card",
+    glassRig: "magnifier-card",
+    typographyMode: "footnote-loupe-zoom",
+    defaultSfx: "glass-loupe-click",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "over_footage",
+    depthSandwichEligible: true,
+  },
+  {
+    id: "glass-telemetry-strip",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:dock",
+    framing: "talking-head-with-glass",
+    motionAction: "slide-up -> highlight-sweep -> fade-out",
+    glassPreset: "dock",
+    glassRig: "telemetry-strip",
+    typographyMode: "stock-ticker-crawl",
+    defaultSfx: "glass-dock",
+    secondarySfx: "odometer-tick",
+    paceProfile: "balanced",
+    register: "over_footage",
+  },
+  {
+    id: "glass-verdict-seal",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:toast",
+    framing: "talking-head-punch-in",
+    motionAction: "pneumatic-stamp-in -> nudge -> pop-down",
+    glassPreset: "toast",
+    glassRig: "verdict-seal",
+    typographyMode: "verdict-anvil-slam",
+    defaultSfx: "archival-stamp",
+    secondarySfx: "gavel-wood-hit",
+    paceProfile: "snappy",
+    register: "over_footage",
+  },
+  {
+    id: "glass-compare-scale",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:card",
+    framing: "talking-head-with-glass",
+    motionAction: "scale-beam-drop -> split-compare -> fade-blur-out",
+    glassPreset: "split-modal",
+    glassRig: "compare-scale",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "balance-scale-creak",
+    secondarySfx: "data-tick",
+    paceProfile: "balanced",
+    register: "over_footage",
+    depthSandwichEligible: true,
+  },
+  {
+    id: "glass-stat-triptych",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:dock",
+    framing: "talking-head-with-glass",
+    motionAction: "slide-up -> glow-rim -> fade-out",
+    glassPreset: "dock",
+    glassRig: "stat-triptych",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "glass-triptych-cascade",
+    secondarySfx: "odometer-tick",
+    paceProfile: "balanced",
+    register: "over_footage",
   },
 ];
+
+// 31-60: Remaining 8 Cinema Style Worlds (Macro Telemetry, Forensic Exhibits,
+// System Simulators, UI Satire, Vintage Archival, Corridor Maps, Generative Set-Pieces)
+STYLE_CATALOG.push(
+  // Macro Telemetry (World 4)
+  {
+    id: "DivergingJawsChart",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "orthographic-extrude -> audit-row-step -> fade-blur-out",
+    typographyMode: "chisel-highlighter-sweep",
+    defaultSfx: "odometer-tick",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "NegativeFcfWaterfall",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> tranche-waterfall-step -> fade-blur-out",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "sub-bass-drop",
+    secondarySfx: "audit-row-lock",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "AuctionPriceShockwave",
+    styleWorld: "macro-telemetry",
+    styleFamily: "doc-broadcast",
+    componentHint: "VisualInvestigationBoard",
+    framing: "fullscreen-cutaway",
+    motionAction: "blur-snap -> auction-tail-tremor -> fade-blur-out",
+    typographyMode: "verdict-anvil-slam",
+    defaultSfx: "high-voltage-arc-snap",
+    secondarySfx: "warning-thud",
+    paceProfile: "calm-hold",
+    peakOnly: true,
+    register: "midnight_telemetry",
+  },
+  {
+    id: "SovereignSpreadFlip",
+    styleWorld: "macro-telemetry",
+    styleFamily: "doc-broadcast",
+    componentHint: "LiveCountdownSplit",
+    framing: "split-screen",
+    motionAction: "slide-up -> yield-spread-widen -> fade-out",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "basis-point-blip",
+    secondarySfx: "balance-scale-creak",
+    paceProfile: "balanced",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "DebtDeflationJaws1933",
+    styleWorld: "macro-telemetry",
+    styleFamily: "vintage-editorial",
+    componentHint: "Newsreel1920s",
+    framing: "fullscreen-cutaway",
+    motionAction: "iris-reveal -> archive-page-breath -> fade-out",
+    typographyMode: "typewriter-1941-ribbon",
+    defaultSfx: "newsreel-click",
+    secondarySfx: "anvil-iron-clank",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "StackedShareShift",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "BlobSimulation",
+    framing: "fullscreen-cutaway",
+    motionAction: "orthographic-extrude -> debt-clock-blur -> fade-blur-out",
+    typographyMode: "debt-odometer-inline",
+    defaultSfx: "calculator-ribbon-print",
+    secondarySfx: "audit-row-lock",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  },
+
+  // Forensic Exhibits (World 5)
+  {
+    id: "FiscalLedgerTableStage",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "ArchiveLightTable",
+    framing: "fullscreen-cutaway",
+    motionAction: "dossier-slide-desk -> loupe-scan-row -> fade-out",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "paper-slide",
+    secondarySfx: "audit-row-lock",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "SupremeCourtSyllabusStage",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "CaptionNewsCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "paper-unfold -> ink-highlighter-double -> fade-out",
+    typographyMode: "court-syllabus-italic",
+    defaultSfx: "gavel-wood-hit",
+    secondarySfx: "fountain-pen-slash",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "Sec10KFootnoteStretch",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "TelestratorOverlay",
+    framing: "split-screen",
+    motionAction: "loupe-pop-focus -> footnote-zoom-callout -> fade-out",
+    typographyMode: "footnote-loupe-zoom",
+    defaultSfx: "glass-loupe-click",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "VetoPenBudgetLedger",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "vintage-editorial",
+    componentHint: "SilentFilmCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "ledger-page-turn -> veto-ink-slash -> fade-out",
+    typographyMode: "veto-fountain-strike",
+    defaultSfx: "fountain-pen-slash",
+    secondarySfx: "archival-stamp",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "ArchivalRationBook1941",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "vintage-editorial",
+    componentHint: "CollageCutout",
+    framing: "fullscreen-cutaway",
+    motionAction: "carbon-copy-peel -> microfilm-frame-step -> fade-out",
+    typographyMode: "typewriter-1941-ribbon",
+    defaultSfx: "paper-tear-crisp",
+    secondarySfx: "archival-stamp",
+    paceProfile: "calm-hold",
+    register: "vintage_newsreel",
+  },
+  {
+    id: "FoiaRedactionDeclassify",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "vintage-editorial",
+    componentHint: "SpyTitleSequence",
+    framing: "fullscreen-cutaway",
+    motionAction: "redaction-bar-reveal -> redact-bar-slide -> fade-out",
+    typographyMode: "redacted-declassify",
+    defaultSfx: "archival-stamp",
+    secondarySfx: "typewriter-strike",
+    paceProfile: "balanced",
+    register: "archival_parchment",
+  },
+
+  // System Simulators (World 8)
+  {
+    id: "SupplyChainBomStrip",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    framing: "fullscreen-cutaway",
+    motionAction: "blueprint-unroll-x -> gear-mesh-cw -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "pneumatic-servo",
+    secondarySfx: "data-tick",
+    paceProfile: "balanced",
+    register: "drafting_blueprint",
+  },
+  {
+    id: "PaloAltoWhiteboardFlip",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "flip-y -> card-flip-180 -> fade-out",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "anvil-iron-clank",
+    secondarySfx: "marker-sweep",
+    paceProfile: "snappy",
+    register: "page_editorial",
+  },
+  {
+    id: "DualTaxPlumbingSchematic",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    framing: "fullscreen-cutaway",
+    motionAction: "guillotine-drop -> sankey-particle-stream -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "guillotine-slice",
+    secondarySfx: "blueprint-unroll",
+    paceProfile: "balanced",
+    register: "drafting_blueprint",
+  },
+  {
+    id: "SovereignPrioritySpillway",
+    styleWorld: "system-simulators",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "hydraulic-press-down -> hydraulic-pressure-tremor -> fade-blur-out",
+    typographyMode: "debt-odometer-inline",
+    defaultSfx: "hydraulic-press",
+    secondarySfx: "vault-bolt-lock",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+  },
+  {
+    id: "TransformerQueueBottleneck",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "StickFigureStage",
+    framing: "fullscreen-cutaway",
+    motionAction: "ratchet-step-in -> transformer-hum-60hz -> fade-out",
+    typographyMode: "solari-split-flap",
+    defaultSfx: "ratchet-winch-click",
+    secondarySfx: "substation-60hz-buzz",
+    paceProfile: "balanced",
+    register: "drafting_blueprint",
+  },
+
+  // UI Satire & Household Balance-Sheet Collage (World 9)
+  {
+    id: "LongitudinalHouseholdDossier",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "StainedGlassFrame",
+    framing: "split-screen",
+    motionAction: "dossier-slide-desk -> paycheck-erode-pulse -> fade-blur-out",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "calculator-ribbon-print",
+    secondarySfx: "nsf-decline-buzz",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  },
+  {
+    id: "ClosedComputeScripWallet",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "StickerCutout",
+    framing: "talking-head-punch-in",
+    motionAction: "turnstile-spin-in -> scrip-token-flicker -> pop-down",
+    typographyMode: "statute-clause-box",
+    defaultSfx: "coin-brass-clink",
+    secondarySfx: "nsf-decline-buzz",
+    paceProfile: "snappy",
+    register: "over_footage",
+  },
+  {
+    id: "ThermalReceiptInflationRoll",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "CollageCutout",
+    framing: "fullscreen-cutaway",
+    motionAction: "receipt-feed-up -> escrow-mercury-climb -> fade-out",
+    typographyMode: "margin-redline-gloss",
+    defaultSfx: "calculator-ribbon-print",
+    secondarySfx: "paper-tear-crisp",
+    paceProfile: "snappy",
+    register: "page_editorial",
+  },
+  {
+    id: "FourEscapeHatchesBoard",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "doc-broadcast",
+    componentHint: "KinoMontageStrip",
+    framing: "fullscreen-cutaway",
+    motionAction: "solari-flap-cascade -> stamp-recoil-hold -> fade-out",
+    typographyMode: "chapter-roman-folio",
+    defaultSfx: "archival-stamp",
+    secondarySfx: "solari-flap",
+    paceProfile: "balanced",
+    register: "page_editorial",
+  },
+  {
+    id: "UnwrittenTruceToAllowance",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "SilentFilmCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "wax-seal-press -> veto-ink-slash -> fade-out",
+    typographyMode: "silent-black-aphorism",
+    defaultSfx: "fountain-pen-slash",
+    secondarySfx: "resolve-chord-warm",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  },
+
+  // Corridor Cartography & 3D Strata (World 7)
+  {
+    id: "data-transit-map",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    framing: "fullscreen-cutaway",
+    motionAction: "radar-sweep-reveal -> cable-packet-pulse -> fade-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "map-whoosh",
+    secondarySfx: "radar-sonar-ping",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "CorridorArcMatrixCard",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    framing: "fullscreen-cutaway",
+    motionAction: "sonar-ping-appear -> chokepoint-gate-clamp -> fade-out",
+    typographyMode: "whisper-focus-spotlight",
+    defaultSfx: "radar-sonar-ping",
+    secondarySfx: "map-whoosh",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "IsometricStrataCutaway3D",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> parallax-hover -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "riser-subtle",
+    secondarySfx: "odometer-tick",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+  },
+
+  // Generative Physics & 3D Set-Pieces (World 10)
+  {
+    id: "setpiece-bom-vaporizer",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> gear-mesh-cw -> fade-blur-out",
+    typographyMode: "chisel-highlighter-sweep",
+    defaultSfx: "hydraulic-press",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+    setPieceId: "SP01_SHOE_LABOR_VAPORIZER",
+  },
+  {
+    id: "setpiece-torque-balance",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "scale-beam-drop -> balance-scale-oscillate -> fade-blur-out",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "anvil-iron-clank",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "balanced",
+    register: "page_editorial",
+    setPieceId: "SP02_PALO_ALTO_WHITEBOARD_FLIP",
+  },
+  {
+    id: "setpiece-hydraulic-spillway",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "hydraulic-press-down -> vault-drain-vortex -> fade-blur-out",
+    typographyMode: "debt-odometer-inline",
+    defaultSfx: "vault-bolt-lock",
+    secondarySfx: "hydraulic-press",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+    setPieceId: "SP07_SOVEREIGN_BOND_SPILLWAY",
+  },
+  {
+    id: "setpiece-wattage-scale-ladder",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> watt-meter-spin -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "substation-60hz-buzz",
+    secondarySfx: "watt-meter-whir",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+    setPieceId: "SP11_10W_TO_5GW_POWER_LADDER",
+  },
+  {
+    id: "setpiece-isometric-diorama-3d",
+    styleWorld: "generative-setpiece",
+    styleFamily: "doc-broadcast",
+    componentHint: "CitySymphonyFrame",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> parallax-hover -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "glass-expand",
+    secondarySfx: "odometer-tick",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  }
+);
 
 const RECIPE_BY_ID: Record<string, StyleRecipe> = {};
 for (let i = 0; i < STYLE_CATALOG.length; i++) {
   RECIPE_BY_ID[STYLE_CATALOG[i].id] = STYLE_CATALOG[i];
 }
 
-/**
- * Preferred style recipe order per BeatCategory (always rotates across families).
- */
 const CATEGORY_RECIPE_PRIORITIES: Record<BeatCategory, string[]> = {
   hook: [
     "doc-kino-montage",
     "liquid-glass-card",
+    "DivergingJawsChart",
     "vintage-collage",
     "data-physical-card",
-    "doc-live-countdown-split",
+    "glass-stat-triptych",
   ],
   "thesis-promise": [
     "liquid-glass-dock",
+    "FourEscapeHatchesBoard",
     "diagram-instruction-manual",
     "doc-news-package",
     "vintage-stained-glass",
     "data-white-model-3d",
   ],
   "receipt-proof": [
+    "FiscalLedgerTableStage",
     "doc-archive-light-table",
     "data-physical-card",
     "doc-caption-news",
+    "glass-dossier-stack",
+    "Sec10KFootnoteStretch",
     "liquid-glass-card",
     "doc-telestrator",
     "doc-news-package",
   ],
   "metaphor-story": [
+    "SupplyChainBomStrip",
     "diagram-isometric",
+    "setpiece-bom-vaporizer",
     "data-white-model-3d",
     "diagram-stick-figure",
+    "PaloAltoWhiteboardFlip",
     "liquid-glass-card",
-    "vintage-collage",
     "doc-city-symphony",
   ],
   "good-work-punchline": [
     "diagram-sticker",
     "liquid-glass-toast",
+    "ClosedComputeScripWallet",
     "vintage-collage",
+    "glass-verdict-seal",
     "doc-telestrator",
   ],
   "history-archive": [
     "vintage-newsreel",
+    "ArchivalRationBook1941",
+    "DebtDeflationJaws1933",
     "doc-archive-light-table",
     "vintage-silent-film",
     "vintage-spy-titles",
-    "data-map-explainer",
+    "SupremeCourtSyllabusStage",
   ],
   "map-geopolitics": [
     "data-map-explainer",
+    "data-transit-map",
+    "CorridorArcMatrixCard",
     "doc-city-symphony",
     "vintage-spy-titles",
     "liquid-glass-card",
-    "doc-telestrator",
   ],
   "warning-escalation": [
     "doc-visual-investigation",
-    "doc-live-countdown-split",
+    "AuctionPriceShockwave",
+    "SovereignSpreadFlip",
+    "SovereignPrioritySpillway",
     "data-blob-simulation",
-    "vintage-spy-titles",
+    "doc-live-countdown-split",
     "liquid-glass-toast",
-    "doc-kino-montage",
   ],
   "claire-ledger": [
+    "LongitudinalHouseholdDossier",
     "diagram-stick-figure",
+    "glass-compare-scale",
     "liquid-glass-card",
-    "doc-live-countdown-split",
+    "ThermalReceiptInflationRoll",
     "diagram-instruction-manual",
-    "data-physical-card",
   ],
   "open-loop": [
     "liquid-glass-dock",
+    "glass-telemetry-strip",
     "vintage-silent-film",
     "doc-news-package",
     "diagram-instruction-manual",
     "vintage-stained-glass",
   ],
   takeaway: [
+    "UnwrittenTruceToAllowance",
+    "VetoPenBudgetLedger",
     "liquid-glass-card",
     "vintage-silent-film",
     "doc-city-symphony",
-    "diagram-stick-figure",
   ],
 };
 
@@ -440,14 +1397,14 @@ const HISTORY_PATTERNS = [
 
 const MAP_PATTERNS = [
   /\btexas\b|\btaxas\b|\baustin\b/i,
-  /\balaska\b/i,
-  /\bireland\b/i,
+  /\balaska\b|\bjuneau\b/i,
+  /\bireland\b|\bdublin\b/i,
   /\bwest london\b|\bm4 corridor\b|\blondon\b/i,
   /\bpjm\b|\bthirteen states\b|\billinois\b|\bnew jersey\b/i,
   /\bohio\b|\bwest virginia\b/i,
-  /\bshenzhen\b|\bsuzhou\b|\bjapan\b/i,
+  /\bshenzhen\b|\bsuzhou\b|\bjapan\b|\btokyo\b|\btaiwan\b|\bhsinchu\b|\bred sea\b|\bfrance\b|\bgreece\b|\brotterdam\b/i,
   /\bthree mile island\b/i,
-  /\bmap\b|\beastern grid\b|\bcorridor\b/i,
+  /\bmap\b|\beastern grid\b|\bcorridor\b|\bstrait\b/i,
 ];
 
 const PRIMARY_SOURCE_PATTERNS = [
@@ -458,7 +1415,7 @@ const PRIMARY_SOURCE_PATTERNS = [
   /\bforbes\b/i,
   /\biea\b|\binternational energy agency\b/i,
   /\bnextera\b/i,
-  /\balphabet\b|\bamazon\b|\bmeta\b|\bmicrosoft\b|\boracle\b/i,
+  /\balphabet\b|\bamazon\b|\bmeta\b|\bmicrosoft\b|\boracle\b|\baws\b|\bopenai\b/i,
   /\bnvidia\b|\bjensen huang\b/i,
   /\blabor data\b|\bproduce per hour\b/i,
   /\bsupreme court\b/i,
@@ -528,10 +1485,10 @@ const TAKEAWAY_PATTERNS = [
  * Extract primary source citation when present in spoken text.
  */
 export function extractSourceCitation(text: string): string | undefined {
-  if (/table\s*9|monthly\s+treasury\s+statement|84(?:\.1)?\s*percent/i.test(text)) {
+  if (/table\s*9|monthly\s+treasury\s+statement|84(?:\.1)?\s*percent|eighty-four\s*percent/i.test(text)) {
     return "U.S. Treasury — Monthly Treasury Statement, Table 9";
   }
-  if (/congressional\s+budget\s+office|\bcbo\b/i.test(text)) {
+  if (/congressional\s+budget\s+office|\bcbo\b|2\.1\s*trillion|bond\s+interest|1\.83\s*trillion/i.test(text)) {
     return "Congressional Budget Office (CBO) Budget & Interest Projections";
   }
   if (/40\.5\s*trillion|national\s+debt/i.test(text)) {
@@ -548,6 +1505,9 @@ export function extractSourceCitation(text: string): string | undefined {
   }
   if (/1947|harry\s+truman|labor\s+data|produce\s+per\s+hour/i.test(text)) {
     return "U.S. Bureau of Labor Statistics (BLS) — Productivity & Labor Share";
+  }
+  if (/\baws\b|\bopenai\b|startup\s+\$[0-9]+|cloud\s+credits/i.test(text)) {
+    return "AWS Activate & OpenAI Startup Compute Credit Terms";
   }
   if (/alphabet|amazon|meta|microsoft|oracle|free\s+cash\s+flow/i.test(text)) {
     return "SEC 10-K / Quarterly Filings (Alphabet, Amazon, Meta, Microsoft)";
@@ -600,15 +1560,156 @@ export function extractSourceCitation(text: string): string | undefined {
   if (/stimulus\s+payments/i.test(text)) {
     return "U.S. Treasury — 2020 CARES Act Disbursement Data";
   }
-  if (/\btreasury\b/i.test(text)) {
-    return "U.S. Department of the Treasury";
+  if (/\btreasury\b|\bsupreme\s+court\b/i.test(text)) {
+    return "U.S. Department of the Treasury / Federal Record";
+  }
+  if (matchesAny(text, NUMERIC_RECEIPT_PATTERNS)) {
+    return "Primary Federal & Institutional Economic Record";
   }
   return undefined;
 }
 
 /**
- * Deterministic text classifier mapping a script segment to one of the 11 BeatCategory roles.
+ * Dynamically extracts a clean geographic query and resolved atlas metadata
+ * without ever hardcoding Austin, Texas unless Texas/Austin/Claire is in the text.
  */
+export function extractGeoQuery(text: string): {
+  geoQuery?: string;
+  corridorId?: string;
+  region?: "us" | "world";
+  highlightLabel?: string;
+} {
+  const clean = (text || "").trim();
+  if (!clean) return {};
+  if (!matchesAny(clean, MAP_PATTERNS)) return {};
+
+  const resolved = resolveGeoQuery({
+    query: clean,
+    spokenText: clean,
+  });
+
+  if (resolved.matchedBy === "world-overview-fallback") {
+    return {};
+  }
+
+  return {
+    geoQuery: clean,
+    corridorId: resolved.corridorId,
+    region: resolved.atlasDataset === "usa" ? "us" : "world",
+    highlightLabel: resolved.title,
+  };
+}
+
+/**
+ * Matches spoken text to one of the stateful multi-act Continuity Engine entities.
+ */
+export function detectContinuityEntity(text: string): string | undefined {
+  if (/claire|3,400|austin|mortgage|sheriff|refinance/i.test(text)) {
+    return "ENT_CLAIRE_AUSTIN";
+  }
+  if (/escape hatch|three escape hatches|four escape hatches/i.test(text)) {
+    return "ENT_ESCAPE_HATCH_BOARD";
+  }
+  if (/40\.5 trillion|2\.1 trillion|table 9|84(?:\.1)?\s*percent|national debt/i.test(text)) {
+    return "ENT_SOVEREIGN_DEBT_WALL";
+  }
+  if (/allowance|unwritten agreement|bill walker|veto|one signature/i.test(text)) {
+    return "ENT_PAYCHECK_TO_ALLOWANCE";
+  }
+  return undefined;
+}
+
+function extractBeatMetrics(text: string): Array<{ raw: string; numeric: number; unit: string }> {
+  const regex =
+    /([$€£])?\s*(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(%|percent\b|trillion\b|billion\b|million\b|thousand\b|gigawatts?\b|terawatt-hours?\b|megawatt-day\b))?/gi;
+  const out: Array<{ raw: string; numeric: number; unit: string }> = [];
+  let m: RegExpExecArray | null = regex.exec(text);
+  while (m !== null) {
+    const prefix = m[1] || "";
+    const numStr = (m[2] || "").replace(/,/g, "");
+    const numeric = Number(numStr);
+    const unitRaw = (m[3] || "").toLowerCase();
+    if (Number.isFinite(numeric)) {
+      const isBareYear =
+        !prefix && !unitRaw && Math.floor(numeric) === numeric && numeric >= 1900 && numeric <= 2099;
+      if (!isBareYear && (prefix || unitRaw)) {
+        let suffix = "";
+        if (unitRaw === "%" || unitRaw === "percent") suffix = "%";
+        else if (unitRaw === "trillion") suffix = "T";
+        else if (unitRaw === "billion") suffix = "B";
+        else if (unitRaw === "million") suffix = "M";
+        else if (unitRaw === "thousand") suffix = "K";
+        else if (unitRaw.indexOf("gigawatt") === 0) suffix = " GW";
+        else if (unitRaw.indexOf("terawatt") === 0) suffix = " TWh";
+        else if (unitRaw.indexOf("megawatt") === 0) suffix = "/MW-day";
+        out.push({
+          raw: prefix + m[2] + suffix,
+          numeric,
+          unit: suffix || prefix,
+        });
+      }
+    }
+    m = regex.exec(text);
+  }
+  return out;
+}
+
+export function extractStructuredBeatData(
+  text: string,
+  category: BeatCategory,
+  sourceCitation?: string
+): {
+  tableRows?: DirectorTableRow[];
+  seriesData?: DirectorSeriesPoint[];
+  exhibitData?: DirectorExhibitData;
+  data: DirectorBeatDataPayload;
+} {
+  const metrics = extractBeatMetrics(text);
+  const primary = metrics[0];
+  const secondary = metrics[1];
+
+  const tableRows: DirectorTableRow[] | undefined =
+    metrics.length > 0
+      ? metrics.slice(0, 3).map((item, idx) => ({
+          label: idx === 0 ? "Primary Figure" : idx === 1 ? "Counterpart" : "Reference",
+          value: item.raw,
+          isHighlight: idx === 0,
+          isFlagged: category === "warning-escalation" && idx === 0,
+        }))
+      : undefined;
+
+  const seriesData: DirectorSeriesPoint[] | undefined =
+    primary && secondary
+      ? [
+          { xLabel: "Baseline", primary: primary.numeric, unit: primary.unit },
+          {
+            xLabel: "Comparison",
+            primary: secondary.numeric,
+            unit: secondary.unit,
+            isThreshold: category === "warning-escalation",
+          },
+        ]
+      : undefined;
+
+  const exhibitData: DirectorExhibitData | undefined = sourceCitation
+    ? {
+        filingTitle: sourceCitation,
+        highlightedClause: text.slice(0, 140),
+        stampLabel: category === "warning-escalation" ? "RISK SIGNAL" : "VERIFIED",
+      }
+    : undefined;
+
+  const data: DirectorBeatDataPayload = {
+    ...(primary ? { primaryMetric: primary.raw } : {}),
+    ...(secondary ? { secondaryMetric: secondary.raw } : {}),
+    ...(tableRows ? { tableRows } : {}),
+    ...(seriesData ? { seriesData } : {}),
+    ...(exhibitData ? { exhibitData } : {}),
+  };
+
+  return { tableRows, seriesData, exhibitData, data };
+}
+
 export function classifyBeat(
   text: string,
   index: number,
@@ -618,10 +1719,7 @@ export function classifyBeat(
   const safeTotal = Math.max(1, totalSegments);
   const ratio = index / safeTotal;
 
-  // 1. Opening Hook (first beat always, or second beat if still in cold-open collision and not a joke)
-  if (index === 0) {
-    return "hook";
-  }
+  if (index === 0) return "hook";
   if (
     index === 1 &&
     safeTotal >= 12 &&
@@ -631,7 +1729,6 @@ export function classifyBeat(
     return "hook";
   }
 
-  // 2. Final Takeaway (closing ~8% of script)
   if (
     (index >= safeTotal - 2 || ratio >= 0.92) &&
     matchesAny(trimmed, TAKEAWAY_PATTERNS)
@@ -639,68 +1736,30 @@ export function classifyBeat(
     return "takeaway";
   }
 
-  // 3. Good Work / GothamChess Sarcastic Punchline
-  if (matchesAny(trimmed, JOKE_PATTERNS)) {
-    return "good-work-punchline";
-  }
+  if (matchesAny(trimmed, JOKE_PATTERNS)) return "good-work-punchline";
+  if (matchesAny(trimmed, CLAIRE_PATTERNS)) return "claire-ledger";
 
-  // 4. Claire Mortgage Ledger (prioritize human concrete anchor when she appears)
-  if (matchesAny(trimmed, CLAIRE_PATTERNS)) {
-    return "claire-ledger";
-  }
-
-  // 5. Primary Document Receipt vs Warning Escalation vs Map vs History
   const hasPrimarySource = matchesAny(trimmed, PRIMARY_SOURCE_PATTERNS);
   const hasNumericReceipt = matchesAny(trimmed, NUMERIC_RECEIPT_PATTERNS);
   const hasWarning = matchesAny(trimmed, WARNING_PATTERNS);
   const hasHistory = matchesAny(trimmed, HISTORY_PATTERNS);
   const hasMap = matchesAny(trimmed, MAP_PATTERNS);
 
-  if (hasHistory && !hasMap) {
-    return "history-archive";
-  }
-  if (hasMap && !hasHistory) {
-    return "map-geopolitics";
-  }
-  if (hasHistory && hasMap) {
-    // e.g. West Virginia 1912/1938 or London 1941 -> historical newsreel frame
-    return "history-archive";
-  }
+  if (hasHistory && !hasMap) return "history-archive";
+  if (hasMap && !hasHistory) return "map-geopolitics";
+  if (hasHistory && hasMap) return "history-archive";
 
-  // Explicit primary source + numbers (e.g. Table 9, IEA, Forbes, BLS) -> receipt-proof
   if (hasPrimarySource && !/\b(2036|default|crashes|833 percent)\b/i.test(trimmed)) {
     return "receipt-proof";
   }
-
-  // Structural threats, 2036 collisions, budget vetoes, crashes -> warning-escalation
-  if (hasWarning) {
-    return "warning-escalation";
-  }
-
-  // Concrete illustrative analogies (even when quoting $120 shoes or 10W chargers)
-  if (matchesAny(trimmed, METAPHOR_PATTERNS)) {
-    return "metaphor-story";
-  }
-
-  // Any remaining hard numerical data / source citation -> receipt-proof
-  if (hasNumericReceipt) {
-    return "receipt-proof";
-  }
-
-  // 6. Thesis / Escape-Hatch Roadmap
-  if (matchesAny(trimmed, THESIS_PATTERNS)) {
-    return "thesis-promise";
-  }
-
-  // 7. Open Loops / Viewer Questions
+  if (hasWarning) return "warning-escalation";
+  if (matchesAny(trimmed, METAPHOR_PATTERNS)) return "metaphor-story";
+  if (hasNumericReceipt) return "receipt-proof";
+  if (matchesAny(trimmed, THESIS_PATTERNS)) return "thesis-promise";
   if (matchesAny(trimmed, OPEN_LOOP_PATTERNS) || /\?\s*$/.test(trimmed)) {
     return "open-loop";
   }
-
-  // Final segment fallback -> takeaway; otherwise metaphor-story
-  if (index === safeTotal - 1) {
-    return "takeaway";
-  }
+  if (index === safeTotal - 1) return "takeaway";
   return "metaphor-story";
 }
 
@@ -714,9 +1773,9 @@ function isTalkingHeadFraming(framing: CameraFraming): boolean {
 
 function selectGlassPreset(
   category: BeatCategory,
-  basePreset: StyleRecipe["glassPreset"],
+  basePreset: GlassPreset | undefined,
   text: string
-): StyleRecipe["glassPreset"] {
+): GlassPreset | undefined {
   if (!basePreset) return undefined;
   if (category === "claire-ledger" || /\bversus\b|\bagainst\b|\bon the one hand\b/i.test(text)) {
     return "split-modal";
@@ -726,6 +1785,98 @@ function selectGlassPreset(
   }
   return basePreset;
 }
+
+function selectGlassRig(
+  beatIndex: number,
+  category: BeatCategory,
+  baseRig: GlassPreset | undefined,
+  vaultGlassWeights?: Readonly<Record<string, number>>
+): GlassPreset {
+  if (baseRig && baseRig !== "card" && baseRig !== "dock" && baseRig !== "toast") {
+    return baseRig;
+  }
+  if (category === "receipt-proof") {
+    const receiptRigs: GlassPreset[] = [
+      "dossier-stack",
+      "evidence-rail",
+      "magnifier-card",
+      "stat-triptych",
+      "receipt-ticker",
+      "quote-citation",
+    ];
+    return receiptRigs[beatIndex % receiptRigs.length];
+  }
+  if (category === "warning-escalation") {
+    const warnRigs: GlassPreset[] = ["verdict-seal", "toast", "telemetry-strip", "terminal-console"];
+    return warnRigs[beatIndex % warnRigs.length];
+  }
+  if (category === "claire-ledger") {
+    return beatIndex % 2 === 0 ? "compare-scale" : "receipt-ticker";
+  }
+  if (category === "map-geopolitics") {
+    return "map-callout";
+  }
+
+  let bestRig: GlassPreset = CANONICAL_GLASS_PRESET_IDS[
+    beatIndex % CANONICAL_GLASS_PRESET_IDS.length
+  ] as GlassPreset;
+  if (vaultGlassWeights) {
+    let bestWeight = -1;
+    for (let k = 0; k < CANONICAL_GLASS_PRESET_IDS.length; k++) {
+      const candidate = CANONICAL_GLASS_PRESET_IDS[
+        (beatIndex + k) % CANONICAL_GLASS_PRESET_IDS.length
+      ] as GlassPreset;
+      const w = vaultGlassWeights[candidate] ?? 1.0;
+      if (w > bestWeight) {
+        bestWeight = w;
+        bestRig = candidate;
+      }
+    }
+  }
+  return bestRig;
+}
+
+function selectTypographyMode(
+  beatIndex: number,
+  category: BeatCategory,
+  wordCount: number,
+  baseMode: string | undefined,
+  isDepthBeat: boolean,
+  vaultTypoWeights?: Readonly<Record<string, number>>
+): string {
+  if (isDepthBeat) return "behind-presenter-monolith";
+  if (wordCount <= 5 && (category === "takeaway" || category === "warning-escalation")) {
+    return "burstiness-staccato-cuts";
+  }
+  if (baseMode && beatIndex % 3 !== 2) {
+    return baseMode;
+  }
+  const candidatePool = CANONICAL_TYPOGRAPHY_MODE_IDS;
+  let picked: string = candidatePool[beatIndex % candidatePool.length];
+  if (vaultTypoWeights) {
+    let bestScore = -1;
+    for (let k = 0; k < 5; k++) {
+      const cand = candidatePool[(beatIndex * 5 + k) % candidatePool.length];
+      const w = vaultTypoWeights[cand] ?? 1.0;
+      if (w > bestScore) {
+        bestScore = w;
+        picked = cand;
+      }
+    }
+  }
+  return picked;
+}
+
+const VITERBI_CAMERA_ACTIONS: readonly string[] = [
+  "dolly-creep",
+  "static",
+  "pan-ledger-right",
+  "rack-focus-fg",
+  "dolly-pullback",
+  "pan-ledger-left",
+  "rack-focus-bg",
+  "dutch-disequilibrium",
+];
 
 const CONJUNCTION_STARTER_RE =
   /^(and|but|so|because|which|while|although|though|whereas|since|unless|until|when|where|before|after|if|or|yet|who|that)$/i;
@@ -838,7 +1989,7 @@ function appendBoundedSegment(
       : Number((cursor + (slice.length / words.length) * dur).toFixed(2));
     out.push({
       ...seg,
-      id: seg.id ? `${seg.id}-${i + 1}` : undefined,
+      id: seg.id ? seg.id + "-" + String(i + 1) : undefined,
       text: slice.join(" "),
       startSec: Number(cursor.toFixed(2)),
       endSec: Math.max(Number((cursor + 0.5).toFixed(2)), sliceEnd),
@@ -861,9 +2012,7 @@ function normalizeAndBoundSegments(segments: TranscriptSegment[]): TranscriptSeg
       const maxK = Math.min(words.length - 2, Math.floor((3.9 / dur) * words.length));
       const targetK = Math.max(2, Math.min(words.length - 2, Math.round((3.0 / dur) * words.length)));
       const splitK =
-        maxK >= minK
-          ? findNaturalWordSplitIndex(words, minK, maxK, targetK)
-          : targetK;
+        maxK >= minK ? findNaturalWordSplitIndex(words, minK, maxK, targetK) : targetK;
       const part1Dur = Number(
         Math.min(3.95, Math.max(2.05, (splitK / words.length) * dur)).toFixed(2)
       );
@@ -875,7 +2024,7 @@ function normalizeAndBoundSegments(segments: TranscriptSegment[]): TranscriptSeg
       });
       appendBoundedSegment(bounded, {
         ...seg,
-        id: seg.id ? `${seg.id}-2` : undefined,
+        id: seg.id ? seg.id + "-2" : undefined,
         text: words.slice(splitK).join(" "),
         startSec: splitTime,
         endSec: seg.endSec,
@@ -887,6 +2036,278 @@ function normalizeAndBoundSegments(segments: TranscriptSegment[]): TranscriptSeg
   return bounded;
 }
 
+export interface WhisperWordInputItem {
+  word?: string;
+  text?: string;
+  startSec?: number;
+  endSec?: number;
+  start?: number;
+  end?: number;
+  startFrame?: number;
+  endFrame?: number;
+}
+
+export interface WhisperDataInput {
+  words?: WhisperWordInputItem[];
+  segments?: Array<{
+    text?: string;
+    startSec?: number;
+    endSec?: number;
+    start?: number;
+    end?: number;
+  }>;
+}
+
+export function segmentWhisperWords(
+  data: WhisperWordInputItem[] | WhisperDataInput
+): TranscriptSegment[] {
+  const rawWords: WhisperWordInputItem[] = Array.isArray(data)
+    ? data
+    : Array.isArray(data.words)
+      ? data.words
+      : [];
+
+  if (rawWords.length === 0 && !Array.isArray(data) && Array.isArray(data.segments)) {
+    return data.segments.map((s, idx) => ({
+      id: "seg-" + String(idx + 1),
+      text: String(s.text || "").trim(),
+      startSec: Number(s.startSec ?? s.start ?? 0),
+      endSec: Number(s.endSec ?? s.end ?? 3),
+    }));
+  }
+
+  const normalized: Array<{ word: string; startSec: number; endSec: number }> = [];
+  for (let i = 0; i < rawWords.length; i++) {
+    const w = rawWords[i];
+    const word = String(w.word ?? w.text ?? "").trim();
+    if (!word) continue;
+    const startSec = Number(w.startSec ?? w.start ?? (w.startFrame !== undefined ? w.startFrame / 30 : 0));
+    const endSec = Number(
+      w.endSec ?? w.end ?? (w.endFrame !== undefined ? w.endFrame / 30 : startSec + 0.3)
+    );
+    normalized.push({ word, startSec, endSec });
+  }
+
+  const segments: TranscriptSegment[] = [];
+  let chunk: Array<{ word: string; startSec: number; endSec: number }> = [];
+
+  const flushChunk = (): void => {
+    if (chunk.length === 0) return;
+    const startSec = chunk[0].startSec;
+    const endSec = chunk[chunk.length - 1].endSec;
+    const timedWords: TimedWord[] = chunk.map((cw) => ({
+      word: cw.word,
+      start: Math.max(0, Math.round((cw.startSec - startSec) * 30)),
+      end: Math.max(1, Math.round((cw.endSec - startSec) * 30)),
+      startSec: cw.startSec,
+      endSec: cw.endSec,
+    }));
+    segments.push({
+      text: chunk
+        .map((w) => w.word)
+        .join(" ")
+        .replace(/\s+([.,!?;:])/g, "$1"),
+      startSec,
+      endSec,
+      timedWords,
+    });
+    chunk = [];
+  };
+
+  for (let i = 0; i < normalized.length; i++) {
+    const curr = normalized[i];
+    chunk.push(curr);
+
+    const dur = curr.endSec - chunk[0].startSec;
+    const next = normalized[i + 1];
+    const pauseGap = next ? next.startSec - curr.endSec : 1.0;
+    const isSentenceEnd = /[.!?]["\u201d']?$/.test(curr.word);
+    const isClauseEnd = /[,;:\u2014]$/.test(curr.word);
+    const isFirstHookBeat = segments.length === 0;
+    const inHook = curr.endSec <= 15;
+
+    if (!next) {
+      flushChunk();
+      continue;
+    }
+
+    if (isFirstHookBeat) {
+      const nextTok = cleanAlphaToken(next.word);
+      const currTok = cleanAlphaToken(curr.word);
+      const naturalClausePivot =
+        !TRAILING_FUNCTION_RE.test(currTok) &&
+        (CONJUNCTION_STARTER_RE.test(nextTok) || CLAUSE_PREP_VERB_RE.test(nextTok));
+
+      if (isSentenceEnd && dur >= 2.0) flushChunk();
+      else if (pauseGap >= 0.42 && dur >= 1.4) flushChunk();
+      else if (isClauseEnd && dur >= 2.1) flushChunk();
+      else if (dur >= 2.8 && naturalClausePivot) flushChunk();
+      else if (dur >= 3.8) flushChunk();
+    } else if (isSentenceEnd && dur >= (inHook ? 2.2 : 2.6)) {
+      flushChunk();
+    } else if (pauseGap >= 0.42 && dur >= 3.0) {
+      flushChunk();
+    } else if (pauseGap >= 0.8 && dur >= 1.8) {
+      flushChunk();
+    } else if (isClauseEnd && dur >= (inHook ? 3.5 : 5.4)) {
+      flushChunk();
+    } else if (dur >= 9.6 && (isClauseEnd || pauseGap >= 0.18)) {
+      flushChunk();
+    } else if (dur >= 11.2) {
+      flushChunk();
+    }
+  }
+
+  return segments;
+}
+
+export function segmentScriptText(rawText: string, wpm: number = 150): TranscriptSegment[] {
+  const wordsPerSec = Math.max(80, wpm) / 60;
+  const maxHookFirstWords = Math.min(9, Math.max(4, Math.floor((3.85 - 0.25) * wordsPerSec)));
+  const targetHookWords = Math.min(maxHookFirstWords, Math.max(5, Math.round(3.0 * wordsPerSec)));
+  const maxBodyWords = Math.min(28, Math.max(12, Math.floor((11.6 - 0.25) * wordsPerSec)));
+  const targetBodyWords = Math.min(maxBodyWords - 3, Math.max(10, Math.round(8.5 * wordsPerSec)));
+
+  const cleaned = rawText
+    .replace(/\r\n/g, "\n")
+    .replace(/^#{1,6}\s+.*$/gm, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/[*_`~]/g, "");
+
+  const paragraphs = cleaned
+    .split(/\n\s*\n+/)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  interface RawClause {
+    text: string;
+    wordCount: number;
+    paraEnd: boolean;
+    dramaticShort: boolean;
+    paragraphIndex: number;
+  }
+
+  const rawClauses: RawClause[] = [];
+
+  const pushBoundedSentence = (
+    sentenceText: string,
+    isParaEnd: boolean,
+    pIdx: number,
+    isHookOrJoke: boolean,
+    isShortDramatic: boolean
+  ): void => {
+    const words = sentenceText.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return;
+
+    const maxSentenceWords = isHookOrJoke ? Math.min(maxBodyWords, 13) : Math.min(maxBodyWords, 24);
+    if (words.length <= maxSentenceWords) {
+      rawClauses.push({
+        text: sentenceText,
+        wordCount: words.length,
+        paraEnd: isParaEnd,
+        dramaticShort: isShortDramatic,
+        paragraphIndex: pIdx,
+      });
+      return;
+    }
+
+    const subSlices = splitWordsAtNaturalBoundaries(
+      words,
+      isHookOrJoke ? Math.min(maxBodyWords, 13) : maxBodyWords,
+      isHookOrJoke ? Math.min(10, targetBodyWords) : targetBodyWords,
+      isHookOrJoke ? 5 : 6
+    );
+    for (let c = 0; c < subSlices.length; c++) {
+      rawClauses.push({
+        text: subSlices[c].join(" "),
+        wordCount: subSlices[c].length,
+        paraEnd: isParaEnd && c === subSlices.length - 1,
+        dramaticShort: false,
+        paragraphIndex: pIdx,
+      });
+    }
+  };
+
+  for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
+    const para = paragraphs[pIdx];
+    const protectedText = para
+      .replace(/(\d)\.(\d)/g, "$1<DOT>$2")
+      .replace(/\b(v|Mr|Mrs|Ms|Dr|St|U\.S)\./g, "$1<DOT>");
+
+    const sentences = protectedText
+      .split(/(?<=[.!?]["\u201d']?)\s+/)
+      .map((s) => s.replace(/<DOT>/g, ".").trim())
+      .filter(Boolean);
+
+    for (let sIdx = 0; sIdx < sentences.length; sIdx++) {
+      const sentence = sentences[sIdx];
+      const words = sentence.split(/\s+/).filter(Boolean);
+      const isShortDramatic =
+        words.length <= 5 &&
+        (/allowance|nothing stops|it's|that is/i.test(sentence) || sentences.length === 1);
+      const isHookOrJoke = pIdx === 0 || matchesAny(sentence, JOKE_PATTERNS);
+      const isParaEnd = sIdx === sentences.length - 1;
+
+      if (rawClauses.length === 0 && words.length > maxHookFirstWords) {
+        const minHookK = Math.min(5, Math.floor(words.length / 2));
+        const safeTail = Math.min(4, Math.floor(words.length / 2));
+        const maxHookK = Math.max(minHookK, Math.min(maxHookFirstWords, words.length - safeTail));
+        const hookK = findNaturalWordSplitIndex(words, minHookK, maxHookK, targetHookWords);
+        rawClauses.push({
+          text: words.slice(0, hookK).join(" "),
+          wordCount: hookK,
+          paraEnd: false,
+          dramaticShort: false,
+          paragraphIndex: pIdx,
+        });
+        pushBoundedSentence(words.slice(hookK).join(" "), isParaEnd, pIdx, isHookOrJoke, false);
+      } else {
+        pushBoundedSentence(sentence, isParaEnd, pIdx, isHookOrJoke, isShortDramatic);
+      }
+    }
+  }
+
+  const merged: RawClause[] = [];
+  for (let i = 0; i < rawClauses.length; i++) {
+    const curr = rawClauses[i];
+    const prev = merged.length > 0 ? merged[merged.length - 1] : null;
+    const maxMergedWords = merged.length === 1 ? maxHookFirstWords : Math.min(26, maxBodyWords);
+    if (
+      prev &&
+      curr.wordCount < 6 &&
+      !curr.dramaticShort &&
+      prev.paragraphIndex === curr.paragraphIndex &&
+      !prev.paraEnd &&
+      prev.wordCount + curr.wordCount <= maxMergedWords
+    ) {
+      prev.text = prev.text + " " + curr.text;
+      prev.wordCount += curr.wordCount;
+      prev.paraEnd = curr.paraEnd;
+    } else {
+      merged.push({ ...curr });
+    }
+  }
+
+  const segments: TranscriptSegment[] = [];
+  let cursorSec = 0;
+  for (let i = 0; i < merged.length; i++) {
+    const item = merged[i];
+    const baseDur = item.wordCount / wordsPerSec;
+    const pausePad = item.paraEnd ? 0.25 : 0.08;
+    const minDur = item.dramaticShort ? 1.8 : i === 0 ? 2.1 : item.paragraphIndex === 0 ? 2.5 : 2.3;
+    const durationSec = Math.max(minDur, Number((baseDur + pausePad).toFixed(2)));
+    segments.push({
+      text: item.text,
+      startSec: Number(cursorSec.toFixed(2)),
+      endSec: Number((cursorSec + durationSec).toFixed(2)),
+      paragraphIndex: item.paragraphIndex,
+    });
+    cursorSec += durationSec;
+  }
+
+  return segments;
+}
+
 function buildCutReason(
   category: BeatCategory,
   recipe: StyleRecipe,
@@ -894,9 +2315,13 @@ function buildCutReason(
   durationSec: number,
   isHeroPeak: boolean,
   isPrePeakQuiet: boolean,
-  sourceCitation?: string
+  sourceCitation?: string,
+  setPieceTitle?: string
 ): string {
   const durLabel = durationSec.toFixed(1) + "s";
+  if (setPieceTitle) {
+    return "Signature Set-Piece [" + setPieceTitle + "] via " + recipe.id + " (" + durLabel + ")";
+  }
   if (isHeroPeak) {
     return (
       "Hero peak (60-75% zone): #a3402e brick-red focal " +
@@ -931,9 +2356,9 @@ function buildCutReason(
   }
   switch (category) {
     case "hook":
-      return "0-15s claim-vs-receipt collision in " + recipe.componentHint + " (" + durLabel + ")";
+      return "0-15s claim-vs-receipt collision in " + recipe.id + " (" + durLabel + ")";
     case "good-work-punchline":
-      return "Dry-wit punchline: snappy " + durLabel + " " + framing + " + " + recipe.componentHint;
+      return "Dry-wit punchline: snappy " + durLabel + " " + framing + " + " + recipe.id;
     case "receipt-proof":
       return (
         "Calm documentary hold (" +
@@ -942,42 +2367,48 @@ function buildCutReason(
         (sourceCitation ? " [" + sourceCitation + "]" : "")
       );
     case "history-archive":
-      return "Period-anchored archival cutaway (" + durLabel + ") via " + recipe.componentHint;
+      return "Period-anchored archival cutaway (" + durLabel + ") via " + recipe.id;
     case "map-geopolitics":
-      return "Spatial grid/region zoom (" + durLabel + ") via " + recipe.componentHint;
+      return "Spatial grid/region zoom (" + durLabel + ") via " + recipe.id;
     case "claire-ledger":
-      return "Human-scale household ledger check (" + durLabel + ") via " + recipe.componentHint;
+      return "Human-scale household ledger check (" + durLabel + ") via " + recipe.id;
     case "warning-escalation":
-      return "Escalating structural tension (" + durLabel + ") via " + recipe.componentHint;
+      return "Escalating structural tension (" + durLabel + ") via " + recipe.id;
     case "open-loop":
-      return "Retention open-loop plant (" + durLabel + ") on " + recipe.componentHint;
+      return "Retention open-loop plant (" + durLabel + ") on " + recipe.id;
     case "thesis-promise":
-      return "Structural roadmap framing (" + durLabel + ") via " + recipe.componentHint;
+      return "Structural roadmap framing (" + durLabel + ") via " + recipe.id;
     case "takeaway":
-      return "Grounded Money & Macro room takeaway (" + durLabel + ") via " + recipe.componentHint;
+      return "Grounded Money & Macro room takeaway (" + durLabel + ") via " + recipe.id;
     default:
-      return "Tangible metaphor illustration (" + durLabel + ") via " + recipe.componentHint;
+      return "Tangible metaphor illustration (" + durLabel + ") via " + recipe.id;
   }
 }
 
-/**
- * Deterministic Dual-Palette Audience-Engineering Director Planner:
- * - Page (#FAF8F3 milk canvas / #1C2B3A classic dark navy hero bars & maps / #2F8F8B teal / #A3402E brick red) for fullscreen cutaways
- * - Over Footage silky smoked-navy Liquid Glass (tint="navy-glass", #FFF6E5 / #F7E8CE / #EDD8B4 warmer cream) for camera overlays
- * - Opening hook shifts cleanly within 2.0-4.0s and caps every beat <= ~12-13s
- * - Never repeats adjacent styleFamily; rotates organically across all 5 families & 24 styles
- * - Balances ~15% talking-head-full room breaths + ~15-20% glass/punch-in (~30-38% total TH)
- * - Reserves brick-red #A3402E / warning-thud for 60-75% hero peak zone with drop-silence breath
- */
+function resolveStrategyId(raw?: string): StrategyPresetId {
+  if (raw) {
+    const parsed = StrategyPresetIdSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+  }
+  return "STR-GEN-EXPLAINER";
+}
+
 export function buildDraftDirectorPlan(
   rawSegments: TranscriptSegment[],
   options: DirectorOptions = {}
 ): DirectorPlan {
   const fps = options.fps && options.fps > 0 ? Math.round(options.fps) : 30;
   const title = options.title || "The Reading Room — Audience Director Plan";
-  const targetTalkingHeadShare = options.targetTalkingHeadShare ?? 0.35;
+  const strategyId = resolveStrategyId(options.strategyId);
+  const strategyPreset = STRATEGY_PRESETS[strategyId];
+  const targetTalkingHeadShare =
+    options.targetTalkingHeadShare ?? strategyPreset.presenterARollTarget.targetShare ?? 0.35;
   const heroStartPct = options.heroStartPct ?? 0.6;
   const heroEndPct = options.heroEndPct ?? 0.75;
+  const enableDepthSandwich = options.enableDepthSandwich !== false;
+  const episodeNumber = options.episodeNumber ?? 1;
+  const lutId = options.lutId || "editorial-warm";
+  const musicStemId = options.musicStemId || "02-ledger-investigation";
 
   const segments = normalizeAndBoundSegments(rawSegments);
 
@@ -987,6 +2418,10 @@ export function buildDraftDirectorPlan(
       fps,
       totalFrames: 0,
       beats: [],
+      strategyId,
+      episodeNumber,
+      lutId,
+      musicStemId,
       audit: {
         avgShotDurationSec: 0,
         styleDiversityScore: 0,
@@ -997,17 +2432,18 @@ export function buildDraftDirectorPlan(
     });
   }
 
+  const continuityEngine = createEpisode01ContinuityEngine();
   const totalSec = Math.max(
     0.5,
     segments[segments.length - 1].endSec - segments[0].startSec
   );
   const firstStartSec = segments[0].startSec;
 
-  // Step 1: Pre-classify every segment (with same-paragraph primary source inheritance)
   const categories: BeatCategory[] = [];
   const citations: Array<string | undefined> = [];
   let activeParaIndex: number | undefined = undefined;
   let activeParaCitation: string | undefined = undefined;
+
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     const cat = classifyBeat(seg.text, i, segments.length);
@@ -1025,17 +2461,17 @@ export function buildDraftDirectorPlan(
       seg.paragraphIndex === activeParaIndex &&
       cat === "receipt-proof"
         ? activeParaCitation
-        : undefined);
+        : cat === "receipt-proof"
+          ? "Primary Federal & Institutional Economic Record"
+          : undefined);
     citations.push(inheritedCitation);
   }
 
-  // Step 2: Locate the primary Hero Peak index inside the 60-75% timeline window
   let heroPeakIdx = -1;
   let bestHeroScore = -1;
   for (let i = 0; i < segments.length; i++) {
     const midRatio =
-      ((segments[i].startSec + segments[i].endSec) * 0.5 - firstStartSec) /
-      totalSec;
+      ((segments[i].startSec + segments[i].endSec) * 0.5 - firstStartSec) / totalSec;
     if (midRatio >= heroStartPct && midRatio <= heroEndPct) {
       let score = 1;
       if (categories[i] === "warning-escalation") score += 4;
@@ -1044,7 +2480,6 @@ export function buildDraftDirectorPlan(
       if (/833|auction|frozen|269\.92|nuclear|crashes|2036/i.test(segments[i].text)) {
         score += 3;
       }
-      // Tie-break closer to 67.5% midpoint
       const distPenalty = Math.abs(midRatio - 0.675) * 2;
       const finalScore = score - distPenalty;
       if (finalScore > bestHeroScore) {
@@ -1053,7 +2488,6 @@ export function buildDraftDirectorPlan(
       }
     }
   }
-  // Short-clip fallback if no segment midpoint falls cleanly in 60-75%
   if (heroPeakIdx === -1 && segments.length >= 2) {
     heroPeakIdx = Math.min(
       segments.length - 1,
@@ -1062,11 +2496,13 @@ export function buildDraftDirectorPlan(
   }
   const prePeakQuietIdx = heroPeakIdx > 0 ? heroPeakIdx - 1 : -1;
 
-  // Step 3: Walk segments and choose non-repeating style recipes
   const beats: DirectorBeat[] = [];
   const lastUsedBeatByComponent: Record<string, number> = {};
   const lastUsedBeatByFamily: Record<string, number> = {};
   const usageCountByComponent: Record<string, number> = {};
+  const usageCountByRecipe: Record<string, number> = {};
+  const usageCountByWorld: Record<string, number> = {};
+  const usedSetPieces: Record<string, boolean> = {};
 
   let talkingHeadSecAccum = 0;
   let fullThBeatsCount = 0;
@@ -1076,6 +2512,8 @@ export function buildDraftDirectorPlan(
   let consecutiveTalkingHeadSec = 0;
   let consecutiveCutawaySec = 0;
   let lastWarningThudSec = -999;
+  let prevCamA = "";
+  let prevCamB = "";
 
   const targetFullThRatio = 0.16;
   const targetOverlayThRatio = 0.185;
@@ -1088,10 +2526,30 @@ export function buildDraftDirectorPlan(
     const segEndRel = Math.max(segStartRel + 0.5, seg.endSec - firstStartSec);
     const startFrame = Math.round(segStartRel * fps);
     const endFrame = Math.max(startFrame + 15, Math.round(segEndRel * fps));
-    const durationSec = Number(((endFrame - startFrame) / fps).toFixed(2));
+    const beatFrames = Math.max(15, endFrame - startFrame);
+    const durationSec = Number((beatFrames / fps).toFixed(2));
     const midSec = (segStartRel + segEndRel) * 0.5;
+    const timelineFrac = Math.max(0, Math.min(1, midSec / totalSec));
     const isHeroPeak = i === heroPeakIdx;
     const isPrePeakQuiet = i === prePeakQuietIdx;
+    const wordList = seg.text.trim().split(/\s+/).filter(Boolean);
+
+    const hasPerishability =
+      /shenzhen|digital yuan|spoils on the clock|empty seat|plane pushes back/i.test(seg.text);
+    const allowedCatalog = filterRecipesByStrategyGuardrails(STYLE_CATALOG, strategyId, [], {
+      hasVerifiedPerishabilityMechanism: hasPerishability,
+      hasShowablePrimaryArtifact: Boolean(sourceCitation),
+    });
+    const activePool = allowedCatalog.length > 0 ? allowedCatalog : STYLE_CATALOG;
+
+    let matchedSetPiece: SignatureSetPieceRule | undefined = undefined;
+    for (let sIdx = 0; sIdx < SIGNATURE_SET_PIECES.length; sIdx++) {
+      const sp = SIGNATURE_SET_PIECES[sIdx];
+      if (!usedSetPieces[sp.id] && sp.pattern.test(seg.text)) {
+        matchedSetPiece = sp;
+        break;
+      }
+    }
 
     const prevFamily: StyleEngineFamily | null =
       beats.length > 0 ? beats[beats.length - 1].styleFamily : null;
@@ -1109,6 +2567,7 @@ export function buildDraftDirectorPlan(
     const isCalmConnective =
       i >= 2 &&
       !isHeroPeak &&
+      !matchedSetPiece &&
       !sourceCitation &&
       !hasNumericReceipt &&
       durationSec <= 9.5 &&
@@ -1125,27 +2584,26 @@ export function buildDraftDirectorPlan(
       currentThShare < Math.min(0.38, targetTalkingHeadShare + 0.025) &&
       (isPrePeakQuiet || needTalkingHead || currentFullThBeatRatio < 0.145);
 
-    // Candidate pool: start with category priorities, then add remaining catalog for rich 24-style coverage
     const priorityIds = CATEGORY_RECIPE_PRIORITIES[category] || [];
     const candidateRecipes: StyleRecipe[] = [];
     const seenIds: Record<string, boolean> = {};
 
     for (let p = 0; p < priorityIds.length; p++) {
       const rec = RECIPE_BY_ID[priorityIds[p]];
-      if (rec && !seenIds[rec.id]) {
+      if (rec && !seenIds[rec.id] && activePool.indexOf(rec) !== -1) {
         candidateRecipes.push(rec);
         seenIds[rec.id] = true;
       }
     }
-    for (let c = 0; c < STYLE_CATALOG.length; c++) {
-      const rec = STYLE_CATALOG[c];
+    for (let c = 0; c < activePool.length; c++) {
+      const rec = activePool[c];
       if (!seenIds[rec.id]) {
         candidateRecipes.push(rec);
         seenIds[rec.id] = true;
       }
     }
 
-    let chosen: StyleRecipe = candidateRecipes[0];
+    let chosen: StyleRecipe = candidateRecipes[0] || STYLE_CATALOG[0];
     if (isHeroPeak) {
       const investigation = RECIPE_BY_ID["doc-visual-investigation"];
       if (investigation && prevFamily !== investigation.styleFamily) {
@@ -1154,81 +2612,83 @@ export function buildDraftDirectorPlan(
         chosen = RECIPE_BY_ID["data-blob-simulation"] || chosen;
       }
     } else {
-      let bestScore = -1e9;
-      for (let k = 0; k < candidateRecipes.length; k++) {
-        const rec = candidateRecipes[k];
-        // HARD RULE: Adjacent beats NEVER repeat the same styleFamily
-        if (prevFamily && rec.styleFamily === prevFamily) {
-          continue;
-        }
-        // Reserve VisualInvestigationBoard (#a3402e hero focal) strictly for hero peak zone
-        if (rec.peakOnly && !isHeroPeak) {
-          continue;
-        }
-        // Keep pre-peak beat outside doc-broadcast so hero peak can cleanly enter VisualInvestigationBoard
-        if (isPrePeakQuiet && rec.styleFamily === "doc-broadcast") {
-          continue;
-        }
+      // Pass 1 enforces strict >= 6-beat componentHint cooldown; Pass 2 relaxes only if short clip
+      for (let pass = 0; pass < 2; pass++) {
+        let bestScore = -1e9;
+        let foundInPass = false;
+        for (let k = 0; k < candidateRecipes.length; k++) {
+          const rec = candidateRecipes[k];
+          if (prevFamily && rec.styleFamily === prevFamily) continue;
+          if (rec.peakOnly && !isHeroPeak) continue;
+          if (isPrePeakQuiet && rec.styleFamily === "doc-broadcast") continue;
 
-        let score = 0;
-        const priorityIdx = priorityIds.indexOf(rec.id);
-        if (priorityIdx !== -1) {
-          score += 50 - priorityIdx * 7;
-        } else {
-          score += 5;
-        }
-
-        // Encourage unused / least-used components across all 24 styles
-        const usedCount = usageCountByComponent[rec.componentHint] || 0;
-        if (usedCount === 0) {
-          score += 22;
-        } else {
-          score -= usedCount * 6;
-        }
-
-        // Strong cooldown since last appearance of this component (< 6 beats) & family
-        const lastCompIdx = lastUsedBeatByComponent[rec.componentHint];
-        if (lastCompIdx !== undefined) {
-          const gap = i - lastCompIdx;
-          if (gap < 6) score -= (6 - gap) * 32 + 12;
-        }
-        const lastFamIdx = lastUsedBeatByFamily[rec.styleFamily];
-        if (lastFamIdx !== undefined) {
-          const famGap = i - lastFamIdx;
-          score += Math.min(10, famGap * 2);
-        }
-
-        // Balance Talking Head (~15% full breaths + ~15-20% glass/punch-in) vs Cutaway (~62-70%)
-        const recIsTH = isTalkingHeadFraming(rec.framing);
-        if (wantFullThBreath) {
-          // Prefer recipes already seen once so every visual style gets real rendered screen time
-          if (usedCount >= 1) score += 14;
-        } else {
-          if (needTalkingHead && recIsTH && currentOverlayThBeatRatio < targetOverlayThRatio) {
-            score += 32;
+          const lastCompIdx = lastUsedBeatByComponent[rec.componentHint];
+          if (pass === 0 && lastCompIdx !== undefined && i - lastCompIdx < 6) {
+            continue;
           }
-          if (needTalkingHead && !recIsTH) score -= 14;
-          if (needCutaway && !recIsTH) score += 32;
-          if (needCutaway && recIsTH) score -= 24;
-          if (rec.styleFamily === "liquid-glass" && needTalkingHead && currentOverlayThBeatRatio < targetOverlayThRatio) {
-            score += 8;
+
+          let score = 0;
+          const priorityIdx = priorityIds.indexOf(rec.id);
+          score += priorityIdx !== -1 ? 50 - priorityIdx * 6 : 6;
+
+          if (matchedSetPiece && rec.componentHint === matchedSetPiece.componentHint) {
+            score += 36;
+          }
+
+          const compUsed = usageCountByComponent[rec.componentHint] || 0;
+          score += compUsed === 0 ? 28 : -compUsed * 5;
+
+          const recUsed = usageCountByRecipe[rec.id] || 0;
+          score += recUsed === 0 ? 16 : -recUsed * 8;
+
+          const worldKey = rec.styleWorld || rec.styleFamily;
+          const worldUsed = usageCountByWorld[worldKey] || 0;
+          score += worldUsed === 0 ? 18 : -worldUsed * 2;
+
+          if (options.vaultStyleWeights && options.vaultStyleWeights[rec.id] !== undefined) {
+            score += (options.vaultStyleWeights[rec.id] - 0.5) * 20;
+          }
+
+          if (lastCompIdx !== undefined && i - lastCompIdx < 6) {
+            score -= (6 - (i - lastCompIdx)) * 45 + 20;
+          }
+          const lastFamIdx = lastUsedBeatByFamily[rec.styleFamily];
+          if (lastFamIdx !== undefined) {
+            score += Math.min(10, (i - lastFamIdx) * 2);
+          }
+
+          const recIsTH = isTalkingHeadFraming(rec.framing);
+          if (wantFullThBreath) {
+            if (compUsed >= 1) score += 14;
+          } else {
+            if (needTalkingHead && recIsTH && currentOverlayThBeatRatio < targetOverlayThRatio) {
+              score += 32;
+            }
+            if (needTalkingHead && !recIsTH) score -= 14;
+            if (needCutaway && !recIsTH) score += 32;
+            if (needCutaway && recIsTH) score -= 24;
+            if (
+              rec.styleFamily === "liquid-glass" &&
+              needTalkingHead &&
+              currentOverlayThBeatRatio < targetOverlayThRatio
+            ) {
+              score += 8;
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            chosen = rec;
+            foundInPass = true;
           }
         }
-
-        if (score > bestScore) {
-          bestScore = score;
-          chosen = rec;
-        }
+        if (foundInPass) break;
       }
     }
 
-    // Determine effective CameraFraming (calm talking-head-full breaths + Over Footage Navy Liquid Glass)
     let framing: CameraFraming = chosen.framing;
     const chosenAlreadyRendered = (usageCountByComponent[chosen.componentHint] || 0) >= 1;
-    if (
-      wantFullThBreath &&
-      (chosenAlreadyRendered || segments.length <= 24)
-    ) {
+    if (wantFullThBreath && (chosenAlreadyRendered || segments.length <= 24)) {
       framing = "talking-head-full";
     } else if (
       needTalkingHead &&
@@ -1239,9 +2699,7 @@ export function buildDraftDirectorPlan(
         chosen.componentHint === "TelestratorOverlay")
     ) {
       framing =
-        category === "good-work-punchline"
-          ? "talking-head-punch-in"
-          : "talking-head-with-glass";
+        category === "good-work-punchline" ? "talking-head-punch-in" : "talking-head-with-glass";
     } else if (i === segments.length - 1 && category === "takeaway") {
       if (isCalmConnective && prevFraming !== "talking-head-full" && currentFullThBeatRatio < 0.18) {
         framing = "talking-head-full";
@@ -1254,6 +2712,11 @@ export function buildDraftDirectorPlan(
     const glassPreset = isFullTalkingHead
       ? undefined
       : selectGlassPreset(category, chosen.glassPreset, seg.text);
+    const glassRig =
+      !isFullTalkingHead && isTalkingHeadFraming(framing)
+        ? selectGlassRig(i, category, chosen.glassRig, options.vaultGlassWeights)
+        : undefined;
+
     const paletteMode: PaletteMode =
       framing === "fullscreen-cutaway" ||
       chosen.componentHint === "StainedGlassFrame" ||
@@ -1261,28 +2724,83 @@ export function buildDraftDirectorPlan(
         ? "page"
         : "over-footage";
 
-    // Music energy: calm baseline, pulse on momentum, drop-silence before peak reveal, tense on peak
+    const structured = extractStructuredBeatData(seg.text, category, sourceCitation);
+    const isDepthBeat =
+      enableDepthSandwich &&
+      !isFullTalkingHead &&
+      paletteMode === "over-footage" &&
+      Boolean(structured.data.primaryMetric) &&
+      (Boolean(chosen.depthSandwichEligible) || i % 7 === 3);
+
+    const depthSandwich: DepthSandwichSpec | undefined = isDepthBeat
+      ? {
+          enabled: true,
+          preset:
+            category === "warning-escalation"
+              ? "spotlight-dim-sandwich"
+              : "behind-shoulder-billboard",
+          heroFigure: structured.data.primaryMetric,
+          foregroundGlass: Boolean(glassPreset || glassRig),
+        }
+      : undefined;
+
+    const typographyMode = selectTypographyMode(
+      i,
+      category,
+      wordList.length,
+      matchedSetPiece ? matchedSetPiece.typographyMode : chosen.typographyMode,
+      isDepthBeat,
+      options.vaultTypographyWeights
+    );
+
+    const geoInfo = extractGeoQuery(seg.text);
+    const continuityEntityId = detectContinuityEntity(seg.text);
+    if (continuityEntityId) {
+      const evaluated = continuityEngine.evaluateAtFrac(continuityEntityId, timelineFrac);
+      structured.data.continuityStage = evaluated.activeStage.stageId;
+    }
+
+    const activeSetPiece =
+      !isFullTalkingHead && paletteMode === "page" && matchedSetPiece ? matchedSetPiece : undefined;
+    if (activeSetPiece) {
+      usedSetPieces[activeSetPiece.id] = true;
+    }
+    const setPieceId = activeSetPiece ? activeSetPiece.id : chosen.setPieceId;
+    const propIds = activeSetPiece ? activeSetPiece.propIds : undefined;
+
+    let cameraAction =
+      wordList.length <= 5 ? "verdict-slam" : VITERBI_CAMERA_ACTIONS[i % VITERBI_CAMERA_ACTIONS.length];
+    if (cameraAction === prevCamA && cameraAction === prevCamB) {
+      cameraAction = VITERBI_CAMERA_ACTIONS[(i + 1) % VITERBI_CAMERA_ACTIONS.length];
+    }
+    prevCamB = prevCamA;
+    prevCamA = cameraAction;
+
+    const register: CinemaRegister =
+      paletteMode === "over-footage"
+        ? "over_footage"
+        : activeSetPiece
+          ? activeSetPiece.register
+          : chosen.register || "page_editorial";
+
     let musicEnergy: MusicEnergy = "calm";
-    if (isPrePeakQuiet) {
-      musicEnergy = "drop-silence";
-    } else if (isHeroPeak) {
-      musicEnergy = "tense";
-    } else if (category === "hook" || category === "good-work-punchline") {
-      musicEnergy = "pulse";
-    } else if (category === "warning-escalation") {
-      const midRatio = midSec / totalSec;
-      musicEnergy = midRatio >= 0.55 ? "tense" : "pulse";
+    if (isPrePeakQuiet) musicEnergy = "drop-silence";
+    else if (isHeroPeak) musicEnergy = "tense";
+    else if (category === "hook" || category === "good-work-punchline") musicEnergy = "pulse";
+    else if (category === "warning-escalation") {
+      musicEnergy = timelineFrac >= 0.55 ? "tense" : "pulse";
     } else if (category === "takeaway") {
       musicEnergy = "drop-silence";
     }
 
-    // Build deterministic SFX cues from the 20 SfxName assets (quiet room breaths omit overlay SFX)
     const sfxCues: DirectorSfxCue[] = [];
     if (!isFullTalkingHead) {
       const primaryCue =
         isHeroPeak && chosen.secondarySfx === "warning-thud"
           ? "flash-cut"
-          : chosen.defaultSfx;
+          : activeSetPiece
+            ? activeSetPiece.sfxPrimary
+            : chosen.defaultSfx;
 
       sfxCues.push({
         cue: primaryCue,
@@ -1293,24 +2811,39 @@ export function buildDraftDirectorPlan(
       if (isHeroPeak && midSec - lastWarningThudSec >= 20) {
         sfxCues.push({
           cue: "warning-thud",
-          offsetFrame: Math.min(8, Math.max(2, Math.floor((endFrame - startFrame) / 4))),
+          offsetFrame: Math.min(8, Math.max(2, Math.floor(beatFrames / 4))),
           volume: 0.88,
         });
         lastWarningThudSec = midSec;
-      } else if (chosen.secondarySfx && chosen.secondarySfx !== "warning-thud") {
-        const totalBeatFrames = endFrame - startFrame;
-        if (totalBeatFrames >= 45) {
+      } else {
+        const secCue = activeSetPiece ? activeSetPiece.sfxSecondary : chosen.secondarySfx;
+        if (secCue && secCue !== "warning-thud" && beatFrames >= 45) {
           sfxCues.push({
-            cue: chosen.secondarySfx,
-            offsetFrame: Math.floor(totalBeatFrames * 0.45),
+            cue: secCue,
+            offsetFrame: Math.floor(beatFrames * 0.45),
             volume: 0.52,
           });
         }
       }
     }
 
+    const rawWhisperWords: ReadonlyArray<AnyTimedWord> | undefined = seg.timedWords;
+    const timedWords: TimedWord[] =
+      rawWhisperWords && rawWhisperWords.length > 0
+        ? connectWhisperWordsToBeat(rawWhisperWords, 0, beatFrames, {
+            fps,
+            rebaseToLocal: false,
+          })
+        : synthesizeTimedWords(seg.text.trim(), beatFrames, fps);
+
     const beatNumber = i + 1;
-    const beatId = "beat-" + (beatNumber < 10 ? "00" + beatNumber : beatNumber < 100 ? "0" + beatNumber : String(beatNumber));
+    const beatId =
+      "beat-" +
+      (beatNumber < 10
+        ? "00" + String(beatNumber)
+        : beatNumber < 100
+          ? "0" + String(beatNumber)
+          : String(beatNumber));
 
     beats.push({
       id: beatId,
@@ -1322,10 +2855,34 @@ export function buildDraftDirectorPlan(
       framing,
       paletteMode,
       styleFamily: chosen.styleFamily,
+      recipeId: chosen.id,
+      styleWorld: activeSetPiece ? activeSetPiece.styleWorld : chosen.styleWorld,
+      register,
       componentHint: chosen.componentHint,
       motionAction: chosen.motionAction,
       ...(glassPreset ? { glassPreset } : {}),
-      ...(chosen.typographyMode ? { typographyMode: chosen.typographyMode } : {}),
+      ...(glassRig ? { glassRig } : {}),
+      ...(typographyMode ? { typographyMode } : {}),
+      ...(depthSandwich ? { depthSandwich, layering: "behind-presenter" } : {}),
+      ...(setPieceId ? { setPieceId } : {}),
+      ...(propIds ? { propIds } : {}),
+      ...(geoInfo.geoQuery
+        ? {
+            geoQuery: geoInfo.geoQuery,
+            ...(geoInfo.corridorId ? { geoCorridor: geoInfo.corridorId } : {}),
+            ...(geoInfo.region ? { mapRegion: geoInfo.region } : {}),
+            ...(geoInfo.highlightLabel ? { highlightLabel: geoInfo.highlightLabel } : {}),
+          }
+        : {}),
+      ...(structured.tableRows ? { tableRows: structured.tableRows } : {}),
+      ...(structured.seriesData ? { seriesData: structured.seriesData } : {}),
+      ...(structured.exhibitData ? { exhibitData: structured.exhibitData } : {}),
+      data: structured.data,
+      timedWords,
+      ...(continuityEntityId ? { continuityEntityId } : {}),
+      lutId,
+      musicStemId,
+      cameraAction,
       sfxCues,
       musicEnergy,
       cutReason: buildCutReason(
@@ -1335,17 +2892,20 @@ export function buildDraftDirectorPlan(
         durationSec,
         isHeroPeak,
         isPrePeakQuiet,
-        sourceCitation
+        sourceCitation,
+        activeSetPiece ? activeSetPiece.title : undefined
       ),
       ...(sourceCitation ? { sourceCitation } : {}),
     });
 
-    // Update rolling balance & anti-repetition trackers
     lastUsedBeatByComponent[chosen.componentHint] = i;
     lastUsedBeatByFamily[chosen.styleFamily] = i;
     if (!isFullTalkingHead) {
       usageCountByComponent[chosen.componentHint] =
         (usageCountByComponent[chosen.componentHint] || 0) + 1;
+      usageCountByRecipe[chosen.id] = (usageCountByRecipe[chosen.id] || 0) + 1;
+      const wKey = chosen.styleWorld || chosen.styleFamily;
+      usageCountByWorld[wKey] = (usageCountByWorld[wKey] || 0) + 1;
     }
 
     totalSecAccum += durationSec;
@@ -1372,6 +2932,10 @@ export function buildDraftDirectorPlan(
     fps,
     totalFrames,
     beats,
+    episodeNumber,
+    strategyId,
+    lutId,
+    musicStemId,
     audit: {
       avgShotDurationSec: 0,
       styleDiversityScore: 0,
@@ -1383,12 +2947,22 @@ export function buildDraftDirectorPlan(
 }
 
 /**
- * Audit a DirectorPlan for:
- * - Consecutive same-styleFamily runs
- * - Excessive static gaps (>18s single beat or unvaried run)
- * - Missing source citations on receipt-proof beats
- * - Hero peak placement (60-75% zone) and talking-head balance (30-40%)
+ * Unified Showrunner entrypoint accepting pre-segmented `TranscriptSegment[]`,
+ * plain Markdown/text script (`string`), or Whisper word alignment (`WhisperDataInput`).
  */
+export function planDocumentaryEdit(
+  input: TranscriptSegment[] | string | WhisperDataInput,
+  options: DirectorOptions = {}
+): DirectorPlan {
+  if (typeof input === "string") {
+    return buildDraftDirectorPlan(segmentScriptText(input, options.wpm ?? 150), options);
+  }
+  if (Array.isArray(input)) {
+    return buildDraftDirectorPlan(input, options);
+  }
+  return buildDraftDirectorPlan(segmentWhisperWords(input), options);
+}
+
 export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
   const beats = plan.beats;
   const fps = plan.fps > 0 ? plan.fps : 30;
@@ -1396,8 +2970,8 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
     plan.totalFrames > 0
       ? plan.totalFrames
       : beats.length > 0
-      ? beats[beats.length - 1].endFrame
-      : 0;
+        ? beats[beats.length - 1].endFrame
+        : 0;
 
   if (beats.length === 0 || totalFrames <= 0) {
     return {
@@ -1417,13 +2991,17 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
   const warnings: string[] = [];
   const uniqueFamilies: Record<string, boolean> = {};
   const uniqueComponents: Record<string, boolean> = {};
+  const uniqueWorlds: Record<string, boolean> = {};
+  const uniqueRecipes: Record<string, boolean> = {};
+  const uniqueTypo: Record<string, boolean> = {};
 
   let totalDurationSec = 0;
   let talkingHeadFrames = 0;
   let consecutiveFamilyRepeats = 0;
   let staticRunFrames = 0;
+  let setPieceCount = 0;
+  let depthSandwichCount = 0;
 
-  // Track peak intensity beat for heroPeakPercent
   let bestPeakScore = -1;
   let bestPeakMidFrame = Math.round(totalFrames * 0.675);
 
@@ -1435,12 +3013,16 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
 
     uniqueFamilies[b.styleFamily] = true;
     uniqueComponents[b.componentHint] = true;
+    if (b.styleWorld) uniqueWorlds[b.styleWorld] = true;
+    if (b.recipeId) uniqueRecipes[b.recipeId] = true;
+    if (b.typographyMode) uniqueTypo[b.typographyMode] = true;
+    if (b.setPieceId) setPieceCount += 1;
+    if (b.depthSandwich) depthSandwichCount += 1;
 
     if (isTalkingHeadFraming(b.framing)) {
       talkingHeadFrames += beatFrames;
     }
 
-    // 1. Check excessive single-beat static gap (>18s)
     if (durSec > 18) {
       warnings.push(
         "Excessive static gap (" +
@@ -1453,7 +3035,6 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
       );
     }
 
-    // 2. Check consecutive same styleFamily & unvaried visual run > 18s
     if (i > 0) {
       const prev = beats[i - 1];
       if (b.styleFamily === prev.styleFamily) {
@@ -1479,18 +3060,13 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
       }
       if (staticRunFrames / fps > 18) {
         warnings.push(
-          "Unvaried visual run > 18s ending at " +
-            b.id +
-            " (" +
-            b.componentHint +
-            ")."
+          "Unvaried visual run > 18s ending at " + b.id + " (" + b.componentHint + ")."
         );
       }
     } else {
       staticRunFrames = beatFrames;
     }
 
-    // 3. Check missing source citations on receipt-proof beats
     if (b.category === "receipt-proof" && (!b.sourceCitation || !b.sourceCitation.trim())) {
       warnings.push(
         "Missing sourceCitation on receipt-proof beat " +
@@ -1501,7 +3077,6 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
       );
     }
 
-    // 4. Score peak intensity for heroPeakPercent
     let peakScore = 0;
     for (let s = 0; s < b.sfxCues.length; s++) {
       if (b.sfxCues[s].cue === "warning-thud") peakScore += 4;
@@ -1528,7 +3103,6 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
     }
   }
 
-  // 5. Check cold-open hook presence
   if (beats[0].category !== "hook") {
     warnings.push("Opening beat (" + beats[0].id + ") is not classified as 'hook'.");
   }
@@ -1537,21 +3111,17 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
   const familyCount = Object.keys(uniqueFamilies).length;
   const componentCount = Object.keys(uniqueComponents).length;
 
-  const familyRatio = familyCount / 5;
-  const targetCompMax = Math.min(STYLE_CATALOG.length, beats.length);
+  const familyRatio = Math.min(1, familyCount / 5);
+  const targetCompMax = Math.min(24, beats.length);
   const compRatio = targetCompMax > 0 ? Math.min(1, componentCount / targetCompMax) : 0;
   const transitionScore =
-    beats.length > 1
-      ? Math.max(0, 1 - consecutiveFamilyRepeats / (beats.length - 1))
-      : 1;
+    beats.length > 1 ? Math.max(0, 1 - consecutiveFamilyRepeats / (beats.length - 1)) : 1;
 
   const styleDiversityScore = Number(
     ((familyRatio * 0.35 + compRatio * 0.4 + transitionScore * 0.25) * 100).toFixed(1)
   );
   const heroPeakPercent = Number(((bestPeakMidFrame / totalFrames) * 100).toFixed(1));
-  const talkingHeadSharePercent = Number(
-    ((talkingHeadFrames / totalFrames) * 100).toFixed(1)
-  );
+  const talkingHeadSharePercent = Number(((talkingHeadFrames / totalFrames) * 100).toFixed(1));
 
   const audit: DirectorAudit = {
     avgShotDurationSec,
@@ -1559,6 +3129,12 @@ export function validateDirectorPlan(plan: DirectorPlan): DirectorPlan {
     repetitionWarnings: warnings,
     heroPeakPercent,
     talkingHeadSharePercent,
+    uniqueStyleWorlds: Object.keys(uniqueWorlds).length,
+    uniqueRecipesUsed: Object.keys(uniqueRecipes).length,
+    uniqueTypographyModes: Object.keys(uniqueTypo).length,
+    setPieceCount,
+    depthSandwichCount,
+    strategyId: plan.strategyId,
   };
 
   return {

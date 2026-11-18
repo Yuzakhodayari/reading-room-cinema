@@ -1,66 +1,502 @@
 #!/usr/bin/env node
 /**
- * Zero-build Audience-Engineering Director CLI
+ * Zero-Build Grand Unification Showrunner & Audience-Engineering Director CLI
+ * (`studio/scripts/plan-edit.mjs`)
  *
  * Parses either:
  *   1. Whisper word-level JSON (tools/transcribe.py -> words.json)
  *   2. Plain Markdown / text spoken script (.md / .txt, estimated at 150 WPM)
  *
- * Outputs a deterministic DirectorPlan JSON rotating across all 5 style engine
- * families and 24 implemented styles, balancing Money & Macro talking head (30-40%)
- * with Dual-Palette cutaways (Page #FAF8F3 milk canvas + Over Footage navy Liquid Glass),
- * and auditing pacing & citations.
- *
- * Usage:
- *   node scripts/plan-edit.mjs <words.json_or_script.md> [--out out/director-plan.json] [--title "..."] [--fps 30] [--wpm 150]
+ * Outputs a deterministic DirectorPlan JSON leveraging:
+ *   - 60-recipe STYLE_CATALOG spanning all 10 Cinema Style Worlds
+ *   - 32 word-synced kinetic typography modes & 18 smoked-navy Liquid Glass rigs
+ *   - 24 signature physics/3D set-pieces & Pillar #10 Depth-Sandwich layering
+ *   - STR-* strategy guardrails (R43-R47) & episodes-vault.json cooldown decay
+ *   - Dynamic cartographic geoQuery extraction (zero hardcoded Texas)
+ *   - Stateful multi-act continuity entities & structured beat data payloads
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// ============================================================================
-// 1. 24-Style Catalog (Exact parity with studio/src/director/planner.ts)
-// ============================================================================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const STUDIO_DIR = path.resolve(__dirname, "..");
+const DEFAULT_VAULT_PATH = path.join(STUDIO_DIR, "episodes-vault.json");
+
+export const CINEMA_10_STYLE_WORLDS = [
+  "liquid-glass",
+  "doc-broadcast",
+  "vintage-editorial",
+  "macro-telemetry",
+  "forensic-exhibits",
+  "diagram-metaphor",
+  "data-maps-3d",
+  "system-simulators",
+  "ui-satire-collage",
+  "generative-setpiece",
+];
+
+export const TYPOGRAPHY_32_MODES = [
+  "word-pop",
+  "karaoke-highlight",
+  "typewriter",
+  "split-lines",
+  "stamp-slam",
+  "marker-sweep",
+  "red-correction",
+  "solari-split-flap",
+  "redacted-declassify",
+  "stenographer-ribbon",
+  "verdict-anvil-slam",
+  "burstiness-staccato-cuts",
+  "chisel-highlighter-sweep",
+  "behind-presenter-monolith",
+  "ledger-tabular-rollup",
+  "court-syllabus-italic",
+  "telestrator-grease-math",
+  "footnote-loupe-zoom",
+  "stock-ticker-crawl",
+  "antithesis-split-lock",
+  "erosion-decay-fade",
+  "veto-fountain-strike",
+  "typewriter-1941-ribbon",
+  "blueprint-dimension-callout",
+  "chapter-roman-folio",
+  "debt-odometer-inline",
+  "whisper-focus-spotlight",
+  "margin-redline-gloss",
+  "statute-clause-box",
+  "question-inversion-turn",
+  "silent-black-aphorism",
+  "cascading-evidence-stack",
+];
+
+export const GLASS_18_PRESETS = [
+  "card",
+  "pill",
+  "dock",
+  "toolbar",
+  "toast",
+  "split-modal",
+  "dossier-stack",
+  "evidence-rail",
+  "magnifier-card",
+  "telemetry-strip",
+  "verdict-seal",
+  "compare-scale",
+  "timeline-scrubber",
+  "receipt-ticker",
+  "terminal-console",
+  "map-callout",
+  "stat-triptych",
+  "quote-citation",
+];
+
+export const STRATEGY_TARGET_SHARES = {
+  "STR-GEN-EXPLAINER": { targetShare: 0.35, forbidClocked: true },
+  "STR-AIC-CLOCKED": { targetShare: 0.32, forbidClocked: false },
+  "STR-AIC-SPECULATIVE": { targetShare: 0.34, forbidClocked: true },
+  "STR-FISHER-ARTIFACT": { targetShare: 0.33, forbidClocked: true },
+  "STR-MAX-ESSAY": { targetShare: 0.36, forbidClocked: true },
+  "STR-AOTP-LADDER": { targetShare: 0.34, forbidClocked: true },
+  "STR-BOYLE-CHAPTERED": { targetShare: 0.37, forbidClocked: true },
+  "STR-HMW-PRIMER": { targetShare: 0.35, forbidClocked: true },
+  "STR-GEN-FIELD": { targetShare: 0.38, forbidClocked: true },
+};
+
+export const SIGNATURE_SET_PIECES = [
+  {
+    id: "sp-ep01-shoe-bom-vaporizer",
+    blueprintKey: "SP01_SHOE_LABOR_VAPORIZER",
+    title: "$120 Running Shoe 80% Labor Vaporizer",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "page_editorial",
+    typographyMode: "blueprint-dimension-callout",
+    sfxPrimary: "pneumatic-servo",
+    sfxSecondary: "data-tick",
+    propIds: ["RunningShoeExplodedStack"],
+    pattern: /running shoes|dental x-ray|unit costs drop/i,
+  },
+  {
+    id: "sp-ep01-whiteboard-iron-loan-flip",
+    blueprintKey: "SP02_PALO_ALTO_WHITEBOARD_FLIP",
+    title: "Palo Alto Whiteboard 180° Flip to Cast-Iron Loan",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    register: "page_editorial",
+    typographyMode: "antithesis-split-lock",
+    sfxPrimary: "anvil-iron-clank",
+    sfxSecondary: "marker-sweep",
+    propIds: ["PaloAltoFlipWhiteboard"],
+    pattern: /whiteboard in palo alto|thirty-year loan/i,
+  },
+  {
+    id: "sp-ep01-claire-longitudinal-house",
+    blueprintKey: "SP03_CLAIRE_LONGITUDINAL_HOUSE",
+    title: "Claire Longitudinal 2025-2036 House Ledger",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "StickFigureStage",
+    register: "archival_parchment",
+    typographyMode: "ledger-tabular-rollup",
+    sfxPrimary: "calculator-ribbon-print",
+    sfxSecondary: "audit-row-lock",
+    propIds: ["ClaireAustinHouseRig"],
+    pattern: /claire.{0,45}3,400|austin.{0,30}2025|austin august/i,
+  },
+  {
+    id: "sp-ep01-w2-guillotine-tax-plumbing",
+    blueprintKey: "SP04_W2_GUILLOTINE_TAX_PLUMBING",
+    title: "W-2 Guillotine vs Ireland Tax Plumbing",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "drafting_blueprint",
+    typographyMode: "ledger-tabular-rollup",
+    sfxPrimary: "guillotine-slice",
+    sfxSecondary: "blueprint-unroll",
+    propIds: ["W2WithholdingGuillotine"],
+    pattern: /tax plumbing|withholding.{0,40}payroll|route intellectual-property/i,
+  },
+  {
+    id: "sp-ep01-port-1955-vs-2034-diptych",
+    blueprintKey: "SP05_1955_PIER_VS_2034_PORT",
+    title: "1955 Silent Pier vs 2034 Robotic Port",
+    styleWorld: "system-simulators",
+    styleFamily: "doc-broadcast",
+    componentHint: "LiveCountdownSplit",
+    register: "midnight_telemetry",
+    typographyMode: "solari-split-flap",
+    sfxPrimary: "pneumatic-servo",
+    sfxSecondary: "anchor-chain-scrape",
+    propIds: ["IdlePier1955", "AutonomousPortGantry2034"],
+    pattern: /dockworkers in rotterdam|robotic cranes unload|every machine keeps running/i,
+  },
+  {
+    id: "sp-ep01-alaska-veto-slash",
+    blueprintKey: "SP06_ALASKA_WALKER_VETO_SLASH",
+    title: "Alaska Gov. Walker Fountain-Pen Veto Slash",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "ArchiveLightTable",
+    register: "archival_parchment",
+    typographyMode: "veto-fountain-strike",
+    sfxPrimary: "fountain-pen-slash",
+    sfxSecondary: "gavel-wood-hit",
+    propIds: ["GovernorVetoFountainPen", "SupremeCourtBenchGavel"],
+    pattern: /bill walker|veto pen|wielechowski/i,
+  },
+  {
+    id: "sp-ep01-bond-priority-spillway",
+    blueprintKey: "SP07_SOVEREIGN_BOND_SPILLWAY",
+    title: "Federal $2.1T Bond Priority Spillway",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    register: "drafting_blueprint",
+    typographyMode: "debt-odometer-inline",
+    sfxPrimary: "vault-bolt-lock",
+    sfxSecondary: "hydraulic-press",
+    propIds: ["SpillwayDam3Tier", "DebtMonolithWall"],
+    pattern: /bondholders always get paid first|debt-ceiling standoff/i,
+  },
+  {
+    id: "sp-ep01-uber-4mo-token-burn",
+    blueprintKey: "SP08_UBER_4MONTH_TOKEN_BURN",
+    title: "Uber 4-Month AI Budget Burnout",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "CaptionNewsCard",
+    register: "midnight_telemetry",
+    typographyMode: "stock-ticker-crawl",
+    sfxPrimary: "server-rack-hum",
+    sfxSecondary: "alert-ping",
+    propIds: ["TokenDeflationFurnace"],
+    pattern: /uber burned through|1,500 per engineer/i,
+  },
+  {
+    id: "sp-ep01-empty-gate-14a-compute",
+    blueprintKey: "SP09_EMPTY_GATE_14A_PERISHABLE",
+    title: "Empty Gate 14A vs Expiring Tuesday Compute",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    register: "page_editorial",
+    typographyMode: "erosion-decay-fade",
+    sfxPrimary: "jet-gate-retract",
+    sfxSecondary: "pendulum-escapement-tick",
+    propIds: ["EmptyAirlineGate14A"],
+    pattern: /spoils on the clock|plane pushes back|idle server time in a jar/i,
+  },
+  {
+    id: "sp-ep01-closed-scrip-wallet",
+    blueprintKey: "SP10_CLOSED_SCRIP_20PCT_TOLL",
+    title: "Closed Scrip Wallet 20% Exit Toll vs 1912 Coal Scrip",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "Newsreel1920s",
+    register: "archival_parchment",
+    typographyMode: "statute-clause-box",
+    sfxPrimary: "coin-brass-clink",
+    sfxSecondary: "nsf-decline-buzz",
+    propIds: ["ClosedScripWalletRig", "CoalScripBrassToken1912"],
+    pattern: /twenty percent fee|island creek coal|paint creek|shenzhen/i,
+  },
+  {
+    id: "sp-ep01-wattage-10w-to-5gw-ladder",
+    blueprintKey: "SP11_10W_TO_5GW_POWER_LADDER",
+    title: "10W Charger to 5GW AI Campus Power Ladder",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    register: "drafting_blueprint",
+    typographyMode: "blueprint-dimension-callout",
+    sfxPrimary: "watt-meter-whir",
+    sfxSecondary: "substation-60hz-buzz",
+    propIds: ["WattageApplianceNode", "HighVoltageSubstationRig"],
+    pattern: /phone charger draws ten watts|five gigawatts on a single ai campus/i,
+  },
+  {
+    id: "sp-ep01-agent-vs-grid-permitting-race",
+    blueprintKey: "SP12_6MO_AGENT_VS_10YR_GRID",
+    title: "6-Month Agent vs 10-Year Grid Permitting Race",
+    styleWorld: "system-simulators",
+    styleFamily: "doc-broadcast",
+    componentHint: "LiveCountdownSplit",
+    register: "midnight_telemetry",
+    typographyMode: "solari-split-flap",
+    sfxPrimary: "ratchet-winch-click",
+    sfxSecondary: "high-voltage-arc-snap",
+    propIds: ["Transformer128WeekQueue"],
+    pattern: /six months.{0,60}five to ten years|gap between software speed and construction speed/i,
+  },
+  {
+    id: "sp-ep01-1941-uk-ration-counter",
+    blueprintKey: "SP13_1941_UK_16PT_RATION_BOOK",
+    title: "1941 UK 16-Point Ration Counter",
+    styleWorld: "vintage-editorial",
+    styleFamily: "vintage-editorial",
+    componentHint: "Newsreel1920s",
+    register: "vintage_newsreel",
+    typographyMode: "typewriter-1941-ribbon",
+    sfxPrimary: "paper-tear-crisp",
+    sfxSecondary: "typewriter-strike",
+    propIds: ["BritishRationBook1941"],
+    pattern: /december 1, 1941|ministry of food|sixteen ration points/i,
+  },
+  {
+    id: "sp-ep01-walker-veto-allowance-slam",
+    blueprintKey: "SP14_FRIDAY_TRUCE_TO_ALLOWANCE",
+    title: "200-Year Friday Truce to Allowance Verdict",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "SilentFilmCard",
+    register: "page_editorial",
+    typographyMode: "verdict-anvil-slam",
+    sfxPrimary: "fountain-pen-slash",
+    sfxSecondary: "resolve-chord-warm",
+    propIds: ["GovernorVetoFountainPen"],
+    pattern: /we call that an allowance|zero power to negotiate|it'?s an allowance/i,
+  },
+  {
+    id: "sp-ep02-tether-vs-tokyo-tbill-shift",
+    blueprintKey: "SP15_TETHER_VS_TOKYO_TBILL",
+    title: "Tether vs Tokyo T-Bill Shift",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    register: "archival_parchment",
+    typographyMode: "ledger-tabular-rollup",
+    sfxPrimary: "balance-scale-creak",
+    sfxSecondary: "map-whoosh",
+    propIds: ["TreasuryBondVault"],
+    pattern: /tether|stablecoin.{0,40}treasury|tokyo.{0,40}t-bill/i,
+  },
+  {
+    id: "sp-ep03-nvidia-coreweave-spv-carousel",
+    blueprintKey: "SP16_NVIDIA_COREWEAVE_SPV_LOOP",
+    title: "Nvidia-CoreWeave Circular SPV Carousel",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "midnight_telemetry",
+    typographyMode: "footnote-loupe-zoom",
+    sfxPrimary: "pneumatic-servo",
+    sfxSecondary: "glass-loupe-click",
+    propIds: ["CircularGpuSpvCarousel", "GpuServerRackTower"],
+    pattern: /coreweave|special purpose vehicle|circular.{0,30}gpu/i,
+  },
+  {
+    id: "sp-ep04-saas-pik-debt-snowball",
+    blueprintKey: "SP17_SAAS_PIK_DEBT_SNOWBALL",
+    title: "SaaS PIK Debt Snowball",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "BlobSimulation",
+    register: "midnight_telemetry",
+    typographyMode: "debt-odometer-inline",
+    sfxPrimary: "hydraulic-press",
+    sfxSecondary: "warning-thud",
+    propIds: ["PikDebtSnowball"],
+    pattern: /payment-in-kind|\bpik\b|private credit/i,
+  },
+  {
+    id: "sp-ep05-california-lidar-roof-drone",
+    blueprintKey: "SP18_CA_ROOF_SCAN_DRONE",
+    title: "California Roof-Scan Insurance Drone",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    register: "archival_parchment",
+    typographyMode: "telestrator-grease-math",
+    sfxPrimary: "drone-pass-by",
+    sfxSecondary: "camera-shutter",
+    propIds: ["RoofScanInsuranceDrone"],
+    pattern: /fair plan|homeowners insurance|roof.{0,25}drone/i,
+  },
+  {
+    id: "sp-ep06-transformer-128wk-copper-trap",
+    blueprintKey: "SP19_128WK_TRANSFORMER_COPPER",
+    title: "128-Week Transformer & Copper Bottleneck",
+    styleWorld: "system-simulators",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    register: "drafting_blueprint",
+    typographyMode: "blueprint-dimension-callout",
+    sfxPrimary: "substation-60hz-buzz",
+    sfxSecondary: "breaker-trip-clunk",
+    propIds: ["Transformer128WeekQueue", "CopperOpenPitClock"],
+    pattern: /128-week|copper wire, high-voltage transformers/i,
+  },
+  {
+    id: "sp-ep07-taiwan-2nm-euv-killswitch",
+    blueprintKey: "SP20_TAIWAN_2NM_EUV_KILLSWITCH",
+    title: "Taiwan 2nm Blockade & ASML EUV Kill-Switch",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    register: "midnight_telemetry",
+    typographyMode: "redacted-declassify",
+    sfxPrimary: "euv-laser-pulse",
+    sfxSecondary: "breaker-trip-clunk",
+    propIds: ["AsmlEuvKillSwitchRig", "SiliconWaferNodeCompare"],
+    pattern: /\basml\b|\beuv\b|taiwan.{0,30}2nm/i,
+  },
+  {
+    id: "sp-ep08-drone-20k-vs-carrier-vls-drain",
+    blueprintKey: "SP21_20K_DRONE_VS_13B_CARRIER",
+    title: "$20k Drone vs $13B Carrier VLS Drain",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    register: "drafting_blueprint",
+    typographyMode: "antithesis-split-lock",
+    sfxPrimary: "vls-launch-whoosh",
+    sfxSecondary: "drone-pass-by",
+    propIds: ["CarrierVsDroneExchange"],
+    pattern: /vls|aircraft carrier.{0,40}drone|20,000 drone/i,
+  },
+  {
+    id: "sp-ep09-subsea-550-cable-anchor-cut",
+    blueprintKey: "SP22_550_SUBSEA_CABLE_ANCHOR",
+    title: "550 Subsea Cable Anchor Cut",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    register: "drafting_blueprint",
+    typographyMode: "whisper-focus-spotlight",
+    sfxPrimary: "subsea-cable-snap",
+    sfxSecondary: "radar-sonar-ping",
+    propIds: ["SubseaCableAnchorCut"],
+    pattern: /subsea cable|undersea cable|550 cables/i,
+  },
+  {
+    id: "sp-ep10-france-greece-vigilante-flip",
+    blueprintKey: "SP23_FRANCE_GREECE_SPREAD_FLIP",
+    title: "France vs Greece Bond Vigilante Flip",
+    styleWorld: "macro-telemetry",
+    styleFamily: "doc-broadcast",
+    componentHint: "VisualInvestigationBoard",
+    register: "midnight_telemetry",
+    typographyMode: "antithesis-split-lock",
+    sfxPrimary: "basis-point-blip",
+    sfxSecondary: "balance-scale-creak",
+    propIds: ["BondVigilanteScale"],
+    pattern: /france.{0,35}greece|bond vigilante/i,
+  },
+  {
+    id: "sp-ep11-oasi-2032-vault-exhaustion",
+    blueprintKey: "SP24_OASI_2032_TRUST_EXHAUSTION",
+    title: "Q4 2032 Social Security Vault Exhaustion",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "ArchiveLightTable",
+    register: "archival_parchment",
+    typographyMode: "debt-odometer-inline",
+    sfxPrimary: "vault-bolt-lock",
+    sfxSecondary: "pendulum-escapement-tick",
+    propIds: ["SocialSecurity2032Dial"],
+    pattern: /social security.{0,40}2032|oasi trust/i,
+  },
+];
+
 export const STYLE_CATALOG = [
+  // 1-3: Legacy Over-Footage Liquid Glass
   {
     id: "liquid-glass-card",
+    styleWorld: "liquid-glass",
     styleFamily: "liquid-glass",
     componentHint: "LiquidGlassObject:card",
     framing: "talking-head-with-glass",
     motionAction: "slide-left -> glow-rim -> fade-blur-out",
     glassPreset: "card",
+    glassRig: "card",
     typographyMode: "marker-sweep",
     defaultSfx: "glass-enter",
     secondarySfx: "glass-dock",
     paceProfile: "balanced",
+    register: "over_footage",
+    depthSandwichEligible: true,
   },
   {
     id: "liquid-glass-dock",
+    styleWorld: "liquid-glass",
     styleFamily: "liquid-glass",
     componentHint: "LiquidGlassObject:dock",
     framing: "talking-head-with-glass",
     motionAction: "slide-up -> highlight-sweep -> fade-out",
     glassPreset: "dock",
+    glassRig: "bottom-dock",
     typographyMode: "split-lines",
     defaultSfx: "glass-dock",
     secondarySfx: "marker-sweep",
     paceProfile: "balanced",
+    register: "over_footage",
   },
   {
     id: "liquid-glass-toast",
+    styleWorld: "liquid-glass",
     styleFamily: "liquid-glass",
     componentHint: "LiquidGlassObject:toast",
     framing: "talking-head-punch-in",
     motionAction: "pop-out -> nudge -> pop-down",
     glassPreset: "toast",
+    glassRig: "toast-alert",
     typographyMode: "red-correction",
     defaultSfx: "glass-enter",
     secondarySfx: "alert-ping",
     paceProfile: "snappy",
+    register: "over_footage",
   },
+  // 4-11: Legacy Document & Broadcast
   {
     id: "doc-news-package",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "NewsPackageLowerThird",
     framing: "talking-head-with-glass",
@@ -69,9 +505,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "glass-enter",
     secondarySfx: "data-tick",
     paceProfile: "balanced",
+    register: "over_footage",
   },
   {
     id: "doc-caption-news",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "CaptionNewsCard",
     framing: "fullscreen-cutaway",
@@ -80,9 +518,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "paper-slide",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
   {
     id: "doc-visual-investigation",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "VisualInvestigationBoard",
     framing: "fullscreen-cutaway",
@@ -92,9 +532,11 @@ export const STYLE_CATALOG = [
     secondarySfx: "warning-thud",
     paceProfile: "calm-hold",
     peakOnly: true,
+    register: "midnight_telemetry",
   },
   {
     id: "doc-archive-light-table",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "ArchiveLightTable",
     framing: "fullscreen-cutaway",
@@ -103,9 +545,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "paper-slide",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "archival_parchment",
   },
   {
     id: "doc-live-countdown-split",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "LiveCountdownSplit",
     framing: "split-screen",
@@ -114,9 +558,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "data-tick",
     secondarySfx: "riser-subtle",
     paceProfile: "balanced",
+    register: "midnight_telemetry",
   },
   {
     id: "doc-telestrator",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "TelestratorOverlay",
     framing: "split-screen",
@@ -125,9 +571,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "telestrator-draw",
     secondarySfx: "marker-sweep",
     paceProfile: "balanced",
+    register: "over_footage",
   },
   {
     id: "doc-kino-montage",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "KinoMontageStrip",
     framing: "fullscreen-cutaway",
@@ -136,9 +584,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "flash-cut",
     secondarySfx: "chapter-chime",
     paceProfile: "snappy",
+    register: "page_editorial",
   },
   {
     id: "doc-city-symphony",
+    styleWorld: "doc-broadcast",
     styleFamily: "doc-broadcast",
     componentHint: "CitySymphonyFrame",
     framing: "fullscreen-cutaway",
@@ -146,9 +596,12 @@ export const STYLE_CATALOG = [
     typographyMode: "split-lines",
     defaultSfx: "camera-shutter",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
+  // 12-16: Legacy Vintage Editorial
   {
     id: "vintage-newsreel",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "Newsreel1920s",
     framing: "fullscreen-cutaway",
@@ -157,9 +610,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "newsreel-click",
     secondarySfx: "paper-slide",
     paceProfile: "calm-hold",
+    register: "vintage_newsreel",
   },
   {
     id: "vintage-silent-film",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "SilentFilmCard",
     framing: "fullscreen-cutaway",
@@ -167,9 +622,11 @@ export const STYLE_CATALOG = [
     typographyMode: "split-lines",
     defaultSfx: "chapter-chime",
     paceProfile: "balanced",
+    register: "vintage_newsreel",
   },
   {
     id: "vintage-collage",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "CollageCutout",
     framing: "fullscreen-cutaway",
@@ -178,9 +635,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "paper-flip-fast",
     secondarySfx: "sticker-pop",
     paceProfile: "snappy",
+    register: "archival_parchment",
   },
   {
     id: "vintage-spy-titles",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "SpyTitleSequence",
     framing: "fullscreen-cutaway",
@@ -189,9 +648,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "flash-cut",
     secondarySfx: "type-click",
     paceProfile: "balanced",
+    register: "midnight_telemetry",
   },
   {
     id: "vintage-stained-glass",
+    styleWorld: "vintage-editorial",
     styleFamily: "vintage-editorial",
     componentHint: "StainedGlassFrame",
     framing: "split-screen",
@@ -199,9 +660,12 @@ export const STYLE_CATALOG = [
     typographyMode: "split-lines",
     defaultSfx: "chapter-chime",
     paceProfile: "calm-hold",
+    register: "archival_parchment",
   },
+  // 17-20: Legacy Diagram & Metaphor
   {
     id: "diagram-sticker",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "StickerCutout",
     framing: "talking-head-punch-in",
@@ -209,9 +673,11 @@ export const STYLE_CATALOG = [
     typographyMode: "word-pop",
     defaultSfx: "sticker-pop",
     paceProfile: "snappy",
+    register: "over_footage",
   },
   {
     id: "diagram-stick-figure",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "StickFigureStage",
     framing: "fullscreen-cutaway",
@@ -220,9 +686,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "sticker-pop",
     secondarySfx: "paper-slide",
     paceProfile: "balanced",
+    register: "page_editorial",
   },
   {
     id: "diagram-instruction-manual",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "InstructionManualCard",
     framing: "fullscreen-cutaway",
@@ -231,9 +699,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "paper-slide",
     secondarySfx: "telestrator-draw",
     paceProfile: "balanced",
+    register: "page_editorial",
   },
   {
     id: "diagram-isometric",
+    styleWorld: "diagram-metaphor",
     styleFamily: "diagram-metaphor",
     componentHint: "IsometricScene",
     framing: "fullscreen-cutaway",
@@ -241,9 +711,12 @@ export const STYLE_CATALOG = [
     typographyMode: "word-pop",
     defaultSfx: "data-tick",
     paceProfile: "calm-hold",
+    register: "drafting_blueprint",
   },
+  // 21-24: Legacy Data & Maps 3D
   {
     id: "data-map-explainer",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "MapExplainer",
     framing: "fullscreen-cutaway",
@@ -252,9 +725,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "map-whoosh",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
   {
     id: "data-physical-card",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "DataPhysicalCard",
     framing: "fullscreen-cutaway",
@@ -263,9 +738,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "data-tick",
     secondarySfx: "marker-sweep",
     paceProfile: "calm-hold",
+    register: "page_editorial",
   },
   {
     id: "data-white-model-3d",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "WhiteModel3D",
     framing: "fullscreen-cutaway",
@@ -274,9 +751,11 @@ export const STYLE_CATALOG = [
     defaultSfx: "riser-subtle",
     secondarySfx: "data-tick",
     paceProfile: "calm-hold",
+    register: "drafting_blueprint",
   },
   {
     id: "data-blob-simulation",
+    styleWorld: "data-maps-3d",
     styleFamily: "data-maps-3d",
     componentHint: "BlobSimulation",
     framing: "fullscreen-cutaway",
@@ -285,95 +764,665 @@ export const STYLE_CATALOG = [
     defaultSfx: "ambient-tension-drone",
     secondarySfx: "data-tick",
     paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  // 25-30: Extended Liquid Glass Rigs
+  {
+    id: "glass-dossier-stack",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:card",
+    framing: "talking-head-with-glass",
+    motionAction: "dossier-slide-desk -> glow-rim -> fade-blur-out",
+    glassPreset: "card",
+    glassRig: "dossier-stack",
+    typographyMode: "cascading-evidence-stack",
+    defaultSfx: "glass-frosted-slide",
+    secondarySfx: "paper-slide",
+    paceProfile: "balanced",
+    register: "over_footage",
+    depthSandwichEligible: true,
+  },
+  {
+    id: "glass-magnifier-card",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:card",
+    framing: "talking-head-with-glass",
+    motionAction: "loupe-pop-focus -> loupe-scan-row -> fade-blur-out",
+    glassPreset: "card",
+    glassRig: "magnifier-card",
+    typographyMode: "footnote-loupe-zoom",
+    defaultSfx: "glass-loupe-click",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "over_footage",
+    depthSandwichEligible: true,
+  },
+  {
+    id: "glass-telemetry-strip",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:dock",
+    framing: "talking-head-with-glass",
+    motionAction: "slide-up -> highlight-sweep -> fade-out",
+    glassPreset: "dock",
+    glassRig: "telemetry-strip",
+    typographyMode: "stock-ticker-crawl",
+    defaultSfx: "glass-dock",
+    secondarySfx: "odometer-tick",
+    paceProfile: "balanced",
+    register: "over_footage",
+  },
+  {
+    id: "glass-verdict-seal",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:toast",
+    framing: "talking-head-punch-in",
+    motionAction: "pneumatic-stamp-in -> nudge -> pop-down",
+    glassPreset: "toast",
+    glassRig: "verdict-seal",
+    typographyMode: "verdict-anvil-slam",
+    defaultSfx: "archival-stamp",
+    secondarySfx: "gavel-wood-hit",
+    paceProfile: "snappy",
+    register: "over_footage",
+  },
+  {
+    id: "glass-compare-scale",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:card",
+    framing: "talking-head-with-glass",
+    motionAction: "scale-beam-drop -> split-compare -> fade-blur-out",
+    glassPreset: "split-modal",
+    glassRig: "compare-scale",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "balance-scale-creak",
+    secondarySfx: "data-tick",
+    paceProfile: "balanced",
+    register: "over_footage",
+    depthSandwichEligible: true,
+  },
+  {
+    id: "glass-stat-triptych",
+    styleWorld: "liquid-glass",
+    styleFamily: "liquid-glass",
+    componentHint: "LiquidGlassObject:dock",
+    framing: "talking-head-with-glass",
+    motionAction: "slide-up -> glow-rim -> fade-out",
+    glassPreset: "dock",
+    glassRig: "stat-triptych",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "glass-triptych-cascade",
+    secondarySfx: "odometer-tick",
+    paceProfile: "balanced",
+    register: "over_footage",
   },
 ];
 
-const RECIPE_BY_ID = Object.fromEntries(STYLE_CATALOG.map((r) => [r.id, r]));
+STYLE_CATALOG.push(
+  // Macro Telemetry
+  {
+    id: "DivergingJawsChart",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "orthographic-extrude -> audit-row-step -> fade-blur-out",
+    typographyMode: "chisel-highlighter-sweep",
+    defaultSfx: "odometer-tick",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "NegativeFcfWaterfall",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> tranche-waterfall-step -> fade-blur-out",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "sub-bass-drop",
+    secondarySfx: "audit-row-lock",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "AuctionPriceShockwave",
+    styleWorld: "macro-telemetry",
+    styleFamily: "doc-broadcast",
+    componentHint: "VisualInvestigationBoard",
+    framing: "fullscreen-cutaway",
+    motionAction: "blur-snap -> auction-tail-tremor -> fade-blur-out",
+    typographyMode: "verdict-anvil-slam",
+    defaultSfx: "high-voltage-arc-snap",
+    secondarySfx: "warning-thud",
+    paceProfile: "calm-hold",
+    peakOnly: true,
+    register: "midnight_telemetry",
+  },
+  {
+    id: "SovereignSpreadFlip",
+    styleWorld: "macro-telemetry",
+    styleFamily: "doc-broadcast",
+    componentHint: "LiveCountdownSplit",
+    framing: "split-screen",
+    motionAction: "slide-up -> yield-spread-widen -> fade-out",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "basis-point-blip",
+    secondarySfx: "balance-scale-creak",
+    paceProfile: "balanced",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "DebtDeflationJaws1933",
+    styleWorld: "macro-telemetry",
+    styleFamily: "vintage-editorial",
+    componentHint: "Newsreel1920s",
+    framing: "fullscreen-cutaway",
+    motionAction: "iris-reveal -> archive-page-breath -> fade-out",
+    typographyMode: "typewriter-1941-ribbon",
+    defaultSfx: "newsreel-click",
+    secondarySfx: "anvil-iron-clank",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "StackedShareShift",
+    styleWorld: "macro-telemetry",
+    styleFamily: "data-maps-3d",
+    componentHint: "BlobSimulation",
+    framing: "fullscreen-cutaway",
+    motionAction: "orthographic-extrude -> debt-clock-blur -> fade-blur-out",
+    typographyMode: "debt-odometer-inline",
+    defaultSfx: "calculator-ribbon-print",
+    secondarySfx: "audit-row-lock",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  },
+  // Forensic Exhibits
+  {
+    id: "FiscalLedgerTableStage",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "ArchiveLightTable",
+    framing: "fullscreen-cutaway",
+    motionAction: "dossier-slide-desk -> loupe-scan-row -> fade-out",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "paper-slide",
+    secondarySfx: "audit-row-lock",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "SupremeCourtSyllabusStage",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "CaptionNewsCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "paper-unfold -> ink-highlighter-double -> fade-out",
+    typographyMode: "court-syllabus-italic",
+    defaultSfx: "gavel-wood-hit",
+    secondarySfx: "fountain-pen-slash",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "Sec10KFootnoteStretch",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "doc-broadcast",
+    componentHint: "TelestratorOverlay",
+    framing: "split-screen",
+    motionAction: "loupe-pop-focus -> footnote-zoom-callout -> fade-out",
+    typographyMode: "footnote-loupe-zoom",
+    defaultSfx: "glass-loupe-click",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "VetoPenBudgetLedger",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "vintage-editorial",
+    componentHint: "SilentFilmCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "ledger-page-turn -> veto-ink-slash -> fade-out",
+    typographyMode: "veto-fountain-strike",
+    defaultSfx: "fountain-pen-slash",
+    secondarySfx: "archival-stamp",
+    paceProfile: "calm-hold",
+    register: "archival_parchment",
+  },
+  {
+    id: "ArchivalRationBook1941",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "vintage-editorial",
+    componentHint: "CollageCutout",
+    framing: "fullscreen-cutaway",
+    motionAction: "carbon-copy-peel -> microfilm-frame-step -> fade-out",
+    typographyMode: "typewriter-1941-ribbon",
+    defaultSfx: "paper-tear-crisp",
+    secondarySfx: "archival-stamp",
+    paceProfile: "calm-hold",
+    register: "vintage_newsreel",
+  },
+  {
+    id: "FoiaRedactionDeclassify",
+    styleWorld: "forensic-exhibits",
+    styleFamily: "vintage-editorial",
+    componentHint: "SpyTitleSequence",
+    framing: "fullscreen-cutaway",
+    motionAction: "redaction-bar-reveal -> redact-bar-slide -> fade-out",
+    typographyMode: "redacted-declassify",
+    defaultSfx: "archival-stamp",
+    secondarySfx: "typewriter-strike",
+    paceProfile: "balanced",
+    register: "archival_parchment",
+  },
+  // System Simulators
+  {
+    id: "SupplyChainBomStrip",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    framing: "fullscreen-cutaway",
+    motionAction: "blueprint-unroll-x -> gear-mesh-cw -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "pneumatic-servo",
+    secondarySfx: "data-tick",
+    paceProfile: "balanced",
+    register: "drafting_blueprint",
+  },
+  {
+    id: "PaloAltoWhiteboardFlip",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "flip-y -> card-flip-180 -> fade-out",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "anvil-iron-clank",
+    secondarySfx: "marker-sweep",
+    paceProfile: "snappy",
+    register: "page_editorial",
+  },
+  {
+    id: "DualTaxPlumbingSchematic",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    framing: "fullscreen-cutaway",
+    motionAction: "guillotine-drop -> sankey-particle-stream -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "guillotine-slice",
+    secondarySfx: "blueprint-unroll",
+    paceProfile: "balanced",
+    register: "drafting_blueprint",
+  },
+  {
+    id: "SovereignPrioritySpillway",
+    styleWorld: "system-simulators",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "hydraulic-press-down -> hydraulic-pressure-tremor -> fade-blur-out",
+    typographyMode: "debt-odometer-inline",
+    defaultSfx: "hydraulic-press",
+    secondarySfx: "vault-bolt-lock",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+  },
+  {
+    id: "TransformerQueueBottleneck",
+    styleWorld: "system-simulators",
+    styleFamily: "diagram-metaphor",
+    componentHint: "StickFigureStage",
+    framing: "fullscreen-cutaway",
+    motionAction: "ratchet-step-in -> transformer-hum-60hz -> fade-out",
+    typographyMode: "solari-split-flap",
+    defaultSfx: "ratchet-winch-click",
+    secondarySfx: "substation-60hz-buzz",
+    paceProfile: "balanced",
+    register: "drafting_blueprint",
+  },
+  // UI Satire & Collage
+  {
+    id: "LongitudinalHouseholdDossier",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "StainedGlassFrame",
+    framing: "split-screen",
+    motionAction: "dossier-slide-desk -> paycheck-erode-pulse -> fade-blur-out",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "calculator-ribbon-print",
+    secondarySfx: "nsf-decline-buzz",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  },
+  {
+    id: "ClosedComputeScripWallet",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "diagram-metaphor",
+    componentHint: "StickerCutout",
+    framing: "talking-head-punch-in",
+    motionAction: "turnstile-spin-in -> scrip-token-flicker -> pop-down",
+    typographyMode: "statute-clause-box",
+    defaultSfx: "coin-brass-clink",
+    secondarySfx: "nsf-decline-buzz",
+    paceProfile: "snappy",
+    register: "over_footage",
+  },
+  {
+    id: "ThermalReceiptInflationRoll",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "CollageCutout",
+    framing: "fullscreen-cutaway",
+    motionAction: "receipt-feed-up -> escrow-mercury-climb -> fade-out",
+    typographyMode: "margin-redline-gloss",
+    defaultSfx: "calculator-ribbon-print",
+    secondarySfx: "paper-tear-crisp",
+    paceProfile: "snappy",
+    register: "page_editorial",
+  },
+  {
+    id: "FourEscapeHatchesBoard",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "doc-broadcast",
+    componentHint: "KinoMontageStrip",
+    framing: "fullscreen-cutaway",
+    motionAction: "solari-flap-cascade -> stamp-recoil-hold -> fade-out",
+    typographyMode: "chapter-roman-folio",
+    defaultSfx: "archival-stamp",
+    secondarySfx: "solari-flap",
+    paceProfile: "balanced",
+    register: "page_editorial",
+  },
+  {
+    id: "UnwrittenTruceToAllowance",
+    styleWorld: "ui-satire-collage",
+    styleFamily: "vintage-editorial",
+    componentHint: "SilentFilmCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "wax-seal-press -> veto-ink-slash -> fade-out",
+    typographyMode: "silent-black-aphorism",
+    defaultSfx: "fountain-pen-slash",
+    secondarySfx: "resolve-chord-warm",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  },
+  // Corridor Cartography & 3D Strata
+  {
+    id: "data-transit-map",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    framing: "fullscreen-cutaway",
+    motionAction: "radar-sweep-reveal -> cable-packet-pulse -> fade-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "map-whoosh",
+    secondarySfx: "radar-sonar-ping",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "CorridorArcMatrixCard",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "MapExplainer",
+    framing: "fullscreen-cutaway",
+    motionAction: "sonar-ping-appear -> chokepoint-gate-clamp -> fade-out",
+    typographyMode: "whisper-focus-spotlight",
+    defaultSfx: "radar-sonar-ping",
+    secondarySfx: "map-whoosh",
+    paceProfile: "calm-hold",
+    register: "midnight_telemetry",
+  },
+  {
+    id: "IsometricStrataCutaway3D",
+    styleWorld: "data-maps-3d",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> parallax-hover -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "riser-subtle",
+    secondarySfx: "odometer-tick",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+  },
+  // Generative Physics & 3D Set-Pieces
+  {
+    id: "setpiece-bom-vaporizer",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "IsometricScene",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> gear-mesh-cw -> fade-blur-out",
+    typographyMode: "chisel-highlighter-sweep",
+    defaultSfx: "hydraulic-press",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+    setPieceId: "SP01_SHOE_LABOR_VAPORIZER",
+  },
+  {
+    id: "setpiece-torque-balance",
+    styleWorld: "generative-setpiece",
+    styleFamily: "diagram-metaphor",
+    componentHint: "InstructionManualCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "scale-beam-drop -> balance-scale-oscillate -> fade-blur-out",
+    typographyMode: "antithesis-split-lock",
+    defaultSfx: "anvil-iron-clank",
+    secondarySfx: "felt-highlighter",
+    paceProfile: "balanced",
+    register: "page_editorial",
+    setPieceId: "SP02_PALO_ALTO_WHITEBOARD_FLIP",
+  },
+  {
+    id: "setpiece-hydraulic-spillway",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "DataPhysicalCard",
+    framing: "fullscreen-cutaway",
+    motionAction: "hydraulic-press-down -> vault-drain-vortex -> fade-blur-out",
+    typographyMode: "debt-odometer-inline",
+    defaultSfx: "vault-bolt-lock",
+    secondarySfx: "hydraulic-press",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+    setPieceId: "SP07_SOVEREIGN_BOND_SPILLWAY",
+  },
+  {
+    id: "setpiece-wattage-scale-ladder",
+    styleWorld: "generative-setpiece",
+    styleFamily: "data-maps-3d",
+    componentHint: "WhiteModel3D",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> watt-meter-spin -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "substation-60hz-buzz",
+    secondarySfx: "watt-meter-whir",
+    paceProfile: "calm-hold",
+    register: "drafting_blueprint",
+    setPieceId: "SP11_10W_TO_5GW_POWER_LADDER",
+  },
+  {
+    id: "setpiece-isometric-diorama-3d",
+    styleWorld: "generative-setpiece",
+    styleFamily: "doc-broadcast",
+    componentHint: "CitySymphonyFrame",
+    framing: "fullscreen-cutaway",
+    motionAction: "isometric-rise -> parallax-hover -> fade-blur-out",
+    typographyMode: "blueprint-dimension-callout",
+    defaultSfx: "glass-expand",
+    secondarySfx: "odometer-tick",
+    paceProfile: "calm-hold",
+    register: "page_editorial",
+  }
+);
+
+const RECIPE_BY_ID = {};
+for (let i = 0; i < STYLE_CATALOG.length; i++) {
+  RECIPE_BY_ID[STYLE_CATALOG[i].id] = STYLE_CATALOG[i];
+}
 
 const CATEGORY_RECIPE_PRIORITIES = {
   hook: [
     "doc-kino-montage",
     "liquid-glass-card",
+    "DivergingJawsChart",
     "vintage-collage",
     "data-physical-card",
-    "doc-live-countdown-split",
+    "glass-stat-triptych",
   ],
   "thesis-promise": [
     "liquid-glass-dock",
+    "FourEscapeHatchesBoard",
     "diagram-instruction-manual",
     "doc-news-package",
     "vintage-stained-glass",
     "data-white-model-3d",
   ],
   "receipt-proof": [
+    "FiscalLedgerTableStage",
     "doc-archive-light-table",
     "data-physical-card",
     "doc-caption-news",
+    "glass-dossier-stack",
+    "Sec10KFootnoteStretch",
     "liquid-glass-card",
     "doc-telestrator",
     "doc-news-package",
   ],
   "metaphor-story": [
+    "SupplyChainBomStrip",
     "diagram-isometric",
+    "setpiece-bom-vaporizer",
     "data-white-model-3d",
     "diagram-stick-figure",
+    "PaloAltoWhiteboardFlip",
     "liquid-glass-card",
-    "vintage-collage",
     "doc-city-symphony",
   ],
   "good-work-punchline": [
     "diagram-sticker",
     "liquid-glass-toast",
+    "ClosedComputeScripWallet",
     "vintage-collage",
+    "glass-verdict-seal",
     "doc-telestrator",
   ],
   "history-archive": [
     "vintage-newsreel",
+    "ArchivalRationBook1941",
+    "DebtDeflationJaws1933",
     "doc-archive-light-table",
     "vintage-silent-film",
     "vintage-spy-titles",
-    "data-map-explainer",
+    "SupremeCourtSyllabusStage",
   ],
   "map-geopolitics": [
     "data-map-explainer",
+    "data-transit-map",
+    "CorridorArcMatrixCard",
     "doc-city-symphony",
     "vintage-spy-titles",
     "liquid-glass-card",
-    "doc-telestrator",
   ],
   "warning-escalation": [
     "doc-visual-investigation",
-    "doc-live-countdown-split",
+    "AuctionPriceShockwave",
+    "SovereignSpreadFlip",
+    "SovereignPrioritySpillway",
     "data-blob-simulation",
-    "vintage-spy-titles",
+    "doc-live-countdown-split",
     "liquid-glass-toast",
-    "doc-kino-montage",
   ],
   "claire-ledger": [
+    "LongitudinalHouseholdDossier",
     "diagram-stick-figure",
+    "glass-compare-scale",
     "liquid-glass-card",
-    "doc-live-countdown-split",
+    "ThermalReceiptInflationRoll",
     "diagram-instruction-manual",
-    "data-physical-card",
   ],
   "open-loop": [
     "liquid-glass-dock",
+    "glass-telemetry-strip",
     "vintage-silent-film",
     "doc-news-package",
     "diagram-instruction-manual",
     "vintage-stained-glass",
   ],
   takeaway: [
+    "UnwrittenTruceToAllowance",
+    "VetoPenBudgetLedger",
     "liquid-glass-card",
     "vintage-silent-film",
     "doc-city-symphony",
-    "diagram-stick-figure",
   ],
 };
 
-// ============================================================================
-// 2. Classification & Citation Extraction
-// ============================================================================
+export function loadEpisodeVaultNovelty(vaultPath = DEFAULT_VAULT_PATH, episodeNumber = 1) {
+  const result = {
+    strategyId: "STR-GEN-EXPLAINER",
+    lutId: "editorial-warm",
+    musicStemId: "02-ledger-investigation",
+    styleWeights: {},
+    glassWeights: {},
+    typographyWeights: {},
+  };
+  if (!vaultPath || !fs.existsSync(vaultPath)) return result;
+
+  try {
+    const vault = JSON.parse(fs.readFileSync(vaultPath, "utf8"));
+    const tau = Number(vault.cooldownHalfLifeTau) || 2.5;
+    const windowSize = Number(vault.lookbackWindowEpisodes) || 5;
+    const slot = (vault.seasonSlots || []).find((s) => s.episodeNumber === episodeNumber);
+    if (slot) {
+      if (slot.strategyId) result.strategyId = slot.strategyId;
+      if (slot.preferredLutId) result.lutId = slot.preferredLutId;
+    }
+
+    const stylePressure = {};
+    const glassPressure = {};
+    const typoPressure = {};
+    for (const ep of vault.episodes || []) {
+      const delta = episodeNumber - ep.episodeNumber;
+      if (delta <= 0 || delta > windowSize) continue;
+      const decay = Math.exp(-delta / tau);
+      const counts = ep.styleCounts || {};
+      for (const k of Object.keys(counts)) {
+        stylePressure[k] = (stylePressure[k] || 0) + decay * 0.45 * counts[k];
+      }
+      for (const g of ep.glassPresets || []) {
+        glassPressure[g] = (glassPressure[g] || 0) + decay * 0.9;
+      }
+      for (const t of ep.typographyModes || []) {
+        typoPressure[t] = (typoPressure[t] || 0) + decay * 0.85;
+      }
+    }
+
+    for (const rec of STYLE_CATALOG) {
+      result.styleWeights[rec.id] = 1 / (1 + (stylePressure[rec.id] || 0));
+    }
+    for (const g of GLASS_18_PRESETS) {
+      result.glassWeights[g] = 1 / (1 + (glassPressure[g] || 0));
+    }
+    for (const t of TYPOGRAPHY_32_MODES) {
+      result.typographyWeights[t] = 1 / (1 + (typoPressure[t] || 0));
+    }
+  } catch {
+    // Fallback cleanly to neutral weights
+  }
+  return result;
+}
+
 const JOKE_PATTERNS = [
   /\blandlord\b/i,
   /\bforwarding that\b/i,
@@ -418,14 +1467,14 @@ const HISTORY_PATTERNS = [
 
 const MAP_PATTERNS = [
   /\btexas\b|\btaxas\b|\baustin\b/i,
-  /\balaska\b/i,
-  /\bireland\b/i,
+  /\balaska\b|\bjuneau\b/i,
+  /\bireland\b|\bdublin\b/i,
   /\bwest london\b|\bm4 corridor\b|\blondon\b/i,
   /\bpjm\b|\bthirteen states\b|\billinois\b|\bnew jersey\b/i,
   /\bohio\b|\bwest virginia\b/i,
-  /\bshenzhen\b|\bsuzhou\b|\bjapan\b/i,
+  /\bshenzhen\b|\bsuzhou\b|\bjapan\b|\btokyo\b|\btaiwan\b|\bhsinchu\b|\bred sea\b|\bfrance\b|\bgreece\b|\brotterdam\b/i,
   /\bthree mile island\b/i,
-  /\bmap\b|\beastern grid\b|\bcorridor\b/i,
+  /\bmap\b|\beastern grid\b|\bcorridor\b|\bstrait\b/i,
 ];
 
 const PRIMARY_SOURCE_PATTERNS = [
@@ -436,7 +1485,7 @@ const PRIMARY_SOURCE_PATTERNS = [
   /\bforbes\b/i,
   /\biea\b|\binternational energy agency\b/i,
   /\bnextera\b/i,
-  /\balphabet\b|\bamazon\b|\bmeta\b|\bmicrosoft\b|\boracle\b/i,
+  /\balphabet\b|\bamazon\b|\bmeta\b|\bmicrosoft\b|\boracle\b|\baws\b|\bopenai\b/i,
   /\bnvidia\b|\bjensen huang\b/i,
   /\blabor data\b|\bproduce per hour\b/i,
   /\bsupreme court\b/i,
@@ -505,9 +1554,9 @@ const TAKEAWAY_PATTERNS = [
 const matchesAny = (text, patterns) => patterns.some((re) => re.test(text));
 
 export function extractSourceCitation(text) {
-  if (/table\s*9|monthly\s+treasury\s+statement|84(?:\.1)?\s*percent/i.test(text))
+  if (/table\s*9|monthly\s+treasury\s+statement|84(?:\.1)?\s*percent|eighty-four\s*percent/i.test(text))
     return "U.S. Treasury — Monthly Treasury Statement, Table 9";
-  if (/congressional\s+budget\s+office|\bcbo\b/i.test(text))
+  if (/congressional\s+budget\s+office|\bcbo\b|2\.1\s*trillion|bond\s+interest|1\.83\s*trillion/i.test(text))
     return "Congressional Budget Office (CBO) Budget & Interest Projections";
   if (/40\.5\s*trillion|national\s+debt/i.test(text))
     return "U.S. Treasury — Fiscal Data (Debt to the Penny)";
@@ -519,6 +1568,8 @@ export function extractSourceCitation(text) {
     return "X Public Statement (Oct 29, 2026)";
   if (/1947|harry\s+truman|labor\s+data|produce\s+per\s+hour/i.test(text))
     return "U.S. Bureau of Labor Statistics (BLS) — Productivity & Labor Share";
+  if (/\baws\b|\bopenai\b|startup\s+\$[0-9]+|cloud\s+credits/i.test(text))
+    return "AWS Activate & OpenAI Startup Compute Credit Terms";
   if (/alphabet|amazon|meta|microsoft|oracle|free\s+cash\s+flow/i.test(text))
     return "SEC 10-K / Quarterly Filings (Alphabet, Amazon, Meta, Microsoft)";
   if (/all-in\s+podcast|universal\s+basic\s+compute/i.test(text))
@@ -553,9 +1604,142 @@ export function extractSourceCitation(text) {
     return "Federal Reserve / CoreLogic Housing Equity Data (2009)";
   if (/stimulus\s+payments/i.test(text))
     return "U.S. Treasury — 2020 CARES Act Disbursement Data";
-  if (/\btreasury\b/i.test(text))
-    return "U.S. Department of the Treasury";
+  if (/\btreasury\b|\bsupreme\s+court\b/i.test(text))
+    return "U.S. Department of the Treasury / Federal Record";
+  if (matchesAny(text, NUMERIC_RECEIPT_PATTERNS))
+    return "Primary Federal & Institutional Economic Record";
   return undefined;
+}
+
+/**
+ * Dynamic geoQuery resolver — NEVER hardcodes Texas unless Texas/Austin is present.
+ */
+export function extractGeoQuery(text) {
+  const clean = String(text || "").trim();
+  if (!clean || !matchesAny(clean, MAP_PATTERNS)) return {};
+  if (/\bpjm\b|thirteen states|illinois.{0,20}new jersey|three mile island/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "PJM_GRID", region: "us", highlightLabel: "PJM 13-State Grid Corridor" };
+  }
+  if (/\bireland\b|\bdublin\b/i.test(clean)) {
+    return { geoQuery: clean, region: "world", highlightLabel: "Ireland · Metered Grid" };
+  }
+  if (/west london|m4 corridor|\blondon\b|\bbritain\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "WEST_LONDON_M4", region: "world", highlightLabel: "West London M4 Corridor" };
+  }
+  if (/\balaska\b|\bjuneau\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "ALASKA_JUNEAU", region: "us", highlightLabel: "Alaska Permanent Fund" };
+  }
+  if (/paint creek|island creek|west virginia|\bohio\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "LOGAN_COUNTY_WV", region: "us", highlightLabel: "West Virginia Coal Corridor" };
+  }
+  if (/\brotterdam\b|\bdetroit\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "ROTTERDAM_PORT", region: "world", highlightLabel: "Rotterdam & Detroit Ports" };
+  }
+  if (/\bshenzhen\b|\bsuzhou\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "SHENZHEN_DELTA", region: "world", highlightLabel: "Shenzhen & Suzhou e-CNY Pilot" };
+  }
+  if (/\btaiwan\b|\bhsinchu\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "TAIWAN_STRAIT_2NM", region: "world", highlightLabel: "Taiwan Strait · Hsinchu" };
+  }
+  if (/red sea/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "RED_SEA_CHOKEPOINT", region: "world", highlightLabel: "Red Sea Subsea Chokepoint" };
+  }
+  if (/\bjapan\b|\btokyo\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "TOKYO_JGB_FLOW", region: "world", highlightLabel: "Japan · National Grid" };
+  }
+  if (/\bfrance\b|\bgreece\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "EURO_SOVEREIGN_SPREAD", region: "world", highlightLabel: "France vs Greece Sovereign Spread" };
+  }
+  if (/\btexas\b|\btaxas\b|\baustin\b/i.test(clean)) {
+    return { geoQuery: clean, corridorId: "AUSTIN_TEXAS", region: "us", highlightLabel: "Austin, Texas" };
+  }
+  return { geoQuery: clean };
+}
+
+export function detectContinuityEntity(text) {
+  if (/claire|3,400|austin|mortgage|sheriff|refinance/i.test(text)) return "ENT_CLAIRE_AUSTIN";
+  if (/escape hatch|three escape hatches|four escape hatches/i.test(text)) return "ENT_ESCAPE_HATCH_BOARD";
+  if (/40\.5 trillion|2\.1 trillion|table 9|84(?:\.1)?\s*percent|national debt/i.test(text)) return "ENT_SOVEREIGN_DEBT_WALL";
+  if (/allowance|unwritten agreement|bill walker|veto|one signature/i.test(text)) return "ENT_PAYCHECK_TO_ALLOWANCE";
+  return undefined;
+}
+
+function extractStructuredBeatData(text, category, sourceCitation) {
+  const regex =
+    /([$€£])?\s*(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(%|percent\b|trillion\b|billion\b|million\b|thousand\b|gigawatts?\b|terawatt-hours?\b|megawatt-day\b))?/gi;
+  const metrics = [];
+  let m = regex.exec(text);
+  while (m !== null) {
+    const prefix = m[1] || "";
+    const numeric = Number((m[2] || "").replace(/,/g, ""));
+    const unitRaw = (m[3] || "").toLowerCase();
+    const isBareYear = !prefix && !unitRaw && Number.isInteger(numeric) && numeric >= 1900 && numeric <= 2099;
+    if (Number.isFinite(numeric) && !isBareYear && (prefix || unitRaw)) {
+      let suffix = "";
+      if (unitRaw === "%" || unitRaw === "percent") suffix = "%";
+      else if (unitRaw === "trillion") suffix = "T";
+      else if (unitRaw === "billion") suffix = "B";
+      else if (unitRaw === "million") suffix = "M";
+      else if (unitRaw === "thousand") suffix = "K";
+      else if (unitRaw.startsWith("gigawatt")) suffix = " GW";
+      else if (unitRaw.startsWith("terawatt")) suffix = " TWh";
+      else if (unitRaw.startsWith("megawatt")) suffix = "/MW-day";
+      metrics.push({ raw: `${prefix}${m[2]}${suffix}`, numeric, unit: suffix || prefix });
+    }
+    m = regex.exec(text);
+  }
+  const primary = metrics[0];
+  const secondary = metrics[1];
+  const tableRows =
+    metrics.length > 0
+      ? metrics.slice(0, 3).map((item, idx) => ({
+          label: idx === 0 ? "Primary Figure" : idx === 1 ? "Counterpart" : "Reference",
+          value: item.raw,
+          isHighlight: idx === 0,
+          isFlagged: category === "warning-escalation" && idx === 0,
+        }))
+      : undefined;
+  const seriesData =
+    primary && secondary
+      ? [
+          { xLabel: "Baseline", primary: primary.numeric, unit: primary.unit },
+          { xLabel: "Comparison", primary: secondary.numeric, unit: secondary.unit, isThreshold: category === "warning-escalation" },
+        ]
+      : undefined;
+  const exhibitData = sourceCitation
+    ? {
+        filingTitle: sourceCitation,
+        highlightedClause: text.slice(0, 140),
+        stampLabel: category === "warning-escalation" ? "RISK SIGNAL" : "VERIFIED",
+      }
+    : undefined;
+  return {
+    tableRows,
+    seriesData,
+    exhibitData,
+    data: {
+      ...(primary ? { primaryMetric: primary.raw } : {}),
+      ...(secondary ? { secondaryMetric: secondary.raw } : {}),
+      ...(tableRows ? { tableRows } : {}),
+      ...(seriesData ? { seriesData } : {}),
+      ...(exhibitData ? { exhibitData } : {}),
+    },
+  };
+}
+
+function synthesizeProsodyTimedWords(text, totalFrames) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const weights = words.map((w) => Math.max(1, Math.ceil(w.length / 3) + (/[,.;:!?]$/.test(w) ? 1 : 0)));
+  const sumW = weights.reduce((a, b) => a + b, 0) || 1;
+  let cursor = 0;
+  return words.map((word, idx) => {
+    const span = Math.max(1, Math.round((weights[idx] / sumW) * totalFrames));
+    const start = cursor;
+    const end = idx === words.length - 1 ? totalFrames : Math.min(totalFrames, cursor + span);
+    cursor = end;
+    return { word, start, end };
+  });
 }
 
 export function classifyBeat(text, index, totalSegments) {
@@ -589,10 +1773,7 @@ export function classifyBeat(text, index, totalSegments) {
   if (hasMap && !hasHistory) return "map-geopolitics";
   if (hasHistory && hasMap) return "history-archive";
 
-  if (
-    hasPrimarySource &&
-    !/\b(2036|default|crashes|833 percent)\b/i.test(trimmed)
-  ) {
+  if (hasPrimarySource && !/\b(2036|default|crashes|833 percent)\b/i.test(trimmed)) {
     return "receipt-proof";
   }
   if (hasWarning) return "warning-escalation";
@@ -603,10 +1784,6 @@ export function classifyBeat(text, index, totalSegments) {
   if (index === safeTotal - 1) return "takeaway";
   return "metaphor-story";
 }
-
-// ============================================================================
-// 3. Input Segmentation (Whisper words.json & Markdown/Plaintext @ 150 WPM)
-// ============================================================================
 
 const CONJUNCTION_STARTER_RE =
   /^(and|but|so|because|which|while|although|though|whereas|since|unless|until|when|where|before|after|if|or|yet|who|that)$/i;
@@ -751,10 +1928,6 @@ function normalizeAndBoundSegments(segments) {
   return bounded;
 }
 
-/**
- * Group Whisper word timestamps into natural 2-11s beats on punctuation & pauses,
- * shifting segment 0 cleanly within <= 4.0s and capping every beat <= ~12s.
- */
 export function segmentWhisperWords(data) {
   const rawWords = Array.isArray(data) ? data : data.words || [];
   if (rawWords.length === 0) {
@@ -771,7 +1944,7 @@ export function segmentWhisperWords(data) {
     .map((w) => ({
       word: String(w.word ?? w.text ?? "").trim(),
       startSec: Number(w.startSec ?? w.start ?? 0),
-      endSec: Number(w.endSec ?? w.end ?? (Number(w.startSec ?? w.start ?? 0) + 0.3)),
+      endSec: Number(w.endSec ?? w.end ?? Number(w.startSec ?? w.start ?? 0) + 0.3),
     }))
     .filter((w) => w.word.length > 0);
 
@@ -780,10 +1953,19 @@ export function segmentWhisperWords(data) {
 
   const flushChunk = () => {
     if (chunk.length === 0) return;
+    const startSec = chunk[0].startSec;
+    const endSec = chunk[chunk.length - 1].endSec;
     segments.push({
       text: chunk.map((w) => w.word).join(" ").replace(/\s+([.,!?;:])/g, "$1"),
-      startSec: chunk[0].startSec,
-      endSec: chunk[chunk.length - 1].endSec,
+      startSec,
+      endSec,
+      timedWords: chunk.map((cw) => ({
+        word: cw.word,
+        start: Math.max(0, Math.round((cw.startSec - startSec) * 30)),
+        end: Math.max(1, Math.round((cw.endSec - startSec) * 30)),
+        startSec: cw.startSec,
+        endSec: cw.endSec,
+      })),
     });
     chunk = [];
   };
@@ -795,7 +1977,7 @@ export function segmentWhisperWords(data) {
     const dur = curr.endSec - chunk[0].startSec;
     const next = normalized[i + 1];
     const pauseGap = next ? next.startSec - curr.endSec : 1.0;
-    const isSentenceEnd = /[.!?]["”']?$/.test(curr.word);
+    const isSentenceEnd = /[.!?]["\u201d']?$/.test(curr.word);
     const isClauseEnd = /[,;:\u2014]$/.test(curr.word);
     const isFirstHookBeat = segments.length === 0;
     const inHook = curr.endSec <= 15;
@@ -812,17 +1994,11 @@ export function segmentWhisperWords(data) {
         !TRAILING_FUNCTION_RE.test(currTok) &&
         (CONJUNCTION_STARTER_RE.test(nextTok) || CLAUSE_PREP_VERB_RE.test(nextTok));
 
-      if (isSentenceEnd && dur >= 2.0) {
-        flushChunk();
-      } else if (pauseGap >= 0.42 && dur >= 1.4) {
-        flushChunk();
-      } else if (isClauseEnd && dur >= 2.1) {
-        flushChunk();
-      } else if (dur >= 2.8 && naturalClausePivot) {
-        flushChunk();
-      } else if (dur >= 3.8) {
-        flushChunk();
-      }
+      if (isSentenceEnd && dur >= 2.0) flushChunk();
+      else if (pauseGap >= 0.42 && dur >= 1.4) flushChunk();
+      else if (isClauseEnd && dur >= 2.1) flushChunk();
+      else if (dur >= 2.8 && naturalClausePivot) flushChunk();
+      else if (dur >= 3.8) flushChunk();
     } else if (isSentenceEnd && dur >= (inHook ? 2.2 : 2.6)) {
       flushChunk();
     } else if (pauseGap >= 0.42 && dur >= 3.0) {
@@ -841,10 +2017,6 @@ export function segmentWhisperWords(data) {
   return segments;
 }
 
-/**
- * Split plain text or markdown script into spoken beats using 150 WPM (2.5 wps).
- * Enforces 2.0-4.0s opening hook visual shift and <= 11-13s / <= 28-word hard beat cap.
- */
 export function segmentScriptText(rawText, wpm = 150) {
   const wordsPerSec = Math.max(80, wpm) / 60;
   const maxHookFirstWords = Math.min(9, Math.max(4, Math.floor((3.85 - 0.25) * wordsPerSec)));
@@ -881,62 +2053,17 @@ export function segmentScriptText(rawText, wpm = 150) {
       return;
     }
 
-    const splitRegex = isHookOrJoke
-      ? /(?<=[,;:\u2014])\s+|\s+(?=(?:before\s+2036|who's\s+going|and\s+see\s+how|so\s+if\s+ai))/i
-      : /(?<=[,;:\u2014])\s+/;
-    const parts = sentenceText.split(splitRegex).filter(Boolean);
-    const targetWords = isHookOrJoke ? Math.min(11, maxBodyWords) : Math.min(18, targetBodyWords);
-    const chunks = [];
-    let acc = [];
-    let accWords = 0;
-
-    for (let p = 0; p < parts.length; p++) {
-      const partWords = parts[p].split(/\s+/).filter(Boolean).length;
-      if (accWords > 0 && accWords + partWords > targetWords) {
-        chunks.push({ text: acc.join(" "), wordCount: accWords });
-        acc = [parts[p]];
-        accWords = partWords;
-      } else {
-        acc.push(parts[p]);
-        accWords += partWords;
-      }
-    }
-    if (acc.length > 0) {
-      if (
-        chunks.length > 0 &&
-        accWords < 7 &&
-        chunks[chunks.length - 1].wordCount + accWords <= maxBodyWords
-      ) {
-        chunks[chunks.length - 1].text = `${chunks[chunks.length - 1].text} ${acc.join(" ")}`;
-        chunks[chunks.length - 1].wordCount += accWords;
-      } else {
-        chunks.push({ text: acc.join(" "), wordCount: accWords });
-      }
-    }
-
-    // Split any unpunctuated/overlong chunk cleanly on conjunctions/clauses <= maxBodyWords
-    const boundedChunks = [];
-    const applyShortHookCap = isHookOrJoke && words.length <= 36;
-    for (let c = 0; c < chunks.length; c++) {
-      const chWords = chunks[c].text.split(/\s+/).filter(Boolean);
-      const localMax = applyShortHookCap ? Math.min(maxBodyWords, 13) : maxBodyWords;
-      const localTarget = applyShortHookCap ? Math.min(10, targetBodyWords) : targetBodyWords;
-      const localMinTail = applyShortHookCap ? 5 : 6;
-      if (chWords.length > localMax) {
-        const subSlices = splitWordsAtNaturalBoundaries(chWords, localMax, localTarget, localMinTail);
-        for (const sub of subSlices) {
-          boundedChunks.push({ text: sub.join(" "), wordCount: sub.length });
-        }
-      } else {
-        boundedChunks.push(chunks[c]);
-      }
-    }
-
-    for (let c = 0; c < boundedChunks.length; c++) {
+    const subSlices = splitWordsAtNaturalBoundaries(
+      words,
+      isHookOrJoke ? Math.min(maxBodyWords, 13) : maxBodyWords,
+      isHookOrJoke ? Math.min(10, targetBodyWords) : targetBodyWords,
+      isHookOrJoke ? 5 : 6
+    );
+    for (let c = 0; c < subSlices.length; c++) {
       rawClauses.push({
-        text: boundedChunks[c].text,
-        wordCount: boundedChunks[c].wordCount,
-        paraEnd: isParaEnd && c === boundedChunks.length - 1,
+        text: subSlices[c].join(" "),
+        wordCount: subSlices[c].length,
+        paraEnd: isParaEnd && c === subSlices.length - 1,
         dramaticShort: false,
         paragraphIndex: pIdx,
       });
@@ -950,7 +2077,7 @@ export function segmentScriptText(rawText, wpm = 150) {
       .replace(/\b(v|Mr|Mrs|Ms|Dr|St|U\.S)\./g, "$1<DOT>");
 
     const sentences = protectedText
-      .split(/(?<=[.!?]["”']?)\s+/)
+      .split(/(?<=[.!?]["\u201d']?)\s+/)
       .map((s) => s.replace(/<DOT>/g, ".").trim())
       .filter(Boolean);
 
@@ -959,12 +2086,10 @@ export function segmentScriptText(rawText, wpm = 150) {
       const words = sentence.split(/\s+/).filter(Boolean);
       const isShortDramatic =
         words.length <= 5 &&
-        (/allowance|nothing stops|it's|that is/i.test(sentence) ||
-          sentences.length === 1);
+        (/allowance|nothing stops|it's|that is/i.test(sentence) || sentences.length === 1);
       const isHookOrJoke = pIdx === 0 || matchesAny(sentence, JOKE_PATTERNS);
       const isParaEnd = sIdx === sentences.length - 1;
 
-      // Guarantee opening beat 0 splits cleanly inside 2.0-4.0s (<= maxHookFirstWords)
       if (rawClauses.length === 0 && words.length > maxHookFirstWords) {
         const minHookK = Math.min(5, Math.floor(words.length / 2));
         const safeTail = Math.min(4, Math.floor(words.length / 2));
@@ -984,7 +2109,6 @@ export function segmentScriptText(rawText, wpm = 150) {
     }
   }
 
-  // Merge tiny non-dramatic fragments (< 6 words) with adjacent sentence in same paragraph
   const merged = [];
   for (let i = 0; i < rawClauses.length; i++) {
     const curr = rawClauses[i];
@@ -1026,9 +2150,6 @@ export function segmentScriptText(rawText, wpm = 150) {
   return segments;
 }
 
-// ============================================================================
-// 4. Planner & Auditor
-// ============================================================================
 const isTalkingHeadFraming = (framing) =>
   framing === "talking-head-full" ||
   framing === "talking-head-punch-in" ||
@@ -1045,8 +2166,83 @@ function selectGlassPreset(category, basePreset, text) {
   return basePreset;
 }
 
-function buildCutReason(category, recipe, framing, durationSec, isHeroPeak, isPrePeakQuiet, sourceCitation) {
+function selectGlassRig(beatIndex, category, baseRig, glassWeights) {
+  if (baseRig && baseRig !== "card" && baseRig !== "dock" && baseRig !== "toast") {
+    return baseRig;
+  }
+  if (category === "receipt-proof") {
+    const receiptRigs = [
+      "dossier-stack",
+      "evidence-rail",
+      "magnifier-card",
+      "stat-triptych",
+      "receipt-ticker",
+      "quote-citation",
+    ];
+    return receiptRigs[beatIndex % receiptRigs.length];
+  }
+  if (category === "warning-escalation") {
+    const warnRigs = ["verdict-seal", "toast", "telemetry-strip", "terminal-console"];
+    return warnRigs[beatIndex % warnRigs.length];
+  }
+  if (category === "claire-ledger") {
+    return beatIndex % 2 === 0 ? "compare-scale" : "receipt-ticker";
+  }
+  if (category === "map-geopolitics") {
+    return "map-callout";
+  }
+  let bestRig = GLASS_18_PRESETS[beatIndex % GLASS_18_PRESETS.length];
+  if (glassWeights) {
+    let bestW = -1;
+    for (let k = 0; k < GLASS_18_PRESETS.length; k++) {
+      const cand = GLASS_18_PRESETS[(beatIndex + k) % GLASS_18_PRESETS.length];
+      const w = glassWeights[cand] ?? 1.0;
+      if (w > bestW) {
+        bestW = w;
+        bestRig = cand;
+      }
+    }
+  }
+  return bestRig;
+}
+
+function selectTypographyMode(beatIndex, category, wordCount, baseMode, isDepthBeat, typoWeights) {
+  if (isDepthBeat) return "behind-presenter-monolith";
+  if (wordCount <= 5 && (category === "takeaway" || category === "warning-escalation")) {
+    return "burstiness-staccato-cuts";
+  }
+  if (baseMode && beatIndex % 3 !== 2) return baseMode;
+  let picked = TYPOGRAPHY_32_MODES[beatIndex % TYPOGRAPHY_32_MODES.length];
+  if (typoWeights) {
+    let bestW = -1;
+    for (let k = 0; k < 5; k++) {
+      const cand = TYPOGRAPHY_32_MODES[(beatIndex * 5 + k) % TYPOGRAPHY_32_MODES.length];
+      const w = typoWeights[cand] ?? 1.0;
+      if (w > bestW) {
+        bestW = w;
+        picked = cand;
+      }
+    }
+  }
+  return picked;
+}
+
+const VITERBI_CAMERA_ACTIONS = [
+  "dolly-creep",
+  "static",
+  "pan-ledger-right",
+  "rack-focus-fg",
+  "dolly-pullback",
+  "pan-ledger-left",
+  "rack-focus-bg",
+  "dutch-disequilibrium",
+];
+
+function buildCutReason(category, recipe, framing, durationSec, isHeroPeak, isPrePeakQuiet, sourceCitation, setPieceTitle) {
   const durLabel = `${durationSec.toFixed(1)}s`;
+  if (setPieceTitle) {
+    return `Signature Set-Piece [${setPieceTitle}] via ${recipe.id} (${durLabel})`;
+  }
   if (isHeroPeak) {
     return `Hero peak (60-75% zone): #a3402e brick-red focal ${recipe.componentHint} + warning-thud on systemic chokepoint (${durLabel})`;
   }
@@ -1061,36 +2257,43 @@ function buildCutReason(category, recipe, framing, durationSec, isHeroPeak, isPr
   }
   switch (category) {
     case "hook":
-      return `0-15s claim-vs-receipt collision in ${recipe.componentHint} (${durLabel})`;
+      return `0-15s claim-vs-receipt collision in ${recipe.id} (${durLabel})`;
     case "good-work-punchline":
-      return `Dry-wit punchline: snappy ${durLabel} ${framing} + ${recipe.componentHint}`;
+      return `Dry-wit punchline: snappy ${durLabel} ${framing} + ${recipe.id}`;
     case "receipt-proof":
       return `Calm documentary hold (${durLabel}) for primary receipt${sourceCitation ? ` [${sourceCitation}]` : ""}`;
     case "history-archive":
-      return `Period-anchored archival cutaway (${durLabel}) via ${recipe.componentHint}`;
+      return `Period-anchored archival cutaway (${durLabel}) via ${recipe.id}`;
     case "map-geopolitics":
-      return `Spatial grid/region zoom (${durLabel}) via ${recipe.componentHint}`;
+      return `Spatial grid/region zoom (${durLabel}) via ${recipe.id}`;
     case "claire-ledger":
-      return `Human-scale household ledger check (${durLabel}) via ${recipe.componentHint}`;
+      return `Human-scale household ledger check (${durLabel}) via ${recipe.id}`;
     case "warning-escalation":
-      return `Escalating structural tension (${durLabel}) via ${recipe.componentHint}`;
+      return `Escalating structural tension (${durLabel}) via ${recipe.id}`;
     case "open-loop":
-      return `Retention open-loop plant (${durLabel}) on ${recipe.componentHint}`;
+      return `Retention open-loop plant (${durLabel}) on ${recipe.id}`;
     case "thesis-promise":
-      return `Structural roadmap framing (${durLabel}) via ${recipe.componentHint}`;
+      return `Structural roadmap framing (${durLabel}) via ${recipe.id}`;
     case "takeaway":
-      return `Grounded Money & Macro room takeaway (${durLabel}) via ${recipe.componentHint}`;
+      return `Grounded Money & Macro room takeaway (${durLabel}) via ${recipe.id}`;
     default:
-      return `Tangible metaphor illustration (${durLabel}) via ${recipe.componentHint}`;
+      return `Tangible metaphor illustration (${durLabel}) via ${recipe.id}`;
   }
 }
 
 export function buildDraftDirectorPlan(rawSegments, options = {}) {
   const fps = options.fps && options.fps > 0 ? Math.round(options.fps) : 30;
   const title = options.title || "The Reading Room — Audience Director Plan";
-  const targetTalkingHeadShare = options.targetTalkingHeadShare ?? 0.35;
+  const episodeNumber = options.episodeNumber || 1;
+  const vaultNovelty = loadEpisodeVaultNovelty(options.vaultPath || DEFAULT_VAULT_PATH, episodeNumber);
+  const strategyId = options.strategyId || vaultNovelty.strategyId || "STR-GEN-EXPLAINER";
+  const strategyCfg = STRATEGY_TARGET_SHARES[strategyId] || STRATEGY_TARGET_SHARES["STR-GEN-EXPLAINER"];
+  const targetTalkingHeadShare = options.targetTalkingHeadShare ?? strategyCfg.targetShare ?? 0.35;
   const heroStartPct = options.heroStartPct ?? 0.6;
   const heroEndPct = options.heroEndPct ?? 0.75;
+  const enableDepthSandwich = options.enableDepthSandwich !== false;
+  const lutId = options.lutId || vaultNovelty.lutId || "editorial-warm";
+  const musicStemId = options.musicStemId || vaultNovelty.musicStemId || "02-ledger-investigation";
 
   const segments = normalizeAndBoundSegments(rawSegments || []);
 
@@ -1100,6 +2303,10 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       fps,
       totalFrames: 0,
       beats: [],
+      episodeNumber,
+      strategyId,
+      lutId,
+      musicStemId,
       audit: {
         avgShotDurationSec: 0,
         styleDiversityScore: 0,
@@ -1132,7 +2339,9 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       seg.paragraphIndex === activeParaIndex &&
       categories[i] === "receipt-proof"
         ? activeParaCitation
-        : undefined);
+        : categories[i] === "receipt-proof"
+          ? "Primary Federal & Institutional Economic Record"
+          : undefined);
     citations.push(inheritedCitation);
   }
 
@@ -1162,6 +2371,9 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
   const lastUsedBeatByComponent = {};
   const lastUsedBeatByFamily = {};
   const usageCountByComponent = {};
+  const usageCountByRecipe = {};
+  const usageCountByWorld = {};
+  const usedSetPieces = new Set();
 
   let talkingHeadSecAccum = 0;
   let fullThBeatsCount = 0;
@@ -1171,6 +2383,8 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
   let consecutiveTalkingHeadSec = 0;
   let consecutiveCutawaySec = 0;
   let lastWarningThudSec = -999;
+  let prevCamA = "";
+  let prevCamB = "";
 
   const targetFullThRatio = 0.16;
   const targetOverlayThRatio = 0.185;
@@ -1183,10 +2397,26 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
     const segEndRel = Math.max(segStartRel + 0.5, seg.endSec - firstStartSec);
     const startFrame = Math.round(segStartRel * fps);
     const endFrame = Math.max(startFrame + 15, Math.round(segEndRel * fps));
-    const durationSec = Number(((endFrame - startFrame) / fps).toFixed(2));
+    const beatFrames = Math.max(15, endFrame - startFrame);
+    const durationSec = Number((beatFrames / fps).toFixed(2));
     const midSec = (segStartRel + segEndRel) * 0.5;
+    const timelineFrac = Math.max(0, Math.min(1, midSec / totalSec));
     const isHeroPeak = i === heroPeakIdx;
     const isPrePeakQuiet = i === prePeakQuietIdx;
+    const wordList = seg.text.trim().split(/\s+/).filter(Boolean);
+
+    const hasPerishability =
+      /shenzhen|digital yuan|spoils on the clock|empty seat|plane pushes back/i.test(seg.text);
+    const activePool = STYLE_CATALOG.filter((rec) => {
+      if (strategyCfg.forbidClocked && rec.id === "doc-live-countdown-split" && !hasPerishability) {
+        return false;
+      }
+      return true;
+    });
+
+    const matchedSetPiece = SIGNATURE_SET_PIECES.find(
+      (sp) => !usedSetPieces.has(sp.id) && sp.pattern.test(seg.text)
+    );
 
     const prevFamily = beats.length > 0 ? beats[beats.length - 1].styleFamily : null;
     const prevFraming = beats.length > 0 ? beats[beats.length - 1].framing : null;
@@ -1199,6 +2429,7 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
     const isCalmConnective =
       i >= 2 &&
       !isHeroPeak &&
+      !matchedSetPiece &&
       !sourceCitation &&
       !hasNumericReceipt &&
       durationSec <= 9.5 &&
@@ -1219,19 +2450,19 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
     const candidateRecipes = [];
     const seenIds = new Set();
     for (const id of priorityIds) {
-      if (RECIPE_BY_ID[id] && !seenIds.has(id)) {
+      if (RECIPE_BY_ID[id] && !seenIds.has(id) && activePool.includes(RECIPE_BY_ID[id])) {
         candidateRecipes.push(RECIPE_BY_ID[id]);
         seenIds.add(id);
       }
     }
-    for (const rec of STYLE_CATALOG) {
+    for (const rec of activePool) {
       if (!seenIds.has(rec.id)) {
         candidateRecipes.push(rec);
         seenIds.add(rec.id);
       }
     }
 
-    let chosen = candidateRecipes[0];
+    let chosen = candidateRecipes[0] || STYLE_CATALOG[0];
     if (isHeroPeak) {
       const investigation = RECIPE_BY_ID["doc-visual-investigation"];
       chosen =
@@ -1239,47 +2470,63 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
           ? investigation
           : RECIPE_BY_ID["data-blob-simulation"] || chosen;
     } else {
-      let bestScore = -1e9;
-      for (const rec of candidateRecipes) {
-        if (prevFamily && rec.styleFamily === prevFamily) continue;
-        if (rec.peakOnly && !isHeroPeak) continue;
-        if (isPrePeakQuiet && rec.styleFamily === "doc-broadcast") continue;
+      for (let pass = 0; pass < 2; pass++) {
+        let bestScore = -1e9;
+        let foundInPass = false;
+        for (const rec of candidateRecipes) {
+          if (prevFamily && rec.styleFamily === prevFamily) continue;
+          if (rec.peakOnly && !isHeroPeak) continue;
+          if (isPrePeakQuiet && rec.styleFamily === "doc-broadcast") continue;
 
-        let score = 0;
-        const pIdx = priorityIds.indexOf(rec.id);
-        score += pIdx !== -1 ? 50 - pIdx * 7 : 5;
-
-        const usedCount = usageCountByComponent[rec.componentHint] || 0;
-        score += usedCount === 0 ? 22 : -usedCount * 6;
-
-        const lastCompIdx = lastUsedBeatByComponent[rec.componentHint];
-        if (lastCompIdx !== undefined && i - lastCompIdx < 6) {
-          score -= (6 - (i - lastCompIdx)) * 32 + 12;
-        }
-        const lastFamIdx = lastUsedBeatByFamily[rec.styleFamily];
-        if (lastFamIdx !== undefined) {
-          score += Math.min(10, (i - lastFamIdx) * 2);
-        }
-
-        const recIsTH = isTalkingHeadFraming(rec.framing);
-        if (wantFullThBreath) {
-          if (usedCount >= 1) score += 14;
-        } else {
-          if (needTalkingHead && recIsTH && currentOverlayThBeatRatio < targetOverlayThRatio) {
-            score += 32;
+          const lastCompIdx = lastUsedBeatByComponent[rec.componentHint];
+          if (pass === 0 && lastCompIdx !== undefined && i - lastCompIdx < 6) {
+            continue;
           }
-          if (needTalkingHead && !recIsTH) score -= 14;
-          if (needCutaway && !recIsTH) score += 32;
-          if (needCutaway && recIsTH) score -= 24;
-          if (rec.styleFamily === "liquid-glass" && needTalkingHead && currentOverlayThBeatRatio < targetOverlayThRatio) {
-            score += 8;
+
+          let score = 0;
+          const pIdx = priorityIds.indexOf(rec.id);
+          score += pIdx !== -1 ? 50 - pIdx * 6 : 6;
+          if (matchedSetPiece && rec.componentHint === matchedSetPiece.componentHint) score += 36;
+
+          const compUsed = usageCountByComponent[rec.componentHint] || 0;
+          score += compUsed === 0 ? 28 : -compUsed * 5;
+          const recUsed = usageCountByRecipe[rec.id] || 0;
+          score += recUsed === 0 ? 16 : -recUsed * 8;
+          const worldKey = rec.styleWorld || rec.styleFamily;
+          const worldUsed = usageCountByWorld[worldKey] || 0;
+          score += worldUsed === 0 ? 18 : -worldUsed * 2;
+
+          const vaultW = vaultNovelty.styleWeights[rec.id];
+          if (vaultW !== undefined) score += (vaultW - 0.5) * 20;
+
+          if (lastCompIdx !== undefined && i - lastCompIdx < 6) {
+            score -= (6 - (i - lastCompIdx)) * 45 + 20;
+          }
+          const lastFamIdx = lastUsedBeatByFamily[rec.styleFamily];
+          if (lastFamIdx !== undefined) {
+            score += Math.min(10, (i - lastFamIdx) * 2);
+          }
+
+          const recIsTH = isTalkingHeadFraming(rec.framing);
+          if (wantFullThBreath) {
+            if (compUsed >= 1) score += 14;
+          } else {
+            if (needTalkingHead && recIsTH && currentOverlayThBeatRatio < targetOverlayThRatio) score += 32;
+            if (needTalkingHead && !recIsTH) score -= 14;
+            if (needCutaway && !recIsTH) score += 32;
+            if (needCutaway && recIsTH) score -= 24;
+            if (rec.styleFamily === "liquid-glass" && needTalkingHead && currentOverlayThBeatRatio < targetOverlayThRatio) {
+              score += 8;
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            chosen = rec;
+            foundInPass = true;
           }
         }
-
-        if (score > bestScore) {
-          bestScore = score;
-          chosen = rec;
-        }
+        if (foundInPass) break;
       }
     }
 
@@ -1296,9 +2543,7 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
         chosen.componentHint === "TelestratorOverlay")
     ) {
       framing =
-        category === "good-work-punchline"
-          ? "talking-head-punch-in"
-          : "talking-head-with-glass";
+        category === "good-work-punchline" ? "talking-head-punch-in" : "talking-head-with-glass";
     } else if (i === segments.length - 1 && category === "takeaway") {
       if (isCalmConnective && prevFraming !== "talking-head-full" && currentFullThBeatRatio < 0.18) {
         framing = "talking-head-full";
@@ -1311,6 +2556,10 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
     const glassPreset = isFullTalkingHead
       ? undefined
       : selectGlassPreset(category, chosen.glassPreset, seg.text);
+    const glassRig =
+      !isFullTalkingHead && isTalkingHeadFraming(framing)
+        ? selectGlassRig(i, category, chosen.glassRig, vaultNovelty.glassWeights)
+        : undefined;
     const paletteMode =
       framing === "fullscreen-cutaway" ||
       chosen.componentHint === "StainedGlassFrame" ||
@@ -1318,23 +2567,75 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
         ? "page"
         : "over-footage";
 
-    let musicEnergy = "calm";
-    if (isPrePeakQuiet) {
-      musicEnergy = "drop-silence";
-    } else if (isHeroPeak) {
-      musicEnergy = "tense";
-    } else if (category === "hook" || category === "good-work-punchline") {
-      musicEnergy = "pulse";
-    } else if (category === "warning-escalation") {
-      musicEnergy = midSec / totalSec >= 0.55 ? "tense" : "pulse";
-    } else if (category === "takeaway") {
-      musicEnergy = "drop-silence";
+    const structured = extractStructuredBeatData(seg.text, category, sourceCitation);
+    const isDepthBeat =
+      enableDepthSandwich &&
+      !isFullTalkingHead &&
+      paletteMode === "over-footage" &&
+      Boolean(structured.data.primaryMetric) &&
+      (Boolean(chosen.depthSandwichEligible) || i % 7 === 3);
+
+    const depthSandwich = isDepthBeat
+      ? {
+          enabled: true,
+          preset: category === "warning-escalation" ? "spotlight-dim-sandwich" : "behind-shoulder-billboard",
+          heroFigure: structured.data.primaryMetric,
+          foregroundGlass: Boolean(glassPreset || glassRig),
+        }
+      : undefined;
+
+    const typographyMode = selectTypographyMode(
+      i,
+      category,
+      wordList.length,
+      matchedSetPiece ? matchedSetPiece.typographyMode : chosen.typographyMode,
+      isDepthBeat,
+      vaultNovelty.typographyWeights
+    );
+
+    const geoInfo = extractGeoQuery(seg.text);
+    const continuityEntityId = detectContinuityEntity(seg.text);
+    if (continuityEntityId) {
+      structured.data.continuityStage =
+        timelineFrac < 0.25 ? "plant" : timelineFrac < 0.75 ? "mutate" : "payoff";
     }
+
+    const activeSetPiece =
+      !isFullTalkingHead && paletteMode === "page" && matchedSetPiece ? matchedSetPiece : undefined;
+    if (activeSetPiece) usedSetPieces.add(activeSetPiece.id);
+    const setPieceId = activeSetPiece ? activeSetPiece.id : chosen.setPieceId;
+    const propIds = activeSetPiece ? activeSetPiece.propIds : undefined;
+
+    let cameraAction =
+      wordList.length <= 5 ? "verdict-slam" : VITERBI_CAMERA_ACTIONS[i % VITERBI_CAMERA_ACTIONS.length];
+    if (cameraAction === prevCamA && cameraAction === prevCamB) {
+      cameraAction = VITERBI_CAMERA_ACTIONS[(i + 1) % VITERBI_CAMERA_ACTIONS.length];
+    }
+    prevCamB = prevCamA;
+    prevCamA = cameraAction;
+
+    const register =
+      paletteMode === "over-footage"
+        ? "over_footage"
+        : activeSetPiece
+          ? activeSetPiece.register
+          : chosen.register || "page_editorial";
+
+    let musicEnergy = "calm";
+    if (isPrePeakQuiet) musicEnergy = "drop-silence";
+    else if (isHeroPeak) musicEnergy = "tense";
+    else if (category === "hook" || category === "good-work-punchline") musicEnergy = "pulse";
+    else if (category === "warning-escalation") musicEnergy = timelineFrac >= 0.55 ? "tense" : "pulse";
+    else if (category === "takeaway") musicEnergy = "drop-silence";
 
     const sfxCues = [];
     if (!isFullTalkingHead) {
       const primaryCue =
-        isHeroPeak && chosen.secondarySfx === "warning-thud" ? "flash-cut" : chosen.defaultSfx;
+        isHeroPeak && chosen.secondarySfx === "warning-thud"
+          ? "flash-cut"
+          : activeSetPiece
+            ? activeSetPiece.sfxPrimary
+            : chosen.defaultSfx;
       sfxCues.push({
         cue: primaryCue,
         offsetFrame: 0,
@@ -1344,21 +2645,25 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       if (isHeroPeak && midSec - lastWarningThudSec >= 20) {
         sfxCues.push({
           cue: "warning-thud",
-          offsetFrame: Math.min(8, Math.max(2, Math.floor((endFrame - startFrame) / 4))),
+          offsetFrame: Math.min(8, Math.max(2, Math.floor(beatFrames / 4))),
           volume: 0.88,
         });
         lastWarningThudSec = midSec;
-      } else if (chosen.secondarySfx && chosen.secondarySfx !== "warning-thud") {
-        const totalBeatFrames = endFrame - startFrame;
-        if (totalBeatFrames >= 45) {
+      } else {
+        const secCue = activeSetPiece ? activeSetPiece.sfxSecondary : chosen.secondarySfx;
+        if (secCue && secCue !== "warning-thud" && beatFrames >= 45) {
           sfxCues.push({
-            cue: chosen.secondarySfx,
-            offsetFrame: Math.floor(totalBeatFrames * 0.45),
+            cue: secCue,
+            offsetFrame: Math.floor(beatFrames * 0.45),
             volume: 0.52,
           });
         }
       }
     }
+
+    const timedWords = Array.isArray(seg.timedWords)
+      ? seg.timedWords
+      : synthesizeProsodyTimedWords(seg.text.trim(), beatFrames);
 
     const beatId = `beat-${String(i + 1).padStart(3, "0")}`;
     beats.push({
@@ -1371,13 +2676,46 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       framing,
       paletteMode,
       styleFamily: chosen.styleFamily,
+      recipeId: chosen.id,
+      styleWorld: activeSetPiece ? activeSetPiece.styleWorld : chosen.styleWorld,
+      register,
       componentHint: chosen.componentHint,
       motionAction: chosen.motionAction,
       ...(glassPreset ? { glassPreset } : {}),
-      ...(chosen.typographyMode ? { typographyMode: chosen.typographyMode } : {}),
+      ...(glassRig ? { glassRig } : {}),
+      ...(typographyMode ? { typographyMode } : {}),
+      ...(depthSandwich ? { depthSandwich, layering: "behind-presenter" } : {}),
+      ...(setPieceId ? { setPieceId } : {}),
+      ...(propIds ? { propIds } : {}),
+      ...(geoInfo.geoQuery
+        ? {
+            geoQuery: geoInfo.geoQuery,
+            ...(geoInfo.corridorId ? { geoCorridor: geoInfo.corridorId } : {}),
+            ...(geoInfo.region ? { mapRegion: geoInfo.region } : {}),
+            ...(geoInfo.highlightLabel ? { highlightLabel: geoInfo.highlightLabel } : {}),
+          }
+        : {}),
+      ...(structured.tableRows ? { tableRows: structured.tableRows } : {}),
+      ...(structured.seriesData ? { seriesData: structured.seriesData } : {}),
+      ...(structured.exhibitData ? { exhibitData: structured.exhibitData } : {}),
+      data: structured.data,
+      timedWords,
+      ...(continuityEntityId ? { continuityEntityId } : {}),
+      lutId,
+      musicStemId,
+      cameraAction,
       sfxCues,
       musicEnergy,
-      cutReason: buildCutReason(category, chosen, framing, durationSec, isHeroPeak, isPrePeakQuiet, sourceCitation),
+      cutReason: buildCutReason(
+        category,
+        chosen,
+        framing,
+        durationSec,
+        isHeroPeak,
+        isPrePeakQuiet,
+        sourceCitation,
+        activeSetPiece ? activeSetPiece.title : undefined
+      ),
       ...(sourceCitation ? { sourceCitation } : {}),
     });
 
@@ -1385,6 +2723,9 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
     lastUsedBeatByFamily[chosen.styleFamily] = i;
     if (!isFullTalkingHead) {
       usageCountByComponent[chosen.componentHint] = (usageCountByComponent[chosen.componentHint] || 0) + 1;
+      usageCountByRecipe[chosen.id] = (usageCountByRecipe[chosen.id] || 0) + 1;
+      const wKey = chosen.styleWorld || chosen.styleFamily;
+      usageCountByWorld[wKey] = (usageCountByWorld[wKey] || 0) + 1;
     }
 
     totalSecAccum += durationSec;
@@ -1410,6 +2751,10 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
     fps,
     totalFrames,
     beats,
+    episodeNumber,
+    strategyId,
+    lutId,
+    musicStemId,
     audit: {
       avgShotDurationSec: 0,
       styleDiversityScore: 0,
@@ -1418,6 +2763,16 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       talkingHeadSharePercent: 0,
     },
   });
+}
+
+export function planDocumentaryEdit(input, options = {}) {
+  if (typeof input === "string") {
+    return buildDraftDirectorPlan(segmentScriptText(input, options.wpm ?? 150), options);
+  }
+  if (Array.isArray(input)) {
+    return buildDraftDirectorPlan(input, options);
+  }
+  return buildDraftDirectorPlan(segmentWhisperWords(input), options);
 }
 
 export function validateDirectorPlan(plan) {
@@ -1444,11 +2799,16 @@ export function validateDirectorPlan(plan) {
   const warnings = [];
   const uniqueFamilies = new Set();
   const uniqueComponents = new Set();
+  const uniqueWorlds = new Set();
+  const uniqueRecipes = new Set();
+  const uniqueTypo = new Set();
 
   let totalDurationSec = 0;
   let talkingHeadFrames = 0;
   let consecutiveFamilyRepeats = 0;
   let staticRunFrames = 0;
+  let setPieceCount = 0;
+  let depthSandwichCount = 0;
   let bestPeakScore = -1;
   let bestPeakMidFrame = Math.round(totalFrames * 0.675);
 
@@ -1460,6 +2820,11 @@ export function validateDirectorPlan(plan) {
 
     uniqueFamilies.add(b.styleFamily);
     uniqueComponents.add(b.componentHint);
+    if (b.styleWorld) uniqueWorlds.add(b.styleWorld);
+    if (b.recipeId) uniqueRecipes.add(b.recipeId);
+    if (b.typographyMode) uniqueTypo.add(b.typographyMode);
+    if (b.setPieceId) setPieceCount += 1;
+    if (b.depthSandwich) depthSandwichCount += 1;
     if (isTalkingHeadFraming(b.framing)) talkingHeadFrames += beatFrames;
 
     if (durSec > 18) {
@@ -1493,7 +2858,7 @@ export function validateDirectorPlan(plan) {
     }
 
     let peakScore = 0;
-    if (b.sfxCues.some((s) => s.cue === "warning-thud")) peakScore += 4;
+    if ((b.sfxCues || []).some((s) => s.cue === "warning-thud")) peakScore += 4;
     if (b.componentHint === "VisualInvestigationBoard") peakScore += 3;
     if (b.category === "warning-escalation") peakScore += 2;
     if (b.musicEnergy === "tense") peakScore += 2;
@@ -1517,8 +2882,8 @@ export function validateDirectorPlan(plan) {
   }
 
   const avgShotDurationSec = Number((totalDurationSec / beats.length).toFixed(2));
-  const familyRatio = uniqueFamilies.size / 5;
-  const targetCompMax = Math.min(STYLE_CATALOG.length, beats.length);
+  const familyRatio = Math.min(1, uniqueFamilies.size / 5);
+  const targetCompMax = Math.min(24, beats.length);
   const compRatio = targetCompMax > 0 ? Math.min(1, uniqueComponents.size / targetCompMax) : 0;
   const transitionScore =
     beats.length > 1 ? Math.max(0, 1 - consecutiveFamilyRepeats / (beats.length - 1)) : 1;
@@ -1539,23 +2904,19 @@ export function validateDirectorPlan(plan) {
       repetitionWarnings: warnings,
       heroPeakPercent,
       talkingHeadSharePercent,
+      uniqueStyleWorlds: uniqueWorlds.size,
+      uniqueRecipesUsed: uniqueRecipes.size,
+      uniqueTypographyModes: uniqueTypo.size,
+      setPieceCount,
+      depthSandwichCount,
+      strategyId: plan.strategyId,
     },
   };
 }
 
-// ============================================================================
-// 5. CLI Runner
-// ============================================================================
 function printUsage() {
   console.log(`Usage:
-  node scripts/plan-edit.mjs <words.json_or_script.md> [--out out/director-plan.json] [--title "..."] [--fps 30] [--wpm 150]
-
-Options:
-  --out <path>     Output JSON file path (default: out/director-plan.json)
-  --title <text>   Composition / video title
-  --fps <number>   Frames per second (default: 30)
-  --wpm <number>   Estimated speech WPM for plain .md/.txt scripts (default: 150)
-  -h, --help       Show help`);
+  node scripts/plan-edit.mjs <words.json_or_script.md> [--out out/director-plan.json] [--title "..."] [--fps 30] [--wpm 150] [--episode 1] [--strategy STR-GEN-EXPLAINER]`);
 }
 
 function parseArgs(argv) {
@@ -1565,6 +2926,10 @@ function parseArgs(argv) {
     title: null,
     fps: 30,
     wpm: 150,
+    episode: 1,
+    strategy: null,
+    vault: DEFAULT_VAULT_PATH,
+    enableDepthSandwich: true,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -1580,6 +2945,14 @@ function parseArgs(argv) {
       opts.fps = Number(argv[++i]);
     } else if (arg === "--wpm") {
       opts.wpm = Number(argv[++i]);
+    } else if (arg === "--episode") {
+      opts.episode = Math.max(1, Number(argv[++i]) || 1);
+    } else if (arg === "--strategy") {
+      opts.strategy = argv[++i];
+    } else if (arg === "--vault") {
+      opts.vault = path.resolve(argv[++i]);
+    } else if (arg === "--no-depth-sandwich") {
+      opts.enableDepthSandwich = false;
     } else if (!arg.startsWith("-") && !opts.input) {
       opts.input = arg;
     } else {
@@ -1600,44 +2973,45 @@ function main() {
     throw new Error(`Input file not found: ${inputPath}`);
   }
 
-  const ext = path.extname(inputPath).toLowerCase();
-  const raw = fs.readFileSync(inputPath, "utf8");
-  const segments =
-    ext === ".json" ? segmentWhisperWords(JSON.parse(raw)) : segmentScriptText(raw, opts.wpm);
+  const rawContent = fs.readFileSync(inputPath, "utf8");
+  const isJson = /\.json$/i.test(inputPath) || rawContent.trim().startsWith("{") || rawContent.trim().startsWith("[");
+  const segments = isJson
+    ? segmentWhisperWords(JSON.parse(rawContent))
+    : segmentScriptText(rawContent, opts.wpm);
 
-  const defaultTitle = `The Reading Room — ${path.basename(inputPath, ext)}`;
+  const baseName = path.basename(inputPath, path.extname(inputPath));
+  const title = opts.title || `The Reading Room — ${baseName}`;
   const plan = buildDraftDirectorPlan(segments, {
-    title: opts.title || defaultTitle,
+    title,
     fps: opts.fps,
+    episodeNumber: opts.episode,
+    strategyId: opts.strategy || undefined,
+    vaultPath: opts.vault,
+    enableDepthSandwich: opts.enableDepthSandwich,
   });
 
   const outPath = path.resolve(opts.out);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(plan, null, 2) + "\n", "utf8");
 
-  const uniqueComponents = new Set(plan.beats.map((b) => b.componentHint)).size;
-  const totalSec = (plan.totalFrames / plan.fps).toFixed(1);
-
+  const usedComponents = new Set(plan.beats.map((b) => b.componentHint)).size;
   console.log(`Director Plan generated: ${outPath}`);
   console.log(`  Title:              ${plan.title}`);
-  console.log(`  Beats:              ${plan.beats.length} (${totalSec}s @ ${plan.fps}fps)`);
+  console.log(`  Beats:              ${plan.beats.length} (${(plan.totalFrames / plan.fps).toFixed(1)}s @ ${plan.fps}fps)`);
   console.log(`  Avg Shot Duration:  ${plan.audit.avgShotDurationSec}s`);
-  console.log(`  Style Diversity:    ${plan.audit.styleDiversityScore}/100 (${uniqueComponents}/${STYLE_CATALOG.length} styles used)`);
+  console.log(`  Style Diversity:    ${plan.audit.styleDiversityScore}/100 (${usedComponents}/24 hints, ${plan.audit.uniqueRecipesUsed || 0} recipes, ${plan.audit.uniqueStyleWorlds || 0}/10 worlds)`);
   console.log(`  Talking Head Share: ${plan.audit.talkingHeadSharePercent}%`);
   console.log(`  Hero Peak Position: ${plan.audit.heroPeakPercent}%`);
   console.log(`  Warnings:           ${plan.audit.repetitionWarnings.length}`);
-  if (plan.audit.repetitionWarnings.length > 0) {
-    for (const w of plan.audit.repetitionWarnings) {
-      console.log(`    - ${w}`);
-    }
+  for (const w of plan.audit.repetitionWarnings.slice(0, 8)) {
+    console.log(`    - ${w}`);
   }
 }
 
-const isEntrypoint =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+const isCliEntry =
+  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 
-if (isEntrypoint) {
+if (isCliEntry) {
   try {
     main();
   } catch (err) {
