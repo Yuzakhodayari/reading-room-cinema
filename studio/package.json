@@ -50,9 +50,15 @@
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
     "sfx:build": "node scripts/generate-sfx.mjs",
+    "music:build": "node scripts/generate-music.mjs",
+    "luts:build": "node scripts/generate-luts.mjs",
     "plan": "node scripts/plan-edit.mjs",
+    "director": "node ../tools/ai_director.mjs",
+    "master-audio": "node scripts/master-audio.mjs",
     "render:beats": "node scripts/render-overlays.mjs",
+    "render-master": "node ../tools/run_pipeline.mjs --standalone-mp4",
     "fcpxml": "node scripts/export-fcpxml.mjs",
+    "cinema-exam": "node scripts/cinema-exam.mjs",
     "pipeline": "node ../tools/run_pipeline.mjs"
   },
   "allowScripts": {
