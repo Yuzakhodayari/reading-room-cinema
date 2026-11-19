@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { fitAndBalanceText } from "../design/fitText";
 import { FONTS, TABULAR_NUM_STYLE, getOpticalTracking } from "../design/fonts";
 import {
   COLORS,
@@ -17,6 +18,7 @@ import {
   MapVisualRegister,
   resolveGeoQuery,
 } from "../maps";
+import type { ScreenObstacleRect } from "../maps/CinemaMapStage";
 
 export type DataMapsDisplayMode = "card" | "page" | "over-footage";
 
@@ -26,6 +28,14 @@ export interface DataMaps3DRecipe {
   componentName: string;
   defaultFraming: "fullscreen-cutaway" | "over-footage";
   description: string;
+}
+
+const PAGE_INK_SECONDARY = "#3D4C5C"; // >= 8.2:1 AAA on #FAF8F3 and #F2F0EA
+const PAGE_ACCENT_BRICK_AAA = "#8A2C1D"; // >= 8.0:1 AAA on #FAF8F3
+const PAGE_ACCENT_TEAL_AAA = "#19615E"; // >= 7.1:1 AAA on #FAF8F3
+
+function clampVal(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
 }
 
 // ============================================================================
@@ -166,14 +176,29 @@ export const MapExplainer: React.FC<MapExplainerProps> = ({
     return null;
   }, [metricValue, metricLabel, resolvedScene]);
 
+  const fittedMetricValue = useMemo(() => {
+    if (!derivedMetric) return null;
+    return fitAndBalanceText({
+      text: derivedMetric.value,
+      fontFamily: "mono",
+      fontWeight: 700,
+      maxWidth: 372,
+      maxHeight: 54,
+      maxLines: 1,
+      minFontSize: 15,
+      maxFontSize: 28,
+      lineHeight: 1.15,
+    });
+  }, [derivedMetric]);
+
   const accentColor =
     routeTone === "alert"
       ? isDarkRegister
         ? OVER_FOOTAGE_PALETTE.brickRedText
-        : PAGE_PALETTE.brickRed
+        : PAGE_ACCENT_BRICK_AAA
       : isDarkRegister
       ? OVER_FOOTAGE_PALETTE.chartSecondary
-      : PAGE_PALETTE.chartSecondary;
+      : PAGE_ACCENT_TEAL_AAA;
 
   return (
     <div
@@ -209,22 +234,25 @@ export const MapExplainer: React.FC<MapExplainerProps> = ({
             background: isOverFootage
               ? OVER_FOOTAGE_PALETTE.glassPrimary
               : isDarkRegister
-              ? "rgba(20, 27, 36, 0.92)"
-              : "rgba(250, 248, 243, 0.96)",
+              ? "rgba(20, 27, 36, 0.95)"
+              : "rgba(250, 248, 243, 0.98)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
             border: `1px solid ${
               isDarkRegister
                 ? OVER_FOOTAGE_PALETTE.glassBorder
-                : PAGE_PALETTE.paperBorder
+                : "#D7D2C6"
             }`,
             borderTop: `4px solid ${accentColor}`,
             borderRadius: "12px",
             padding: "16px 24px",
             minWidth: "220px",
+            maxWidth: "420px",
+            overflow: "hidden",
+            boxSizing: "border-box",
             boxShadow: isDarkRegister
               ? "0 20px 44px rgba(15, 25, 35, 0.48)"
-              : "0 16px 36px rgba(28, 43, 58, 0.12)",
+              : "0 16px 36px rgba(28, 43, 58, 0.13)",
             opacity: interpolate(badgeProgress, [0, 1], [0, 1], {
               extrapolateLeft: "clamp",
               extrapolateRight: "clamp",
@@ -249,6 +277,9 @@ export const MapExplainer: React.FC<MapExplainerProps> = ({
               letterSpacing: getOpticalTracking(11, "mono"),
               textTransform: "uppercase",
               color: accentColor,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {derivedMetric.label}
@@ -257,13 +288,17 @@ export const MapExplainer: React.FC<MapExplainerProps> = ({
             style={{
               ...TABULAR_NUM_STYLE,
               fontFamily: FONTS.mono,
-              fontSize: "28px",
+              fontSize: `${fittedMetricValue ? fittedMetricValue.fontSize : 28}px`,
               fontWeight: 700,
               color: isDarkRegister
                 ? OVER_FOOTAGE_PALETTE.textHeadline
                 : PAGE_PALETTE.navy,
               marginTop: "6px",
               lineHeight: 1.15,
+              maxWidth: "420px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {derivedMetric.value}
@@ -302,6 +337,7 @@ interface IsoShade {
   front: string;
   top: string;
   right: string;
+  edge: string;
   text: string;
 }
 
@@ -314,7 +350,8 @@ function getIsoShade(
       front: PAGE_PALETTE.brickRed,
       top: "#C76250",
       right: "#74291C",
-      text: isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_PALETTE.brickRed,
+      edge: isOverFootage ? "rgba(255, 246, 229, 0.36)" : "#5C1E14",
+      text: isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_ACCENT_BRICK_AAA,
     };
   }
   if (tone === "teal") {
@@ -322,9 +359,8 @@ function getIsoShade(
       front: PAGE_PALETTE.chartSecondary,
       top: "#4FB3AE",
       right: "#1E6360",
-      text: isOverFootage
-        ? OVER_FOOTAGE_PALETTE.chartSecondary
-        : PAGE_PALETTE.chartSecondary,
+      edge: isOverFootage ? "rgba(191, 214, 234, 0.36)" : "#154644",
+      text: isOverFootage ? OVER_FOOTAGE_PALETTE.chartSecondary : PAGE_ACCENT_TEAL_AAA,
     };
   }
   if (tone === "slate") {
@@ -332,7 +368,8 @@ function getIsoShade(
       front: PAGE_PALETTE.gold,
       top: "#5A89B6",
       right: "#284866",
-      text: isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : PAGE_PALETTE.gold,
+      edge: isOverFootage ? "rgba(191, 214, 234, 0.36)" : "#1C354D",
+      text: isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : "#1D4A75",
     };
   }
   if (tone === "paper") {
@@ -340,13 +377,15 @@ function getIsoShade(
       front: PAGE_PALETTE.paper,
       top: PAGE_PALETTE.paperLight,
       right: PAGE_PALETTE.paperBorder,
-      text: isOverFootage ? OVER_FOOTAGE_PALETTE.textBody : PAGE_PALETTE.muted,
+      edge: PAGE_PALETTE.navy,
+      text: isOverFootage ? OVER_FOOTAGE_PALETTE.textBody : PAGE_PALETTE.navy,
     };
   }
   return {
     front: isOverFootage ? "#2D4761" : PAGE_PALETTE.navy,
     top: isOverFootage ? "#46688A" : "#2E4357",
     right: PAGE_PALETTE.navyDeep,
+    edge: isOverFootage ? "rgba(191, 214, 234, 0.38)" : PAGE_PALETTE.navyDeep,
     text: isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : PAGE_PALETTE.navy,
   };
 }
@@ -370,6 +409,7 @@ export const DataPhysicalCard: React.FC<DataPhysicalCardProps> = ({
 
   const elapsed = Math.max(0, frame - atFrame);
   const isOverFootage = mode === "over-footage";
+  const isPage = mode === "page";
 
   const columns: PhysicalColumnSpec[] = useMemo(() => {
     if (blocks && blocks.length > 0) return blocks;
@@ -387,135 +427,307 @@ export const DataPhysicalCard: React.FC<DataPhysicalCardProps> = ({
     return m;
   }, [columns]);
 
-  const barW = mode === "page" ? 138 : 108;
-  const isoDx = mode === "page" ? 22 : 16;
-  const isoDy = mode === "page" ? 18 : 14;
-  const maxBarH = mode === "page" ? 360 : 210;
+  const ratioCallout = useMemo(() => {
+    if (columns.length !== 2) return null;
+    const hi = Math.max(columns[0].value, columns[1].value);
+    const lo = Math.min(columns[0].value, columns[1].value);
+    if (lo <= 0) return null;
+    return `${(hi / lo).toFixed(1)}x SCALE RATIO`;
+  }, [columns]);
 
-  const renderColumns = () => (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center",
-        gap: mode === "page" ? "76px" : "54px",
-        height: mode === "page" ? "490px" : "336px",
-        paddingTop: "24px",
-      }}
-    >
-      {columns.map((col, idx) => {
-        const grow = studioSpring(elapsed, fps, "editorialSnap", idx * 5);
-        const clampedGrow = interpolate(grow, [0, 1], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        });
-        const shade = getIsoShade(col.tone ?? (idx === 0 ? "navy" : "brick"), isOverFootage);
-        const targetH = Math.max(14, (col.value / maxVal) * maxBarH);
-        const heightPx = Math.max(12, targetH * clampedGrow);
-        const svgW = barW + isoDx;
-        const svgH = heightPx + isoDy;
+  const colCount = columns.length;
+  const barW = isPage ? (colCount > 2 ? 112 : 142) : colCount > 2 ? 84 : 108;
+  const isoDx = isPage ? 22 : 16;
+  const isoDy = isPage ? 16 : 12;
+  const maxBarH = isPage ? 340 : 196;
+  const gapPx = isPage ? (colCount > 2 ? 52 : 84) : colCount > 2 ? 32 : 54;
+  const stageHeightPx = maxBarH + isoDy + (isPage ? 72 : 58);
 
-        return (
+  const ruleStroke = isOverFootage
+    ? "rgba(191, 214, 234, 0.14)"
+    : "rgba(28, 43, 58, 0.10)";
+  const datumStroke = isOverFootage
+    ? "rgba(191, 214, 234, 0.42)"
+    : PAGE_PALETTE.navy;
+  const tickInk = isOverFootage
+    ? OVER_FOOTAGE_PALETTE.textMuted
+    : PAGE_INK_SECONDARY;
+
+  const renderColumns = () => {
+    const ticks = [1, 0.5, 0];
+    return (
+      <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
+        {/* Calibrated Isometric Stage with Horizontal Gridlines & Shared Datum Plinth */}
+        <div
+          style={{
+            position: "relative",
+            height: `${stageHeightPx}px`,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            paddingLeft: isPage ? "58px" : "44px",
+            paddingRight: isPage ? "24px" : "14px",
+            boxSizing: "border-box",
+          }}
+        >
+          {/* Calibrated Reference Gridlines & Left Numeric Ticks */}
+          {ticks.map((frac) => {
+            const bottomPx = Math.round(frac * maxBarH);
+            const tickVal = Math.round(frac * maxVal);
+            return (
+              <div
+                key={`grid-tick-${frac}`}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: `${bottomPx}px`,
+                  display: "flex",
+                  alignItems: "center",
+                  pointerEvents: "none",
+                }}
+              >
+                <span
+                  style={{
+                    ...TABULAR_NUM_STYLE,
+                    fontFamily: FONTS.mono,
+                    fontSize: isPage ? "12px" : "10px",
+                    fontWeight: 600,
+                    color: tickInk,
+                    width: isPage ? "48px" : "36px",
+                    textAlign: "right",
+                    paddingRight: "8px",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  {tickVal}
+                  {unitSuffix}
+                </span>
+                <div
+                  style={{
+                    flex: 1,
+                    height: frac === 0 ? "2px" : "1px",
+                    borderTop:
+                      frac === 0
+                        ? `2px solid ${datumStroke}`
+                        : `1px dashed ${ruleStroke}`,
+                  }}
+                />
+              </div>
+            );
+          })}
+
+          {/* 3D Extruded Columns Resting Flush on the Datum Baseline */}
           <div
-            key={`phys-col-${idx}-${col.label}`}
             style={{
+              position: "relative",
               display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              gap: `${gapPx}px`,
+              zIndex: 2,
             }}
           >
-            <span
+            {columns.map((col, idx) => {
+              const grow = studioSpring(elapsed, fps, "editorialSnap", idx * 5);
+              const clampedGrow = interpolate(grow, [0, 1], [0, 1], {
+                extrapolateLeft: "clamp",
+                extrapolateRight: "clamp",
+              });
+              const shade = getIsoShade(
+                col.tone ?? (idx === 0 ? "navy" : "brick"),
+                isOverFootage
+              );
+              const targetH = Math.max(14, (col.value / maxVal) * maxBarH);
+              const heightPx = Math.max(12, targetH * clampedGrow);
+              const svgW = barW + isoDx + 8;
+              const svgH = heightPx + isoDy;
+
+              return (
+                <div
+                  key={`phys-col-${idx}-${col.label}`}
+                  style={{
+                    width: `${Math.max(barW + isoDx, isPage ? 190 : 148)}px`,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <span
+                    style={{
+                      ...TABULAR_NUM_STYLE,
+                      fontFamily: FONTS.mono,
+                      fontSize: isPage ? "42px" : "32px",
+                      fontWeight: 700,
+                      lineHeight: 1.05,
+                      color: shade.text,
+                      marginBottom: "8px",
+                    }}
+                  >
+                    {Math.round(col.value * clampedGrow)}
+                    {unitSuffix}
+                  </span>
+                  <svg
+                    width={svgW}
+                    height={svgH}
+                    viewBox={`0 0 ${svgW} ${svgH}`}
+                    style={{ display: "block", overflow: "visible" }}
+                  >
+                    <polygon
+                      points={`4,${svgH} ${barW + 4},${svgH} ${barW + isoDx + 8},${svgH - 7} ${isoDx + 6},${svgH - 7}`}
+                      fill={isOverFootage ? "rgba(7, 13, 20, 0.34)" : "rgba(28, 43, 58, 0.14)"}
+                    />
+                    <polygon
+                      points={`0,${isoDy} ${isoDx},0 ${barW + isoDx},0 ${barW},${isoDy}`}
+                      fill={shade.top}
+                      stroke={shade.edge}
+                      strokeWidth="1"
+                      strokeLinejoin="round"
+                    />
+                    <polygon
+                      points={`${barW},${isoDy} ${barW + isoDx},0 ${barW + isoDx},${heightPx} ${barW},${svgH}`}
+                      fill={shade.right}
+                      stroke={shade.edge}
+                      strokeWidth="1"
+                      strokeLinejoin="round"
+                    />
+                    <rect
+                      x={0}
+                      y={isoDy}
+                      width={barW}
+                      height={heightPx}
+                      fill={shade.front}
+                      stroke={shade.edge}
+                      strokeWidth="1"
+                    />
+                    <line
+                      x1={0.5}
+                      y1={isoDy + 0.5}
+                      x2={barW - 0.5}
+                      y2={isoDy + 0.5}
+                      stroke="rgba(255, 246, 229, 0.28)"
+                      strokeWidth="1"
+                    />
+                  </svg>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Aligned Label Footer Row (Independent of Bar Baseline) */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            gap: `${gapPx}px`,
+            paddingLeft: isPage ? "58px" : "44px",
+            paddingRight: isPage ? "24px" : "14px",
+            paddingTop: isPage ? "16px" : "12px",
+            boxSizing: "border-box",
+          }}
+        >
+          {columns.map((col, idx) => (
+            <div
+              key={`phys-lbl-${idx}-${col.label}`}
               style={{
-                ...TABULAR_NUM_STYLE,
-                fontFamily: FONTS.mono,
-                fontSize: mode === "page" ? "44px" : "34px",
-                fontWeight: 700,
-                color: shade.text,
-                marginBottom: "10px",
-              }}
-            >
-              {Math.round(col.value * clampedGrow)}
-              {unitSuffix}
-            </span>
-            <svg
-              width={svgW}
-              height={svgH}
-              viewBox={`0 0 ${svgW} ${svgH}`}
-              style={{ display: "block", overflow: "visible" }}
-            >
-              <polygon
-                points={`4,${svgH} ${barW + 4},${svgH} ${barW + isoDx + 10},${svgH - 8} ${isoDx + 10},${svgH - 8}`}
-                fill="rgba(15, 25, 35, 0.14)"
-              />
-              <polygon
-                points={`0,${isoDy} ${isoDx},0 ${barW + isoDx},0 ${barW},${isoDy}`}
-                fill={shade.top}
-              />
-              <polygon
-                points={`${barW},${isoDy} ${barW + isoDx},0 ${barW + isoDx},${heightPx} ${barW},${svgH}`}
-                fill={shade.right}
-              />
-              <rect x={0} y={isoDy} width={barW} height={heightPx} fill={shade.front} />
-            </svg>
-            <span
-              style={{
+                width: `${Math.max(barW + isoDx, isPage ? 190 : 148)}px`,
+                textAlign: "center",
                 fontFamily: FONTS.sans,
-                fontSize: mode === "page" ? "16px" : "13px",
+                fontSize: isPage ? "16px" : "13px",
                 lineHeight: 1.32,
                 color: isOverFootage
                   ? OVER_FOOTAGE_PALETTE.textBody
                   : idx === 0
                   ? PAGE_PALETTE.navy
-                  : PAGE_PALETTE.muted,
+                  : PAGE_INK_SECONDARY,
                 fontWeight: 700,
-                marginTop: "18px",
-                maxWidth: mode === "page" ? "210px" : "165px",
-                textAlign: "center",
+                wordBreak: "break-word",
               }}
             >
               {col.label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
-  if (mode !== "page") {
+  if (!isPage) {
     return (
       <div
         style={{
-          display: "inline-block",
-          padding: "30px 38px",
+          display: "inline-flex",
+          flexDirection: "column",
+          minWidth: columns.length > 2 ? "560px" : "430px",
+          padding: "24px 30px 22px",
           background: isOverFootage
             ? OVER_FOOTAGE_PALETTE.glassPrimary
             : PAGE_PALETTE.paperLight,
           backdropFilter: isOverFootage ? "blur(14px)" : undefined,
           WebkitBackdropFilter: isOverFootage ? "blur(14px)" : undefined,
           border: `1px solid ${
-            isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : PAGE_PALETTE.paperBorder
+            isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : "#D7D2C6"
+          }`,
+          borderTop: `4px solid ${
+            isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_ACCENT_BRICK_AAA
           }`,
           borderRadius: "16px",
           boxShadow: isOverFootage
             ? "0 22px 48px rgba(15, 25, 35, 0.46)"
-            : "0 20px 44px rgba(28, 43, 58, 0.12)",
+            : "0 20px 44px rgba(28, 43, 58, 0.13)",
+          boxSizing: "border-box",
           userSelect: "none",
         }}
       >
         <div
           style={{
-            fontFamily: FONTS.mono,
-            fontSize: "11.5px",
-            color: isOverFootage
-              ? OVER_FOOTAGE_PALETTE.brickRedText
-              : PAGE_PALETTE.brickRed,
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            marginBottom: "28px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "16px",
+            marginBottom: "18px",
           }}
         >
-          {eyebrow}
+          <span
+            style={{
+              fontFamily: FONTS.mono,
+              fontSize: "11.5px",
+              color: isOverFootage
+                ? OVER_FOOTAGE_PALETTE.brickRedText
+                : PAGE_ACCENT_BRICK_AAA,
+              fontWeight: 700,
+              letterSpacing: getOpticalTracking(11.5, "mono"),
+              textTransform: "uppercase",
+            }}
+          >
+            {eyebrow}
+          </span>
+          {ratioCallout && (
+            <span
+              style={{
+                ...TABULAR_NUM_STYLE,
+                fontFamily: FONTS.mono,
+                fontSize: "10.5px",
+                fontWeight: 700,
+                color: isOverFootage
+                  ? OVER_FOOTAGE_PALETTE.textHeadline
+                  : PAGE_PALETTE.navy,
+                backgroundColor: isOverFootage
+                  ? OVER_FOOTAGE_PALETTE.glassDarkWell
+                  : PAGE_PALETTE.paper,
+                border: `1px solid ${
+                  isOverFootage ? OVER_FOOTAGE_PALETTE.glassInnerHairline : PAGE_PALETTE.paperBorder
+                }`,
+                borderRadius: "5px",
+                padding: "3px 8px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {ratioCallout}
+            </span>
+          )}
         </div>
         {renderColumns()}
       </div>
@@ -530,7 +742,7 @@ export const DataPhysicalCard: React.FC<DataPhysicalCardProps> = ({
         height: "1080px",
         backgroundColor: PAGE_PALETTE.paperLight,
         display: "grid",
-        gridTemplateColumns: "0.95fr 1.05fr",
+        gridTemplateColumns: "0.92fr 1.08fr",
         alignItems: "center",
         padding: "84px 104px",
         boxSizing: "border-box",
@@ -547,7 +759,7 @@ export const DataPhysicalCard: React.FC<DataPhysicalCardProps> = ({
             fontWeight: 700,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            color: PAGE_PALETTE.brickRed,
+            color: PAGE_ACCENT_BRICK_AAA,
           }}
         >
           {eyebrow}
@@ -570,19 +782,37 @@ export const DataPhysicalCard: React.FC<DataPhysicalCardProps> = ({
             fontFamily: FONTS.sans,
             fontSize: "23px",
             lineHeight: 1.48,
-            color: PAGE_PALETTE.muted,
+            color: PAGE_INK_SECONDARY,
           }}
         >
           {subtitle}
         </p>
+        {ratioCallout && (
+          <div
+            style={{
+              ...TABULAR_NUM_STYLE,
+              alignSelf: "flex-start",
+              fontFamily: FONTS.mono,
+              fontSize: "15px",
+              fontWeight: 700,
+              color: PAGE_PALETTE.navy,
+              backgroundColor: PAGE_PALETTE.paper,
+              border: `1.5px solid ${PAGE_PALETTE.navy}`,
+              borderRadius: "8px",
+              padding: "8px 14px",
+            }}
+          >
+            {ratioCallout}
+          </div>
+        )}
         <div
           style={{
-            marginTop: "20px",
+            marginTop: "14px",
             paddingTop: "16px",
             borderTop: `1.5px solid ${PAGE_PALETTE.paperBorder}`,
             fontFamily: FONTS.mono,
             fontSize: "13px",
-            color: PAGE_PALETTE.muted,
+            color: PAGE_INK_SECONDARY,
             ...TABULAR_NUM_STYLE,
           }}
         >
@@ -595,8 +825,9 @@ export const DataPhysicalCard: React.FC<DataPhysicalCardProps> = ({
           backgroundColor: PAGE_PALETTE.paper,
           border: `2px solid ${PAGE_PALETTE.navy}`,
           borderRadius: "18px",
-          padding: "44px 52px",
+          padding: "44px 48px",
           boxShadow: "0 24px 48px rgba(28, 43, 58, 0.12)",
+          boxSizing: "border-box",
         }}
       >
         {renderColumns()}
@@ -704,7 +935,7 @@ function getArchitecturalFaces(
       left: PAGE_PALETTE.brickRed,
       right: "#752A1D",
       stroke: isOverFootage ? "#FFF6E5" : PAGE_PALETTE.navyDeep,
-      tagInk: isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_PALETTE.brickRed,
+      tagInk: isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_ACCENT_BRICK_AAA,
     };
   }
   if (tone === "teal") {
@@ -715,7 +946,7 @@ function getArchitecturalFaces(
       stroke: isOverFootage ? "#BFD6EA" : PAGE_PALETTE.navy,
       tagInk: isOverFootage
         ? OVER_FOOTAGE_PALETTE.chartSecondary
-        : PAGE_PALETTE.chartSecondary,
+        : PAGE_ACCENT_TEAL_AAA,
     };
   }
   if (tone === "slate") {
@@ -724,7 +955,7 @@ function getArchitecturalFaces(
       left: PAGE_PALETTE.gold,
       right: "#274766",
       stroke: isOverFootage ? "#BFD6EA" : PAGE_PALETTE.navy,
-      tagInk: isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : PAGE_PALETTE.gold,
+      tagInk: isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : "#1D4A75",
     };
   }
   if (tone === "paper") {
@@ -771,8 +1002,9 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
 
   const elapsed = Math.max(0, frame - atFrame);
   const isOverFootage = mode === "over-footage";
-  const stageW = mode === "page" ? 960 : width;
-  const stageH = mode === "page" ? 720 : height;
+  const isPage = mode === "page";
+  const stageW = isPage ? 960 : width;
+  const stageH = isPage ? 720 : height;
 
   const modelBlocks = blocks && blocks.length > 0 ? blocks : DEFAULT_WHITE_MODEL_BLOCKS;
 
@@ -782,18 +1014,92 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
   const cosY = Math.cos(yawRad);
   const sinY = Math.sin(yawRad);
 
-  const unitScale = Math.min(stageW / 18.5, stageH / 13.5);
-  const originX = stageW * 0.5;
-  const originY = stageH * 0.63;
-  const zScale = unitScale * 0.92;
+  const plinthHalf = 5.2;
+  const plinthDepth = 0.42;
+  const innerHalf = 4.3;
+  const innerHeight = 0.18;
 
-  const projectIso = (wx: number, wy: number, wz: number): [number, number] => {
-    const rx = wx * cosY - wy * sinY;
-    const ry = wx * sinY + wy * cosY;
-    const sx = originX + (rx - ry) * unitScale * 0.866;
-    const sy = originY + (rx + ry) * unitScale * 0.5 - wz * zScale;
-    return [sx, sy];
-  };
+  // Calibrated auto-fit projection so plinth & tallest spire tags NEVER clip at any aspect
+  const { unitScale, zScale, originX, originY, maxElevUnits } = useMemo(() => {
+    let maxH = 4;
+    for (let i = 0; i < modelBlocks.length; i++) {
+      if (modelBlocks[i].heightUnits > maxH) maxH = modelBlocks[i].heightUnits;
+    }
+
+    const maxYaw = (Math.abs(orbitAmplitudeDeg) * Math.PI) / 180;
+    const angles = [0, maxYaw, -maxYaw];
+    let minNx = Infinity;
+    let maxNx = -Infinity;
+    let minNy = Infinity;
+    let maxNy = -Infinity;
+
+    const samplePt = (wx: number, wy: number, wz: number, a: number) => {
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      const rx = wx * ca - wy * sa;
+      const ry = wx * sa + wy * ca;
+      const nx = (rx - ry) * 0.866;
+      const ny = (rx + ry) * 0.5 - wz * 0.92;
+      if (nx < minNx) minNx = nx;
+      if (nx > maxNx) maxNx = nx;
+      if (ny < minNy) minNy = ny;
+      if (ny > maxNy) maxNy = ny;
+    };
+
+    for (let ai = 0; ai < angles.length; ai++) {
+      const a = angles[ai];
+      const corners: Array<[number, number, number]> = [
+        [-plinthHalf, -plinthHalf, -plinthDepth - 0.15],
+        [plinthHalf, -plinthHalf, -plinthDepth - 0.15],
+        [plinthHalf, plinthHalf, -plinthDepth - 0.15],
+        [-plinthHalf, plinthHalf, -plinthDepth - 0.15],
+        [-plinthHalf, -plinthHalf, 0],
+        [plinthHalf, -plinthHalf, 0],
+        [plinthHalf, plinthHalf, 0],
+        [-plinthHalf, plinthHalf, 0],
+      ];
+      for (let ci = 0; ci < corners.length; ci++) {
+        samplePt(corners[ci][0], corners[ci][1], corners[ci][2], a);
+      }
+      for (let bi = 0; bi < modelBlocks.length; bi++) {
+        const b = modelBlocks[bi];
+        const zTop = innerHeight + b.heightUnits;
+        samplePt(b.gx, b.gy, zTop, a);
+        samplePt(b.gx + b.gw, b.gy, zTop, a);
+        samplePt(b.gx + b.gw, b.gy + b.gd, zTop, a);
+        samplePt(b.gx, b.gy + b.gd, zTop, a);
+      }
+    }
+
+    const topReserve = isPage ? 74 : 66;
+    const bottomReserve = isPage ? 42 : 34;
+    const sideReserve = isPage ? 56 : 36;
+    const availW = Math.max(120, stageW - sideReserve * 2);
+    const availH = Math.max(120, stageH - topReserve - bottomReserve);
+
+    const spanX = Math.max(1, maxNx - minNx);
+    const spanY = Math.max(1, maxNy - minNy);
+    const uScale = Math.min(availW / spanX, availH / spanY);
+
+    return {
+      unitScale: uScale,
+      zScale: uScale * 0.92,
+      originX: stageW * 0.5 - ((minNx + maxNx) * 0.5) * uScale,
+      originY: topReserve + (availH - spanY * uScale) * 0.5 - minNy * uScale,
+      maxElevUnits: Math.ceil(maxH),
+    };
+  }, [modelBlocks, orbitAmplitudeDeg, stageW, stageH, isPage]);
+
+  const projectIso = React.useCallback(
+    (wx: number, wy: number, wz: number): [number, number] => {
+      const rx = wx * cosY - wy * sinY;
+      const ry = wx * sinY + wy * cosY;
+      const sx = originX + (rx - ry) * unitScale * 0.866;
+      const sy = originY + (rx + ry) * unitScale * 0.5 - wz * zScale;
+      return [sx, sy];
+    },
+    [cosY, sinY, originX, originY, unitScale, zScale]
+  );
 
   // Sort blocks back-to-front in rotated camera space using (rx + ry)
   const sortedBlocks = useMemo(() => {
@@ -810,8 +1116,6 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
     return copy;
   }, [modelBlocks, cosY, sinY]);
 
-  const plinthHalf = 5.4;
-  const plinthDepth = 0.42;
   const pTop = [
     projectIso(-plinthHalf, -plinthHalf, 0),
     projectIso(plinthHalf, -plinthHalf, 0),
@@ -831,9 +1135,6 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
     projectIso(plinthHalf, -plinthHalf, -plinthDepth),
   ];
 
-  // Tier-2 inner podium slab
-  const innerHalf = 4.3;
-  const innerHeight = 0.18;
   const iTop = [
     projectIso(-innerHalf, -innerHalf, innerHeight),
     projectIso(innerHalf, -innerHalf, innerHeight),
@@ -841,15 +1142,140 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
     projectIso(-innerHalf, innerHalf, innerHeight),
   ];
 
-  const gridLines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  const gridLines: Array<{ x1: number; y1: number; x2: number; y2: number; major: boolean }> = [];
   for (let g = -5; g <= 5; g++) {
+    const major = g % 2 === 0;
     const a1 = projectIso(g, -plinthHalf, 0.01);
     const a2 = projectIso(g, plinthHalf, 0.01);
-    gridLines.push({ x1: a1[0], y1: a1[1], x2: a2[0], y2: a2[1] });
+    gridLines.push({ x1: a1[0], y1: a1[1], x2: a2[0], y2: a2[1], major });
     const b1 = projectIso(-plinthHalf, g, 0.01);
     const b2 = projectIso(plinthHalf, g, 0.01);
-    gridLines.push({ x1: b1[0], y1: b1[1], x2: b2[0], y2: b2[1] });
+    gridLines.push({ x1: b1[0], y1: b1[1], x2: b2[0], y2: b2[1], major });
   }
+
+  // Plinth coordinate numeric ticks along front-left edge
+  const plinthAxisTicks: Array<{ x: number; y: number; tx: number; ty: number; label: string }> = [];
+  for (let g = -4; g <= 4; g += 2) {
+    const pEdge = projectIso(g, plinthHalf, 0);
+    const pOut = projectIso(g, plinthHalf + 0.28, 0);
+    plinthAxisTicks.push({
+      x: pEdge[0],
+      y: pEdge[1],
+      tx: pOut[0],
+      ty: pOut[1],
+      label: g === 0 ? "0" : `${g > 0 ? "+" : ""}${g}`,
+    });
+  }
+
+  // Calibrated vertical elevation datum mast on back-left plinth corner
+  const mastBase = projectIso(-plinthHalf + 0.25, -plinthHalf + 0.25, innerHeight);
+  const mastTopZ = innerHeight + Math.max(6, maxElevUnits);
+  const mastTop = projectIso(-plinthHalf + 0.25, -plinthHalf + 0.25, mastTopZ);
+  const elevStep = maxElevUnits >= 6 ? 2 : 1;
+  const elevTicks: Array<{ x: number; y: number; label: string }> = [];
+  for (let z = 0; z <= maxElevUnits; z += elevStep) {
+    const pt = projectIso(-plinthHalf + 0.25, -plinthHalf + 0.25, innerHeight + z);
+    elevTicks.push({ x: pt[0], y: pt[1], label: `+${z.toFixed(0)}u` });
+  }
+
+  // Precompute non-overlapping roof callout tag positions in screen space
+  const solvedTags = useMemo(() => {
+    const raw = sortedBlocks.map((b, idx) => {
+      const extrude = interpolate(
+        studioSpring(elapsed, fps, "editorialSnap", idx * 4),
+        [0, 1],
+        [0, 1],
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+      );
+      const z1 = innerHeight + Math.max(0.15, b.heightUnits * extrude);
+      const rc = projectIso(b.gx + b.gw * 0.5, b.gy + b.gd * 0.5, z1);
+      const text = b.valueLabel ? b.valueLabel : b.label;
+      const tagW = clampVal(Math.round(text.length * 7.1 + 18), 72, 138);
+      const tagH = 22;
+      const sideDir = rc[0] >= stageW * 0.5 ? 1 : -1;
+      const boxX = clampVal(
+        rc[0] + sideDir * 14 - tagW * 0.5,
+        10,
+        stageW - tagW - 10
+      );
+      const boxY = clampVal(
+        rc[1] - 34,
+        isPage ? 16 : 36,
+        stageH - 36 - tagH
+      );
+      return {
+        id: b.id,
+        roofX: rc[0],
+        roofY: rc[1],
+        boxX,
+        boxY,
+        tagW,
+        tagH,
+        text,
+        extrude,
+        tone: b.tone,
+      };
+    });
+
+    // Deterministic 24-pass AABB separation for roof callout badges
+    const minTagGap = 8;
+    const minY = isPage ? 14 : 34;
+    const maxY = stageH - 34;
+    for (let iter = 0; iter < 24; iter++) {
+      for (let i = 0; i < raw.length; i++) {
+        for (let j = i + 1; j < raw.length; j++) {
+          const a = raw[i];
+          const b = raw[j];
+          const acx = a.boxX + a.tagW * 0.5;
+          const acy = a.boxY + a.tagH * 0.5;
+          const bcx = b.boxX + b.tagW * 0.5;
+          const bcy = b.boxY + b.tagH * 0.5;
+          const dx = bcx - acx;
+          const dy = bcy - acy;
+          const reqX = (a.tagW + b.tagW) * 0.5 + minTagGap;
+          const reqY = (a.tagH + b.tagH) * 0.5 + minTagGap;
+          const penX = reqX - Math.abs(dx);
+          const penY = reqY - Math.abs(dy);
+          if (penX > 0 && penY > 0) {
+            if (penY <= penX) {
+              const dir = Math.abs(dy) > 0.5 ? Math.sign(dy) : i < j ? 1 : -1;
+              const s = penY * 0.52 * dir;
+              a.boxY -= s;
+              b.boxY += s;
+            } else {
+              const dir = Math.abs(dx) > 0.5 ? Math.sign(dx) : i < j ? -1 : 1;
+              const s = penX * 0.52 * dir;
+              a.boxX -= s;
+              b.boxX += s;
+            }
+          }
+        }
+      }
+      for (let i = 0; i < raw.length; i++) {
+        raw[i].boxX = clampVal(raw[i].boxX, 10, stageW - raw[i].tagW - 10);
+        raw[i].boxY = clampVal(raw[i].boxY, minY, maxY - raw[i].tagH);
+      }
+    }
+    return raw;
+  }, [sortedBlocks, elapsed, fps, stageW, stageH, isPage, projectIso]);
+
+  const tagById = useMemo(() => {
+    const map = new Map<string, (typeof solvedTags)[number]>();
+    for (let i = 0; i < solvedTags.length; i++) {
+      map.set(solvedTags[i].id, solvedTags[i]);
+    }
+    return map;
+  }, [solvedTags]);
+
+  const gridStrokeMinor = isOverFootage
+    ? "rgba(191, 214, 234, 0.08)"
+    : "rgba(28, 43, 58, 0.07)";
+  const gridStrokeMajor = isOverFootage
+    ? "rgba(191, 214, 234, 0.17)"
+    : "rgba(28, 43, 58, 0.15)";
+  const axisTickColor = isOverFootage
+    ? OVER_FOOTAGE_PALETTE.textMuted
+    : PAGE_INK_SECONDARY;
 
   const renderSvgStage = () => (
     <svg
@@ -889,7 +1315,7 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
         strokeWidth="1.4"
       />
 
-      {/* Plinth Isometric Grid */}
+      {/* Calibrated Isometric Plinth Grid */}
       {gridLines.map((ln, idx) => (
         <line
           key={`plinth-grid-${idx}`}
@@ -897,13 +1323,35 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
           y1={ln.y1}
           x2={ln.x2}
           y2={ln.y2}
-          stroke={
-            isOverFootage
-              ? "rgba(191, 214, 234, 0.09)"
-              : "rgba(28, 43, 58, 0.075)"
-          }
-          strokeWidth="0.9"
+          stroke={ln.major ? gridStrokeMajor : gridStrokeMinor}
+          strokeWidth={ln.major ? "1.05" : "0.75"}
         />
+      ))}
+
+      {/* Plinth Perimeter Coordinate Ticks */}
+      {plinthAxisTicks.map((tk, idx) => (
+        <g key={`plinth-tk-${idx}`}>
+          <line
+            x1={tk.x}
+            y1={tk.y}
+            x2={tk.tx}
+            y2={tk.ty}
+            stroke={axisTickColor}
+            strokeWidth="1.1"
+          />
+          <text
+            x={tk.tx - 4}
+            y={tk.ty + 10}
+            textAnchor="middle"
+            fontFamily={FONTS.mono}
+            fontSize={isPage ? "10" : "8.5"}
+            fontWeight="600"
+            fill={axisTickColor}
+            style={TABULAR_NUM_STYLE}
+          >
+            {tk.label}
+          </text>
+        </g>
       ))}
 
       {/* Inner Architectural Podium */}
@@ -914,6 +1362,43 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
         strokeWidth="1.1"
       />
 
+      {/* Vertical Elevation Scale Mast & Numeric Height Ticks */}
+      <g>
+        <line
+          x1={mastBase[0]}
+          y1={mastBase[1]}
+          x2={mastTop[0]}
+          y2={mastTop[1]}
+          stroke={isOverFootage ? "rgba(191, 214, 234, 0.45)" : "rgba(28, 43, 58, 0.45)"}
+          strokeWidth="1.15"
+          strokeDasharray="3 3"
+        />
+        {elevTicks.map((et, idx) => (
+          <g key={`elev-mast-tk-${idx}`}>
+            <line
+              x1={et.x - 5}
+              y1={et.y}
+              x2={et.x + 5}
+              y2={et.y}
+              stroke={axisTickColor}
+              strokeWidth="1.2"
+            />
+            <text
+              x={et.x - 9}
+              y={et.y + 3}
+              textAnchor="end"
+              fontFamily={FONTS.mono}
+              fontSize={isPage ? "10" : "8.5"}
+              fontWeight="700"
+              fill={axisTickColor}
+              style={TABULAR_NUM_STYLE}
+            >
+              {et.label}
+            </text>
+          </g>
+        ))}
+      </g>
+
       {/* Oblique Ground Cast Shadows */}
       {sortedBlocks.map((b, idx) => {
         const extrude = interpolate(
@@ -923,8 +1408,8 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
           { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
         );
         const h = Math.max(0.15, b.heightUnits * extrude);
-        const shDx = h * 0.34;
-        const shDy = h * 0.24;
+        const shDx = h * 0.32;
+        const shDy = h * 0.22;
         const x0 = b.gx;
         const x1 = b.gx + b.gw;
         const y0 = b.gy;
@@ -980,13 +1465,10 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
           projectIso(x0, y1, z1),
         ];
 
-        const roofCenter = projectIso(
-          (x0 + x1) * 0.5,
-          (y0 + y1) * 0.5,
-          z1
-        );
         const elevTop = projectIso(x1, y0, z1);
         const elevBase = projectIso(x1, y0, z0);
+        const elevMidY = (elevTop[1] + elevBase[1]) * 0.5;
+        const dimX = elevTop[0] + 18;
 
         return (
           <g key={`iso-blk-${b.id}`}>
@@ -1024,91 +1506,118 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
               />
             )}
 
-            {/* Elevation Dimension Callout Line on Tallest/Primary Blocks */}
+            {/* Calibrated Elevation Dimension Bracket & Numeric Tick */}
             {showElevationLines && b.heightUnits >= 4.5 && (
               <g opacity={extrude}>
                 <line
-                  x1={elevTop[0] + 10}
+                  x1={elevTop[0] + 6}
                   y1={elevTop[1]}
-                  x2={elevTop[0] + 30}
+                  x2={dimX + 5}
                   y2={elevTop[1]}
                   stroke={faces.tagInk}
-                  strokeWidth="1.3"
+                  strokeWidth="1.15"
                 />
                 <line
-                  x1={elevBase[0] + 10}
+                  x1={elevBase[0] + 6}
                   y1={elevBase[1]}
-                  x2={elevBase[0] + 30}
+                  x2={dimX + 5}
                   y2={elevBase[1]}
                   stroke={faces.tagInk}
-                  strokeWidth="1.3"
+                  strokeWidth="1.15"
                 />
                 <line
-                  x1={elevTop[0] + 22}
+                  x1={dimX}
                   y1={elevTop[1]}
-                  x2={elevBase[0] + 22}
+                  x2={dimX}
                   y2={elevBase[1]}
                   stroke={faces.tagInk}
-                  strokeWidth="1.3"
-                  strokeDasharray="3 3"
+                  strokeWidth="1.15"
+                  strokeDasharray="3 2.5"
                 />
+                <text
+                  x={dimX + 5}
+                  y={elevMidY + 3}
+                  fontFamily={FONTS.mono}
+                  fontSize={isPage ? "10" : "8.5"}
+                  fontWeight="700"
+                  fill={faces.tagInk}
+                  style={TABULAR_NUM_STYLE}
+                >
+                  {(b.heightUnits * extrude).toFixed(1)}u
+                </text>
               </g>
             )}
-
-            {/* Leader Pin + Architectural Callout Label */}
-            <g opacity={extrude}>
-              <line
-                x1={roofCenter[0]}
-                y1={roofCenter[1]}
-                x2={roofCenter[0]}
-                y2={roofCenter[1] - 20}
-                stroke={faces.tagInk}
-                strokeWidth="1.4"
-              />
-              <circle cx={roofCenter[0]} cy={roofCenter[1]} r="3" fill={faces.tagInk} />
-              <rect
-                x={roofCenter[0] - 58}
-                y={roofCenter[1] - 46}
-                width={116}
-                height={24}
-                rx={4}
-                fill={
-                  isOverFootage
-                    ? "rgba(15, 25, 35, 0.88)"
-                    : "rgba(250, 248, 243, 0.94)"
-                }
-                stroke={
-                  isOverFootage
-                    ? OVER_FOOTAGE_PALETTE.glassBorder
-                    : PAGE_PALETTE.paperBorder
-                }
-                strokeWidth="1"
-              />
-              <text
-                x={roofCenter[0]}
-                y={roofCenter[1] - 30}
-                textAnchor="middle"
-                fontFamily={FONTS.mono}
-                fontSize="10.5"
-                fontWeight="700"
-                fill={faces.tagInk}
-                style={TABULAR_NUM_STYLE}
-              >
-                {b.valueLabel ? `${b.valueLabel}` : b.label}
-              </text>
-            </g>
           </g>
         );
       })}
 
-      {/* Corner Datum Caption */}
+      {/* De-Collided Architectural Roof Callout Badges Rendered Above Geometry */}
+      {sortedBlocks.map((b) => {
+        const tag = tagById.get(b.id);
+        if (!tag) return null;
+        const faces = getArchitecturalFaces(b.tone, isOverFootage);
+        const tagAnchorX = tag.boxX + tag.tagW * 0.5;
+        const tagAnchorY = tag.boxY + tag.tagH;
+
+        return (
+          <g key={`iso-tag-${b.id}`} opacity={tag.extrude}>
+            <polyline
+              points={`${tag.roofX.toFixed(1)},${tag.roofY.toFixed(1)} ${tagAnchorX.toFixed(1)},${tagAnchorY.toFixed(1)}`}
+              fill="none"
+              stroke={faces.tagInk}
+              strokeWidth="1.35"
+            />
+            <circle cx={tag.roofX} cy={tag.roofY} r="2.8" fill={faces.tagInk} />
+            <rect
+              x={tag.boxX}
+              y={tag.boxY}
+              width={tag.tagW}
+              height={tag.tagH}
+              rx={4.5}
+              fill={
+                isOverFootage
+                  ? "rgba(15, 25, 35, 0.92)"
+                  : "rgba(250, 248, 243, 0.96)"
+              }
+              stroke={
+                isOverFootage
+                  ? OVER_FOOTAGE_PALETTE.glassBorder
+                  : "#D4CFC3"
+              }
+              strokeWidth="1"
+            />
+            <text
+              x={tag.boxX + tag.tagW * 0.5}
+              y={tag.boxY + 14.5}
+              textAnchor="middle"
+              fontFamily={FONTS.mono}
+              fontSize={isPage ? "10.5" : "9.5"}
+              fontWeight="700"
+              fill={faces.tagInk}
+              style={TABULAR_NUM_STYLE}
+            >
+              {tag.text}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Bottom Corner Datum Footer */}
+      <line
+        x1={18}
+        y1={stageH - 28}
+        x2={stageW - 18}
+        y2={stageH - 28}
+        stroke={isOverFootage ? OVER_FOOTAGE_PALETTE.glassInnerHairline : PAGE_PALETTE.paperBorder}
+        strokeWidth="1"
+      />
       <text
-        x={22}
-        y={stageH - 18}
+        x={20}
+        y={stageH - 11}
         fontFamily={FONTS.mono}
-        fontSize="10.5"
+        fontSize="10"
         fontWeight="600"
-        fill={isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : PAGE_PALETTE.muted}
+        fill={axisTickColor}
         style={TABULAR_NUM_STYLE}
       >
         {datumLabel}
@@ -1116,7 +1625,7 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
     </svg>
   );
 
-  if (mode !== "page") {
+  if (!isPage) {
     return (
       <div
         style={{
@@ -1127,7 +1636,10 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
           borderRadius: "16px",
           overflow: "hidden",
           border: `1px solid ${
-            isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : COLORS.paperBorder
+            isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : "#D7D2C6"
+          }`,
+          borderTop: `3.5px solid ${
+            isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_ACCENT_BRICK_AAA
           }`,
           background: isOverFootage
             ? OVER_FOOTAGE_PALETTE.glassPrimary
@@ -1136,27 +1648,49 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
           WebkitBackdropFilter: isOverFootage ? "blur(14px)" : undefined,
           boxShadow: isOverFootage
             ? "0 22px 48px rgba(15, 25, 35, 0.46)"
-            : "0 20px 44px rgba(28, 43, 58, 0.12)",
+            : "0 20px 44px rgba(28, 43, 58, 0.13)",
+          boxSizing: "border-box",
           userSelect: "none",
         }}
       >
         <div
           style={{
             position: "absolute",
-            top: "14px",
+            top: "10px",
             left: "18px",
-            fontFamily: FONTS.mono,
-            fontSize: "11px",
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: isOverFootage
-              ? OVER_FOOTAGE_PALETTE.brickRedText
-              : PAGE_PALETTE.brickRed,
+            right: "18px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            pointerEvents: "none",
             zIndex: 2,
           }}
         >
-          {eyebrow}
+          <span
+            style={{
+              fontFamily: FONTS.mono,
+              fontSize: "10.5px",
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: isOverFootage
+                ? OVER_FOOTAGE_PALETTE.brickRedText
+                : PAGE_ACCENT_BRICK_AAA,
+            }}
+          >
+            {eyebrow}
+          </span>
+          <span
+            style={{
+              ...TABULAR_NUM_STYLE,
+              fontFamily: FONTS.mono,
+              fontSize: "9.5px",
+              fontWeight: 600,
+              color: axisTickColor,
+            }}
+          >
+            {modelBlocks.length} MASSING VOLUMES
+          </span>
         </div>
         {renderSvgStage()}
       </div>
@@ -1188,7 +1722,7 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
             fontWeight: 700,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            color: PAGE_PALETTE.brickRed,
+            color: PAGE_ACCENT_BRICK_AAA,
           }}
         >
           {eyebrow}
@@ -1211,7 +1745,7 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
             fontFamily: FONTS.sans,
             fontSize: "22px",
             lineHeight: 1.48,
-            color: PAGE_PALETTE.muted,
+            color: PAGE_INK_SECONDARY,
           }}
         >
           {subtitle}
@@ -1225,6 +1759,7 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                gap: "16px",
                 padding: "12px 18px",
                 backgroundColor: PAGE_PALETTE.paper,
                 border: `1.5px solid ${PAGE_PALETTE.paperBorder}`,
@@ -1237,6 +1772,7 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
                   fontSize: "17px",
                   fontWeight: 700,
                   color: PAGE_PALETTE.navy,
+                  minWidth: 0,
                 }}
               >
                 {blk.label}
@@ -1247,10 +1783,12 @@ export const WhiteModel3D: React.FC<WhiteModel3DProps> = ({
                   fontFamily: FONTS.mono,
                   fontSize: "16px",
                   fontWeight: 700,
+                  flexShrink: 0,
+                  whiteSpace: "nowrap",
                   color:
                     blk.tone === "brick"
-                      ? PAGE_PALETTE.brickRed
-                      : PAGE_PALETTE.chartSecondary,
+                      ? PAGE_ACCENT_BRICK_AAA
+                      : PAGE_ACCENT_TEAL_AAA,
                 }}
               >
                 {blk.valueLabel ?? `${blk.heightUnits.toFixed(1)}u`}
@@ -1330,7 +1868,7 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
           330 * scaleX
         } ${90 * scaleY} L ${520 * scaleX} ${45 * scaleY}`}
         fill="none"
-        stroke={isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : COLORS.muted}
+        stroke={isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : PAGE_INK_SECONDARY}
         strokeWidth={2.2 * scaleX}
       />
       <path
@@ -1338,7 +1876,7 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
           330 * scaleX
         } ${140 * scaleY} L ${520 * scaleX} ${185 * scaleY}`}
         fill="none"
-        stroke={isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : COLORS.muted}
+        stroke={isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : PAGE_INK_SECONDARY}
         strokeWidth={2.2 * scaleX}
       />
       <rect
@@ -1348,7 +1886,7 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
         height={58 * scaleY}
         fill="none"
         stroke={
-          isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_PALETTE.brickRed
+          isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_ACCENT_BRICK_AAA
         }
         strokeWidth="1.5"
         strokeDasharray="4 4"
@@ -1378,12 +1916,13 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
         );
       })}
       <text
-        x={96 * scaleX}
+        x={116 * scaleX}
         y={212 * scaleY}
+        textAnchor="middle"
         fontFamily={FONTS.mono}
         fontSize={10 * scaleX}
         fontWeight="700"
-        fill={isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : PAGE_PALETTE.muted}
+        fill={isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : PAGE_INK_SECONDARY}
       >
         {inflowLabel}
       </text>
@@ -1394,17 +1933,18 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
         fontFamily={FONTS.mono}
         fontSize={10 * scaleX}
         fontWeight="700"
-        fill={isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_PALETTE.brickRed}
+        fill={isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : PAGE_ACCENT_BRICK_AAA}
       >
         {chokepointLabel}
       </text>
       <text
-        x={448 * scaleX}
+        x={468 * scaleX}
         y={212 * scaleY}
+        textAnchor="middle"
         fontFamily={FONTS.mono}
         fontSize={10 * scaleX}
         fontWeight="700"
-        fill={isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : PAGE_PALETTE.muted}
+        fill={isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : PAGE_INK_SECONDARY}
       >
         {outflowLabel}
       </text>
@@ -1443,7 +1983,7 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
             fontSize: "11px",
             color: isOverFootage
               ? OVER_FOOTAGE_PALETTE.brickRedText
-              : COLORS.brickRed,
+              : PAGE_ACCENT_BRICK_AAA,
             fontWeight: 700,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
@@ -1479,7 +2019,7 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
             fontWeight: 700,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            color: PAGE_PALETTE.brickRed,
+            color: PAGE_ACCENT_BRICK_AAA,
           }}
         >
           {eyebrow}
@@ -1502,7 +2042,7 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
             fontFamily: FONTS.sans,
             fontSize: "22px",
             lineHeight: 1.48,
-            color: PAGE_PALETTE.muted,
+            color: PAGE_INK_SECONDARY,
           }}
         >
           {subtitle}
@@ -1514,12 +2054,12 @@ export const BlobSimulation: React.FC<BlobSimulationProps> = ({
             padding: "16px 24px",
             backgroundColor: PAGE_PALETTE.riskFill,
             border: `1.5px solid ${PAGE_PALETTE.riskBorder}`,
-            borderLeft: `5px solid ${PAGE_PALETTE.brickRed}`,
+            borderLeft: `5px solid ${PAGE_ACCENT_BRICK_AAA}`,
             borderRadius: "10px",
             fontFamily: FONTS.mono,
             fontSize: "24px",
             fontWeight: 700,
-            color: PAGE_PALETTE.brickRed,
+            color: PAGE_ACCENT_BRICK_AAA,
             ...TABULAR_NUM_STYLE,
           }}
         >
@@ -1581,6 +2121,31 @@ export const CorridorArcMatrixCard: React.FC<CorridorArcMatrixCardProps> = ({
   const enter = studioSpring(elapsed, fps, "editorialSnap", 4);
   const isOverFootage = paletteMode === "over-footage";
 
+  // Inform CinemaMapStage about the docked ledger card so map callouts never hide behind it
+  const reservedRects: ScreenObstacleRect[] = useMemo(() => {
+    if (isOverFootage) {
+      return [
+        {
+          x: 0,
+          y: 468,
+          width: 640,
+          height: 152,
+          label: "compact-exposure-dock",
+        },
+      ];
+    }
+    const estHeight = 110 + metrics.length * 72;
+    return [
+      {
+        x: 1424,
+        y: 36,
+        width: 448,
+        height: estHeight,
+        label: "corridor-exposure-ledger",
+      },
+    ];
+  }, [isOverFootage, metrics.length]);
+
   return (
     <div
       style={{
@@ -1594,6 +2159,7 @@ export const CorridorArcMatrixCard: React.FC<CorridorArcMatrixCardProps> = ({
         border: isOverFootage
           ? `1px solid ${OVER_FOOTAGE_PALETTE.glassBorder}`
           : undefined,
+        boxSizing: "border-box",
         overflow: "hidden",
         userSelect: "none",
       }}
@@ -1604,19 +2170,109 @@ export const CorridorArcMatrixCard: React.FC<CorridorArcMatrixCardProps> = ({
         title={title}
         eyebrow={eyebrow}
         compactCard={isOverFootage}
+        stageWidth={isOverFootage ? 640 : 1920}
+        stageHeight={isOverFootage ? 620 : 1080}
+        reservedRects={reservedRects}
         atFrame={atFrame}
       />
+
+      {isOverFootage && metrics.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: "16px",
+            right: "16px",
+            bottom: "16px",
+            backgroundColor: OVER_FOOTAGE_PALETTE.glassDarkWell,
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            border: `1px solid ${OVER_FOOTAGE_PALETTE.glassInnerHairline}`,
+            borderTop: `2.5px solid ${OVER_FOOTAGE_PALETTE.brickRedText}`,
+            borderRadius: "12px",
+            padding: "12px 16px",
+            display: "grid",
+            gridTemplateColumns: `repeat(${Math.min(3, metrics.length)}, minmax(0, 1fr))`,
+            gap: "12px",
+            boxSizing: "border-box",
+            opacity: interpolate(enter, [0, 1], [0, 1], {
+              extrapolateLeft: "clamp",
+              extrapolateRight: "clamp",
+            }),
+            zIndex: 25,
+          }}
+        >
+          {metrics.slice(0, 3).map((m, idx) => (
+            <div
+              key={`compact-corr-m-${idx}`}
+              style={{
+                minWidth: 0,
+                borderLeft:
+                  idx === 0
+                    ? "none"
+                    : `1px solid ${OVER_FOOTAGE_PALETTE.glassInnerHairline}`,
+                paddingLeft: idx === 0 ? 0 : "12px",
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: FONTS.sans,
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: OVER_FOOTAGE_PALETTE.textMuted,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {m.label}
+              </div>
+              <div
+                style={{
+                  ...TABULAR_NUM_STYLE,
+                  fontFamily: FONTS.mono,
+                  fontSize: "19px",
+                  fontWeight: 700,
+                  color: OVER_FOOTAGE_PALETTE.textHeadline,
+                  marginTop: "3px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {m.value}
+              </div>
+              {m.delta && (
+                <div
+                  style={{
+                    fontFamily: FONTS.mono,
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    color: OVER_FOOTAGE_PALETTE.chartSecondary,
+                    marginTop: "2px",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {m.delta}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {!isOverFootage && (
         <div
           style={{
             position: "absolute",
             right: "64px",
-            top: "148px",
-            width: "390px",
-            backgroundColor: "rgba(250, 248, 243, 0.96)",
+            top: "44px",
+            width: "412px",
+            backgroundColor: "rgba(250, 248, 243, 0.97)",
             border: `1.5px solid ${PAGE_PALETTE.navy}`,
+            borderTop: `4px solid ${PAGE_ACCENT_BRICK_AAA}`,
             borderRadius: "14px",
-            padding: "24px 28px",
+            padding: "22px 26px",
+            boxSizing: "border-box",
             boxShadow: "0 20px 44px rgba(28, 43, 58, 0.14)",
             opacity: interpolate(enter, [0, 1], [0, 1], {
               extrapolateLeft: "clamp",
@@ -1631,8 +2287,9 @@ export const CorridorArcMatrixCard: React.FC<CorridorArcMatrixCardProps> = ({
               fontSize: "12px",
               fontWeight: 700,
               letterSpacing: "0.08em",
-              color: PAGE_PALETTE.brickRed,
-              marginBottom: "14px",
+              color: PAGE_ACCENT_BRICK_AAA,
+              marginBottom: "12px",
+              textTransform: "uppercase",
             }}
           >
             CORRIDOR EXPOSURE LEDGER
@@ -1644,18 +2301,21 @@ export const CorridorArcMatrixCard: React.FC<CorridorArcMatrixCardProps> = ({
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "baseline",
+                gap: "16px",
                 padding: "12px 0",
                 borderTop:
                   idx === 0 ? "none" : `1px solid ${PAGE_PALETTE.paperBorder}`,
               }}
             >
-              <div>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <div
                   style={{
                     fontFamily: FONTS.sans,
                     fontSize: "15px",
                     fontWeight: 700,
                     color: PAGE_PALETTE.navy,
+                    lineHeight: 1.3,
+                    wordBreak: "break-word",
                   }}
                 >
                   {m.label}
@@ -1665,7 +2325,9 @@ export const CorridorArcMatrixCard: React.FC<CorridorArcMatrixCardProps> = ({
                     style={{
                       fontFamily: FONTS.mono,
                       fontSize: "11.5px",
-                      color: PAGE_PALETTE.muted,
+                      fontWeight: 500,
+                      color: PAGE_INK_SECONDARY,
+                      marginTop: "2px",
                     }}
                   >
                     {m.delta}
@@ -1676,9 +2338,11 @@ export const CorridorArcMatrixCard: React.FC<CorridorArcMatrixCardProps> = ({
                 style={{
                   ...TABULAR_NUM_STYLE,
                   fontFamily: FONTS.mono,
-                  fontSize: "24px",
+                  fontSize: "23px",
                   fontWeight: 700,
                   color: PAGE_PALETTE.navy,
+                  flexShrink: 0,
+                  whiteSpace: "nowrap",
                 }}
               >
                 {m.value}
@@ -1729,7 +2393,7 @@ export const IsometricStrataCutaway3D: React.FC<IsometricStrataCutaway3DProps> =
   const isOverFootage = mode === "over-footage";
 
   const renderStackSvg = (svgW: number, svgH: number) => (
-    <svg width={svgW} height={svgH} viewBox="0 0 760 620">
+    <svg width={svgW} height={svgH} viewBox="0 0 820 620">
       {layers.map((ly, idx) => {
         const s = interpolate(
           studioSpring(elapsed, fps, "editorialSnap", idx * 5),
@@ -1769,7 +2433,7 @@ export const IsometricStrataCutaway3D: React.FC<IsometricStrataCutaway3DProps> =
               y="69"
               textAnchor="middle"
               fontFamily={FONTS.mono}
-              fontSize="14.5"
+              fontSize="14"
               fontWeight="700"
               fill={
                 ly.tone === "paper"
@@ -1782,13 +2446,13 @@ export const IsometricStrataCutaway3D: React.FC<IsometricStrataCutaway3DProps> =
             <line
               x1="560"
               y1="64"
-              x2="628"
+              x2="624"
               y2="64"
               stroke={faces.tagInk}
               strokeWidth="1.8"
             />
             <text
-              x="638"
+              x="634"
               y="69"
               fontFamily={FONTS.mono}
               fontSize="18"
@@ -1846,7 +2510,7 @@ export const IsometricStrataCutaway3D: React.FC<IsometricStrataCutaway3DProps> =
             fontSize: "14px",
             fontWeight: 700,
             letterSpacing: "0.1em",
-            color: PAGE_PALETTE.brickRed,
+            color: PAGE_ACCENT_BRICK_AAA,
           }}
         >
           {eyebrow}
@@ -1868,7 +2532,7 @@ export const IsometricStrataCutaway3D: React.FC<IsometricStrataCutaway3DProps> =
             fontFamily: FONTS.sans,
             fontSize: "22px",
             lineHeight: 1.48,
-            color: PAGE_PALETTE.muted,
+            color: PAGE_INK_SECONDARY,
           }}
         >
           {subtitle}
@@ -1880,16 +2544,28 @@ export const IsometricStrataCutaway3D: React.FC<IsometricStrataCutaway3DProps> =
               style={{
                 display: "flex",
                 justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: "16px",
                 padding: "12px 18px",
                 backgroundColor: PAGE_PALETTE.paper,
                 border: `1px solid ${PAGE_PALETTE.paperBorder}`,
                 borderRadius: "8px",
               }}
             >
-              <span style={{ fontFamily: FONTS.sans, fontSize: "16px", fontWeight: 700, color: PAGE_PALETTE.navy }}>
-                {ly.label} · <span style={{ fontWeight: 500, color: PAGE_PALETTE.muted }}>{ly.note}</span>
+              <span style={{ fontFamily: FONTS.sans, fontSize: "16px", fontWeight: 700, color: PAGE_PALETTE.navy, minWidth: 0 }}>
+                {ly.label} · <span style={{ fontWeight: 500, color: PAGE_INK_SECONDARY }}>{ly.note}</span>
               </span>
-              <span style={{ ...TABULAR_NUM_STYLE, fontFamily: FONTS.mono, fontSize: "16px", fontWeight: 700, color: PAGE_PALETTE.brickRed }}>
+              <span
+                style={{
+                  ...TABULAR_NUM_STYLE,
+                  fontFamily: FONTS.mono,
+                  fontSize: "16px",
+                  fontWeight: 700,
+                  color: PAGE_ACCENT_BRICK_AAA,
+                  flexShrink: 0,
+                  whiteSpace: "nowrap",
+                }}
+              >
                 {ly.share}
               </span>
             </div>

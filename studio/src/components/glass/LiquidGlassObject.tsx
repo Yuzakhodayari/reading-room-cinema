@@ -243,6 +243,7 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
         className={className}
         style={{
           position: "relative",
+          display: width !== undefined || style?.width !== undefined ? undefined : "inline-block",
           width,
           height,
           transform: transformParts.join(" "),
@@ -286,7 +287,11 @@ export const LiquidGlassObject: React.FC<LiquidGlassObjectProps> = ({
               background: tintConfig.bg,
               backdropFilter: `blur(${blurAmount}px) saturate(165%) brightness(0.66)`,
               WebkitBackdropFilter: `blur(${blurAmount}px) saturate(165%) brightness(0.66)`,
-              border: `1.25px solid ${tintConfig.border}`,
+              border: `1px solid ${
+                tint === "warning"
+                  ? OVER_FOOTAGE_PALETTE.riskBorder
+                  : "rgba(191, 214, 234, 0.34)"
+              }`,
               pointerEvents: "none",
               zIndex: 1,
             }}

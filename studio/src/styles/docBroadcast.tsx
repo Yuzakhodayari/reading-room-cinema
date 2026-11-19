@@ -1,7 +1,9 @@
 import React from "react";
 import { noise2D } from "@remotion/noise";
-import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { EditorialBackdrop } from "../components/EditorialBackdrop";
 import { SfxCue } from "../components/SfxCue";
+import { SourceBadge } from "../components/SourceBadge";
 import { fitAndBalanceText, formatTabularFigure } from "../design/fitText";
 import { FONTS, TABULAR_NUM_STYLE } from "../design/fonts";
 import { HighlighterStroke, ReadingRoomStage } from "../design/optics";
@@ -14,6 +16,8 @@ import {
   REGISTERS,
   STYLE_FAMILIES,
 } from "../design/tokens";
+import type { DirectorTableRow } from "../director/schema";
+import { PropVaultRenderer } from "../registry/props";
 
 export type BroadcastPaletteMode = "page" | "over-footage";
 
@@ -371,8 +375,11 @@ export interface CaptionNewsCardProps {
   metric?: string;
   metricLabel?: string;
   bullets?: string[];
+  tableRows?: DirectorTableRow[];
+  propIds?: string[];
   sourceCitation?: string;
   paletteMode?: BroadcastPaletteMode;
+  fullScene?: boolean;
   atFrame?: number;
 }
 
@@ -383,8 +390,11 @@ export const CaptionNewsCard: React.FC<CaptionNewsCardProps> = ({
   metric,
   metricLabel = "KEY FIGURE",
   bullets,
+  tableRows,
+  propIds,
   sourceCitation,
   paletteMode = "over-footage",
+  fullScene = false,
   atFrame = 0,
 }) => {
   const frame = useCurrentFrame();
@@ -398,159 +408,491 @@ export const CaptionNewsCard: React.FC<CaptionNewsCardProps> = ({
     config: CINEMA_SPRINGS.editorialSnap,
   });
 
-  if (paletteMode === "page") {
+  const cleanMetric = metric?.replace(/\s+/g, " ").trim();
+  const displayMetric =
+    cleanMetric && cleanMetric.length > 0
+      ? /\d/.test(cleanMetric) && cleanMetric.length <= 20
+        ? formatTabularFigure(cleanMetric).formatted || cleanMetric
+        : cleanMetric
+      : undefined;
+
+  if (paletteMode === "page" || fullScene) {
+    const primaryPropId = propIds && propIds.length > 0 ? propIds[0] : undefined;
+    const hasSideExhibit = Boolean(primaryPropId);
+    const fittedHeadline = fitAndBalanceText({
+      text: headline,
+      fontFamily: "serif",
+      fontWeight: 700,
+      maxWidth: displayMetric ? 840 : 1140,
+      maxHeight: 132,
+      maxLines: 2,
+      minFontSize: 32,
+      maxFontSize: 50,
+      lineHeight: 1.15,
+    });
+    const fittedMetric = displayMetric
+      ? fitAndBalanceText({
+          text: displayMetric,
+          fontFamily: "mono",
+          fontWeight: 800,
+          maxWidth: 260,
+          maxHeight: 56,
+          maxLines: 1,
+          minFontSize: 20,
+          maxFontSize: 40,
+          lineHeight: 1.08,
+        })
+      : null;
+
+    const highlightSweep = interpolate(elapsed, [10, 32], [0, 1], CLAMP);
+
+    const comparativeRows: DirectorTableRow[] =
+      tableRows && tableRows.length > 0
+        ? tableRows.slice(0, 4)
+        : bullets && bullets.length > 0
+          ? bullets.slice(0, 4).map((b, i) => ({
+              label: `Record 0${i + 1}`,
+              value: b,
+              isHighlight: i === 0,
+            }))
+          : [
+              ...(displayMetric
+                ? [
+                    {
+                      label: metricLabel || "Reported Figure",
+                      value: displayMetric,
+                      delta: "Primary Metric",
+                      isHighlight: true,
+                    },
+                  ]
+                : []),
+              {
+                label: "Dossier Subject",
+                value: headline,
+                delta: dateline,
+              },
+              {
+                label: "Primary Filing",
+                value: sourceCitation || "Reading Room Editorial Archive",
+                delta: "Verified Record",
+              },
+            ];
+
     return (
-      <ReadingRoomStage
-        register="page_editorial"
-        chapterTitle={dateline}
-        folioLabel="EDITORIAL BRIEFING"
-        sourceCitation={sourceCitation}
-        cameraMove="dolly-creep"
-      >
-        <div
+      <AbsoluteFill style={{ overflow: "hidden", fontFamily: FONTS.sans }}>
+        <EditorialBackdrop
+          driftSpeed={0.18}
+          showGrid={true}
+          tone="light"
+          register="page_editorial"
+        />
+
+        <AbsoluteFill
           style={{
-            position: "absolute",
-            left: LAYOUT.safeMargin,
-            right: LAYOUT.safeMargin,
-            top: 128,
-            bottom: 108,
-            display: "grid",
-            gridTemplateColumns: metric ? "1.35fr 0.65fr" : "1fr",
-            gap: "40px",
-            alignItems: "stretch",
-            opacity: enter,
-            transform: `translate3d(0, ${((1 - enter) * 20).toFixed(2)}px, 0)`,
-            userSelect: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "52px 72px 86px 72px",
           }}
         >
           <div
             style={{
-              backgroundColor: COLORS.paperLight,
-              border: `1.5px solid ${COLORS.paperBorder}`,
-              borderTop: `4px solid ${COLORS.navy}`,
-              borderRadius: "14px",
-              padding: "48px 56px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              boxShadow: "0 20px 44px rgba(28, 43, 58, 0.08)",
+              width: "1320px",
+              maxWidth: "100%",
+              backgroundColor: COLORS.paper,
+              color: COLORS.paperInk,
+              borderRadius: "12px",
+              border: `1px solid ${COLORS.paperBorder}`,
+              boxShadow:
+                "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)",
+              padding: "44px 52px",
+              position: "relative",
+              overflow: "hidden",
+              opacity: enter,
+              transform: `translate3d(0, ${((1 - enter) * 28).toFixed(2)}px, 0)`,
+              userSelect: "none",
             }}
           >
-            <div>
-              <div
-                style={{
-                  fontFamily: FONTS.mono,
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  color: COLORS.brickRed,
-                  letterSpacing: "0.09em",
-                  textTransform: "uppercase",
-                  marginBottom: "16px",
-                }}
-              >
-                {dateline}
-              </div>
-              <h1
-                style={{
-                  margin: 0,
-                  fontFamily: FONTS.serif,
-                  fontSize: "50px",
-                  fontWeight: 700,
-                  color: COLORS.navy,
-                  lineHeight: 1.15,
-                }}
-              >
-                {headline}
-              </h1>
-              <p
-                style={{
-                  margin: "24px 0 0 0",
-                  fontFamily: FONTS.sans,
-                  fontSize: "23px",
-                  color: REGISTERS.page_editorial.ink.secondary,
-                  lineHeight: 1.55,
-                  ...TABULAR_NUM_STYLE,
-                }}
-              >
-                {body}
-              </p>
-            </div>
+            {/* 4px Navy Top Accent Bar */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: "4px",
+                backgroundColor: COLORS.navy,
+              }}
+            />
 
-            {bullets && bullets.length > 0 && (
+            {/* Masthead Header */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: "32px",
+                borderBottom: `2px solid ${COLORS.navy}`,
+                paddingBottom: "20px",
+                marginBottom: "26px",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontFamily: FONTS.mono,
+                    fontSize: "12.5px",
+                    fontWeight: 700,
+                    letterSpacing: "0.09em",
+                    textTransform: "uppercase",
+                    color: PAGE_PALETTE.brickRed,
+                    marginBottom: "8px",
+                  }}
+                >
+                  {dateline} · EDITORIAL DOSSIER
+                </div>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontFamily: FONTS.serif,
+                    fontSize: `${fittedHeadline.fontSize}px`,
+                    fontWeight: 700,
+                    lineHeight: 1.15,
+                    letterSpacing: "-0.015em",
+                    color: COLORS.navy,
+                  }}
+                >
+                  {fittedHeadline.lines.map((line, i) => (
+                    <React.Fragment key={`cn-hl-${i}`}>
+                      {i > 0 && <br />}
+                      {line}
+                    </React.Fragment>
+                  ))}
+                </h1>
+              </div>
+
               <div
                 style={{
-                  borderTop: `1px solid ${COLORS.paperBorder}`,
-                  paddingTop: "22px",
+                  flexShrink: 0,
                   display: "flex",
                   flexDirection: "column",
+                  alignItems: "flex-end",
                   gap: "10px",
+                  maxWidth: "300px",
                 }}
               >
-                {bullets.map((b, i) => (
+                <span
+                  style={{
+                    backgroundColor: COLORS.navy,
+                    color: COLORS.paperLight,
+                    fontFamily: FONTS.mono,
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    letterSpacing: "0.09em",
+                    textTransform: "uppercase",
+                    padding: "5px 12px",
+                    borderRadius: "5px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  PRIMARY RECORD
+                </span>
+
+                {displayMetric && fittedMetric && (
                   <div
-                    key={`cap-bul-${i}`}
                     style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "12px",
+                      backgroundColor: COLORS.paperLight,
+                      border: `1px solid ${COLORS.paperBorder}`,
+                      borderLeft: `4px solid ${PAGE_PALETTE.brickRed}`,
+                      borderRadius: "8px",
+                      padding: "10px 16px",
+                      textAlign: "right",
+                      maxWidth: "280px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: FONTS.mono,
+                        fontSize: "10.5px",
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: REGISTERS.page_editorial.ink.muted,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {metricLabel}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: FONTS.mono,
+                        fontSize: `${fittedMetric.fontSize}px`,
+                        fontWeight: 800,
+                        color: COLORS.navy,
+                        lineHeight: 1.1,
+                        marginTop: "4px",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        ...TABULAR_NUM_STYLE,
+                      }}
+                    >
+                      {displayMetric}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Body Grid */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: hasSideExhibit ? "1.32fr 0.68fr" : "1fr",
+                gap: "32px",
+                alignItems: "stretch",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px", minWidth: 0 }}>
+                {/* Highlighted Prose Excerpt */}
+                <div
+                  style={{
+                    backgroundColor: COLORS.paperLight,
+                    border: `1px solid ${COLORS.paperBorder}`,
+                    borderLeft: `4px solid ${PAGE_PALETTE.brickRed}`,
+                    borderRadius: "8px",
+                    padding: "22px 26px",
+                    position: "relative",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "relative",
+                      display: "inline-block",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "-6px",
+                        top: "-3px",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <HighlighterStroke
+                        width={185}
+                        height={22}
+                        progress={highlightSweep}
+                        register="page_editorial"
+                        seed={19}
+                      />
+                    </div>
+                    <span
+                      style={{
+                        position: "relative",
+                        fontFamily: FONTS.mono,
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: COLORS.navy,
+                      }}
+                    >
+                      RECORDED EXCERPT
+                    </span>
+                  </div>
+
+                  <p
+                    style={{
+                      margin: 0,
                       fontFamily: FONTS.sans,
-                      fontSize: "18px",
+                      fontSize: body.length > 210 ? "19.5px" : "22px",
+                      fontWeight: 500,
+                      lineHeight: 1.54,
                       color: COLORS.navy,
                       ...TABULAR_NUM_STYLE,
                     }}
                   >
-                    <span style={{ color: COLORS.brickRed, fontFamily: FONTS.mono, fontWeight: 700 }}>
-                      0{i + 1}
-                    </span>
-                    <span>{b}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                    {body}
+                  </p>
+                </div>
 
-          {metric && (
-            <div
-              style={{
-                backgroundColor: COLORS.paper,
-                border: `1.5px solid ${COLORS.navy}`,
-                borderRadius: "14px",
-                padding: "44px 40px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                alignItems: "flex-start",
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: FONTS.mono,
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  color: COLORS.brickRed,
-                  textTransform: "uppercase",
-                }}
-              >
-                {metricLabel}
+                {/* Comparative Figures / Table Rows Grid */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                    borderTop: `1px solid ${COLORS.paperBorder}`,
+                    paddingTop: "18px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.1fr 1.2fr 0.7fr",
+                      gap: "16px",
+                      padding: "0 18px 4px 18px",
+                      fontFamily: FONTS.mono,
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: REGISTERS.page_editorial.ink.muted,
+                    }}
+                  >
+                    <span>LEDGER LINE</span>
+                    <span>RECORDED VALUE</span>
+                    <span style={{ textAlign: "right" }}>STATUS</span>
+                  </div>
+
+                  {comparativeRows.map((row, idx) => {
+                    const rowProgress = interpolate(
+                      elapsed,
+                      [8 + idx * 5, 18 + idx * 5],
+                      [0, 1],
+                      CLAMP
+                    );
+                    const isFlag = Boolean(row.isFlagged);
+                    const isHi = Boolean(row.isHighlight);
+                    return (
+                      <div
+                        key={`cn-row-${idx}-${row.label}`}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1.1fr 1.2fr 0.7fr",
+                          gap: "16px",
+                          alignItems: "center",
+                          padding: "13px 18px",
+                          borderRadius: "8px",
+                          backgroundColor: isFlag
+                            ? PAGE_PALETTE.riskFill
+                            : isHi
+                              ? "rgba(227, 194, 111, 0.18)"
+                              : COLORS.paperLight,
+                          border: `1px solid ${
+                            isFlag ? PAGE_PALETTE.riskBorder : COLORS.paperBorder
+                          }`,
+                          opacity: rowProgress,
+                          transform: `translate3d(0, ${((1 - rowProgress) * 10).toFixed(1)}px, 0)`,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: FONTS.sans,
+                            fontSize: "16px",
+                            fontWeight: 700,
+                            color: COLORS.navy,
+                            minWidth: 0,
+                          }}
+                        >
+                          {row.label}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: FONTS.mono,
+                            fontSize: row.value.length > 26 ? "14.5px" : "18px",
+                            fontWeight: 700,
+                            color: isFlag ? PAGE_PALETTE.brickRed : COLORS.navy,
+                            minWidth: 0,
+                            ...TABULAR_NUM_STYLE,
+                          }}
+                        >
+                          {row.value}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: FONTS.mono,
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: isFlag
+                              ? PAGE_PALETTE.brickRed
+                              : REGISTERS.page_editorial.ink.secondary,
+                            textAlign: "right",
+                            minWidth: 0,
+                            ...TABULAR_NUM_STYLE,
+                          }}
+                        >
+                          {row.delta || (isFlag ? "Flagged" : isHi ? "Primary" : "Logged")}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div
-                style={{
-                  fontFamily: FONTS.mono,
-                  fontSize: "74px",
-                  fontWeight: 700,
-                  color: COLORS.navy,
-                  marginTop: "14px",
-                  lineHeight: 1.05,
-                  ...TABULAR_NUM_STYLE,
-                }}
-              >
-                {formatTabularFigure(metric).formatted}
-              </div>
+
+              {hasSideExhibit && primaryPropId && (
+                <div
+                  style={{
+                    backgroundColor: COLORS.paperLight,
+                    border: `1px solid ${COLORS.paperBorder}`,
+                    borderRadius: "10px",
+                    padding: "22px 20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "14px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: `1px solid ${COLORS.paperBorder}`,
+                      paddingBottom: "8px",
+                      fontFamily: FONTS.mono,
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      color: REGISTERS.page_editorial.ink.muted,
+                    }}
+                  >
+                    <span>EXHIBIT SPECIMEN</span>
+                    <span style={{ color: PAGE_PALETTE.brickRed }}>FIG. 01</span>
+                  </div>
+
+                  <PropVaultRenderer
+                    propId={primaryPropId}
+                    width={320}
+                    height={230}
+                    paletteMode="page"
+                    frame={elapsed}
+                  />
+
+                  <div
+                    style={{
+                      width: "100%",
+                      borderTop: `1px solid ${COLORS.paperBorder}`,
+                      paddingTop: "10px",
+                      fontFamily: FONTS.mono,
+                      fontSize: "11.5px",
+                      color: REGISTERS.page_editorial.ink.secondary,
+                      textAlign: "center",
+                      ...TABULAR_NUM_STYLE,
+                    }}
+                  >
+                    {displayMetric ? `${metricLabel} · ${displayMetric}` : dateline}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </ReadingRoomStage>
+          </div>
+        </AbsoluteFill>
+
+        <SourceBadge
+          sourceText={sourceCitation || "Reading Room Editorial Archive"}
+          paletteMode="page"
+          startFrame={Math.max(0, atFrame + 8)}
+        />
+      </AbsoluteFill>
     );
   }
 
@@ -578,6 +920,7 @@ export const CaptionNewsCard: React.FC<CaptionNewsCardProps> = ({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: "10px",
           marginBottom: "8px",
         }}
       >
@@ -593,7 +936,7 @@ export const CaptionNewsCard: React.FC<CaptionNewsCardProps> = ({
         >
           {dateline}
         </span>
-        {metric && (
+        {displayMetric && (
           <span
             style={{
               fontFamily: FONTS.mono,
@@ -604,10 +947,14 @@ export const CaptionNewsCard: React.FC<CaptionNewsCardProps> = ({
               padding: "2px 8px",
               borderRadius: "4px",
               border: `1px solid ${COLORS.paperBorder}`,
+              maxWidth: "200px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
               ...TABULAR_NUM_STYLE,
             }}
           >
-            {metric}
+            {displayMetric}
           </span>
         )}
       </div>
@@ -1857,6 +2204,7 @@ export const TelestratorOverlay: React.FC<TelestratorOverlayProps> = ({
             flexDirection: "column",
             alignItems: "center",
             gap: "4px",
+            maxWidth: "440px",
             backgroundColor: PAGE_PALETTE.navy,
             border: `1.5px solid ${OVER_FOOTAGE_PALETTE.accentPrimary}`,
             color: OVER_FOOTAGE_PALETTE.textHeadline,
@@ -1877,6 +2225,9 @@ export const TelestratorOverlay: React.FC<TelestratorOverlayProps> = ({
               fontSize: "13px",
               fontWeight: 700,
               letterSpacing: "0.04em",
+              maxWidth: "400px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               ...TABULAR_NUM_STYLE,
             }}
@@ -1890,7 +2241,16 @@ export const TelestratorOverlay: React.FC<TelestratorOverlayProps> = ({
                 flexShrink: 0,
               }}
             />
-            <span>{resolvedLabel}</span>
+            <span
+              style={{
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {resolvedLabel}
+            </span>
           </div>
           {calloutText && !renderEvidenceFrame && (
             <div

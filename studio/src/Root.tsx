@@ -20,6 +20,7 @@ import {
   normalizeDirectorBeat,
   resolvePlayableMediaSrc,
 } from "./components/DirectorBeatRenderer";
+import { CameraPreviewStage } from "./components/glass/CameraPreviewStage";
 import { PresenterDepthStage } from "./components/glass/PresenterDepthStage";
 import { MusicBed, SpeechRange } from "./components/MusicBed";
 import { TreasuryOverlayCard } from "./compositions/TreasuryOverlayCard";
@@ -345,8 +346,17 @@ export const ReadingRoomEpisodeMaster: React.FC<EpisodeMasterProps> = ({
     DEFAULT_EPISODE_MASTER_PLAN.musicStemId ||
     "02-ledger-investigation";
 
+  const activeBeat = activeBeatInfo.beat;
+  const activeIsFullscreen = activeBeat?.framing === "fullscreen-cutaway";
+  const activeIsDepthBeat =
+    Boolean(activeBeat) &&
+    !activeIsFullscreen &&
+    (Boolean(activeBeat.depthSandwich) ||
+      activeBeat.layering === "behind-presenter" ||
+      activeBeat.typographyMode === "behind-presenter-monolith");
+
   const spineTransform = computeCameraTransformForBeat(
-    activeBeatInfo.beat,
+    activeBeat,
     activeBeatInfo.localFrame,
     activeBeatInfo.beatFrames
   );
@@ -366,6 +376,8 @@ export const ReadingRoomEpisodeMaster: React.FC<EpisodeMasterProps> = ({
             objectFit="cover"
             style={{ width: "100%", height: "100%" }}
           />
+        ) : activeIsDepthBeat ? (
+          <CameraPreviewStage previewMode="simulated-room" />
         ) : (
           <PresenterDepthStage mode="simulated-depth" preset="behind-shoulder-billboard" />
         )}

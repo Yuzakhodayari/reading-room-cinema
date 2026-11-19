@@ -316,123 +316,206 @@ export function evaluateBomVaporizer(
   const zeta = clampRange(config.dampingZeta ?? 0.92, 0.2, 0.995);
   const seedBase = config.seed ?? hashStringSeed(config.id);
 
+  const sliceCount = config.slices.length;
+  const slotGapPx = sliceCount > 1 ? 4 : 0;
   const sumRatios = config.slices.reduce((acc, s) => acc + s.heightRatio, 0) || 1;
+  const totalGapBudget = Math.max(0, sliceCount - 1) * slotGapPx;
+  const bodyBudgetPx = Math.max(sliceCount * 18, totalStackPx - totalGapBudget);
+  const minSliceBase =
+    sliceCount > 0 ? Math.min(26, (bodyBudgetPx / sliceCount) * 0.65) : 0;
+  const flexBudget = Math.max(0, bodyBudgetPx - sliceCount * minSliceBase);
 
-  // Compute each slice's vaporization state first (ordered bottom-to-top: index 0 = bottom foundation)
-  let cumulativeRestingBottom = 0;
-  let cumulativeTargetBottom = 0;
+  const vapWindow = 0.11;
+
+  // Pass 1: Compute per-slice base height, current collapsed height, opacity, and embers
+  const baseHeights: number[] = [];
+  const currentHeights: number[] = [];
+  const vapProgresses: number[] = [];
+  const easedVaps: number[] = [];
+  const opacities: number[] = [];
+  const contribGaps: number[] = [];
+  const sliceEmbers: VaporEmberParticle[][] = [];
+
   let vaporizedHeightAccum = 0;
+  let totalCurrentHeightPx = 0;
 
-  const sliceStates: BomSlicePhysicsState[] = [];
-
-  for (let i = 0; i < config.slices.length; i++) {
+  for (let i = 0; i < sliceCount; i++) {
     const spec = config.slices[i];
-    const baseHeightPx = (spec.heightRatio / sumRatios) * totalStackPx;
+    const baseHeightPx =
+      minSliceBase + (spec.heightRatio / sumRatios) * flexBudget;
     const triggerProg = spec.vaporizeAtProgress ?? 0.34 + i * 0.05;
 
     let vapP = 0;
     if (spec.vaporizable && progress > triggerProg) {
-      vapP = clamp01((progress - triggerProg) / 0.16);
+      vapP = clamp01((progress - triggerProg) / vapWindow);
     }
 
     const easedVap = vapP * vapP * (3 - 2 * vapP);
-    const currentHeightPx = baseHeightPx * (1 - easedVap);
+    const currentHeightPx = spec.vaporizable
+      ? baseHeightPx * (1 - easedVap)
+      : baseHeightPx;
+    const fadeRatio = clamp01(vapP / 0.88);
+    const fadeSmooth = fadeRatio * fadeRatio * (3 - 2 * fadeRatio);
+    const opacity = spec.vaporizable ? clamp01(1 - fadeSmooth) : 1;
+    const contribGap =
+      currentHeightPx <= 0.01
+        ? 0
+        : spec.vaporizable
+          ? slotGapPx * (1 - easedVap)
+          : slotGapPx;
+
     if (spec.vaporizable) {
       vaporizedHeightAccum += baseHeightPx * easedVap;
     }
+    totalCurrentHeightPx += currentHeightPx;
 
-    // Gap opened beneath this slice due to lower vaporized slices
-    const dropGapPx = cumulativeRestingBottom - cumulativeTargetBottom;
-    let settledBottom = cumulativeRestingBottom;
+    // Deterministic vapor embers strictly confined inside the dissolving row gap
+    const embers: VaporEmberParticle[] = [];
+    if (vapP > 0.02 && vapP < 0.92 && currentHeightPx > 1) {
+      const prng = mulberry32(seedBase + i * 977);
+      const maxHalfDy = Math.max(1.5, currentHeightPx * 0.34);
+      for (let k = 0; k < 12; k++) {
+        const dirX = prng() > 0.5 ? 1 : -1;
+        const dirY = prng() > 0.5 ? 1 : -1;
+        const spreadX = (14 + prng() * 110) * dirX;
+        const offsetY = prng() * maxHalfDy * dirY;
+        embers.push({
+          dx: spreadX * (0.25 + vapP * 0.75),
+          dy: offsetY,
+          opacity: Math.sin(clamp01(vapP / 0.92) * Math.PI) * 0.88,
+          radiusPx: 1.8 + prng() * 2.1,
+        });
+      }
+    }
+
+    baseHeights.push(baseHeightPx);
+    currentHeights.push(currentHeightPx);
+    vapProgresses.push(vapP);
+    easedVaps.push(easedVap);
+    opacities.push(opacity);
+    contribGaps.push(contribGap);
+    sliceEmbers.push(embers);
+  }
+
+  // Pass 2 (strictly bottom-to-top): Compute non-overlapping positions with gravity + damped landing bounce
+  const sliceStates: BomSlicePhysicsState[] = [];
+
+  for (let i = 0; i < sliceCount; i++) {
+    const spec = config.slices[i];
+    const currentHeightPx = currentHeights[i];
+    const easedVap = easedVaps[i];
+
+    // Strict non-penetration support ceiling above ALL lower visible slices j < i
+    let supportTop = 0;
+    for (let j = 0; j < i; j++) {
+      const lower = sliceStates[j];
+      if (lower.currentHeightPx > 0.01) {
+        const lowerTopWithGap =
+          lower.bottomOffsetPx + lower.currentHeightPx + contribGaps[j];
+        if (lowerTopWithGap > supportTop) {
+          supportTop = lowerTopWithGap;
+        }
+      }
+    }
+
+    let settledBottom = supportTop;
     let squashX = 1;
     let squashY = 1;
 
-    if (!spec.vaporizable && dropGapPx > 0.25) {
-      // Find earliest vaporization start among lower vaporizable slices
-      let earliestLowerTrigger = 1;
+    if (!spec.vaporizable) {
+      // Find last vaporizable slice below i to drive clean final drop & zeta = 0.92 landing bounce
+      let lastVapIdx = -1;
+      let finalNonVapSupportTop = 0;
       for (let j = 0; j < i; j++) {
         if (config.slices[j].vaporizable) {
-          earliestLowerTrigger = Math.min(
-            earliestLowerTrigger,
-            config.slices[j].vaporizeAtProgress ?? 0.34 + j * 0.05
-          );
+          lastVapIdx = j;
+        } else {
+          finalNonVapSupportTop += baseHeights[j] + slotGapPx;
         }
       }
-      const dropStartFrame = Math.round((earliestLowerTrigger + 0.08) * safeTotal);
-      const dropElapsedSec = Math.max(0, (frame - dropStartFrame) / safeFps);
 
-      // Free-fall duration t_fall = sqrt(2 * h / g), followed by zeta = 0.92 damped impact bounce
-      const fallDurationSec = Math.sqrt((2 * dropGapPx) / Math.max(200, gravity));
-      if (dropElapsedSec <= 0) {
-        settledBottom = cumulativeRestingBottom;
-      } else if (dropElapsedSec < fallDurationSec) {
-        const fallen = 0.5 * gravity * dropElapsedSec * dropElapsedSec;
-        settledBottom = Math.max(
-          cumulativeTargetBottom,
-          cumulativeRestingBottom - fallen
-        );
-      } else {
-        const bounceSec = dropElapsedSec - fallDurationSec;
-        const impactVel = gravity * fallDurationSec;
-        const omegaN = 22.0;
-        const omegaD = omegaN * Math.sqrt(1 - zeta * zeta);
-        const decay = Math.exp(-zeta * omegaN * bounceSec);
-        // Upward rebound arch with zeta = 0.92 high damping
-        const reboundHeight =
-          Math.abs(Math.sin(omegaD * bounceSec)) *
-          decay *
-          Math.min(26, impactVel * 0.032);
-        settledBottom = cumulativeTargetBottom + reboundHeight;
+      if (lastVapIdx !== -1) {
+        const lastVapTrigger =
+          config.slices[lastVapIdx].vaporizeAtProgress ??
+          0.34 + lastVapIdx * 0.05;
+        const dropStartProg = lastVapTrigger + 0.025;
 
-        const impactPulse = Math.exp(-Math.pow(bounceSec * 14, 2)) * 0.055;
-        squashY = 1 - impactPulse;
-        squashX = 1 + impactPulse * 0.75;
-      }
-    } else if (spec.vaporizable) {
-      settledBottom =
-        cumulativeTargetBottom + (cumulativeRestingBottom - cumulativeTargetBottom) * (1 - easedVap);
-    }
+        if (progress >= dropStartProg) {
+          // Exact support top at dropStartProg guarantees C^0 continuity with zero pop
+          let startBottom = 0;
+          for (let j = 0; j < i; j++) {
+            const sj = config.slices[j];
+            const tj = sj.vaporizeAtProgress ?? 0.34 + j * 0.05;
+            const pj =
+              sj.vaporizable && dropStartProg > tj
+                ? clamp01((dropStartProg - tj) / vapWindow)
+                : 0;
+            const ej = pj * pj * (3 - 2 * pj);
+            const hj = sj.vaporizable ? baseHeights[j] * (1 - ej) : baseHeights[j];
+            const gj =
+              hj <= 0.01 ? 0 : sj.vaporizable ? slotGapPx * (1 - ej) : slotGapPx;
+            if (hj > 0.01) {
+              startBottom += hj + gj;
+            }
+          }
 
-    // Deterministic vapor embers when slice is actively vaporizing
-    const embers: VaporEmberParticle[] = [];
-    if (vapP > 0.02 && vapP < 0.99) {
-      const prng = mulberry32(seedBase + i * 977);
-      for (let k = 0; k < 10; k++) {
-        const dir = prng() > 0.5 ? 1 : -1;
-        const speedX = (28 + prng() * 85) * dir;
-        const liftY = -(18 + prng() * 54);
-        embers.push({
-          dx: speedX * vapP,
-          dy: liftY * vapP,
-          opacity: Math.sin(vapP * Math.PI) * 0.85,
-          radiusPx: 2.2 + prng() * 2.8,
-        });
+          const dropGapPx = Math.max(0, startBottom - finalNonVapSupportTop);
+          if (dropGapPx > 0.25) {
+            const dropStartFrame = Math.round(dropStartProg * safeTotal);
+            const dropElapsedSec = Math.max(0, (frame - dropStartFrame) / safeFps);
+            const fallDurationSec = Math.sqrt(
+              (2 * dropGapPx) / Math.max(200, gravity)
+            );
+
+            if (dropElapsedSec < fallDurationSec) {
+              const fallen = 0.5 * gravity * dropElapsedSec * dropElapsedSec;
+              settledBottom = Math.max(supportTop, startBottom - fallen);
+            } else {
+              const bounceSec = dropElapsedSec - fallDurationSec;
+              const impactVel = gravity * fallDurationSec;
+              const omegaN = 22.0;
+              const omegaD = omegaN * Math.sqrt(1 - zeta * zeta);
+              const decay = Math.exp(-zeta * omegaN * bounceSec);
+              const reboundHeight =
+                Math.abs(Math.sin(omegaD * bounceSec)) *
+                decay *
+                Math.min(24, impactVel * 0.032);
+              settledBottom = Math.max(
+                supportTop,
+                finalNonVapSupportTop + reboundHeight
+              );
+
+              if (supportTop <= finalNonVapSupportTop + 0.6) {
+                const impactPulse = Math.exp(-Math.pow(bounceSec * 14, 2)) * 0.055;
+                squashY = 1 - impactPulse;
+                squashX = 1 + impactPulse * 0.75;
+              }
+            }
+          }
+        }
       }
     }
 
     sliceStates.push({
       id: spec.id,
-      baseHeightPx,
+      baseHeightPx: baseHeights[i],
       currentHeightPx,
       bottomOffsetPx: settledBottom,
-      vaporizeProgress: vapP,
-      opacity: spec.vaporizable ? clamp01(1 - easedVap * 1.05) : 1,
-      driftX: spec.vaporizable ? easedVap * (i % 2 === 0 ? 34 : -34) : 0,
+      vaporizeProgress: vapProgresses[i],
+      opacity: opacities[i],
+      driftX: spec.vaporizable ? easedVap * (i % 2 === 0 ? 28 : -28) : 0,
       squashScaleX: squashX,
       squashScaleY: squashY,
-      embers,
+      embers: sliceEmbers[i],
     });
-
-    cumulativeRestingBottom += baseHeightPx;
-    cumulativeTargetBottom += currentHeightPx;
   }
 
   return {
     kind: "bom-vaporizer",
     id: config.id,
     totalInitialHeightPx: totalStackPx,
-    totalCurrentHeightPx: cumulativeTargetBottom,
-    vaporizedShareRatio: clamp01(vaporizedHeightAccum / Math.max(1, totalStackPx)),
+    totalCurrentHeightPx,
+    vaporizedShareRatio: clamp01(vaporizedHeightAccum / Math.max(1, bodyBudgetPx)),
     slices: sliceStates,
   };
 }

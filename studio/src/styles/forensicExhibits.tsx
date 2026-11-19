@@ -1,5 +1,7 @@
 import React from "react";
+import { evolvePath } from "@remotion/paths";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { fitSvgTextToWidth, FontMetricFamily } from "../design/fitText";
 import { FONTS, TABULAR_NUM_STYLE } from "../design/fonts";
 import { HighlighterStroke, OpticalLoupe, ReadingRoomStage } from "../design/optics";
 import {
@@ -30,6 +32,34 @@ export interface BaseForensicProps {
   atFrame?: number;
 }
 
+export interface ForensicRenderContext {
+  elapsed: number;
+  enter: number;
+  progress: number;
+  settleProgress: number;
+  isGlass: boolean;
+  isDark: boolean;
+  registerId: RegisterId;
+  viewW: number;
+  viewH: number;
+  inkPrimary: string;
+  inkSecondary: string;
+  inkMuted: string;
+  ruleHairline: string;
+  ruleOxford: string;
+  accentLiability: string;
+  accentLiabilityStroke: string;
+  accentSolvent: string;
+  accentCapital: string;
+  accentStatutory: string;
+  bgElevated: string;
+  bgRecessed: string;
+  riskFill: string;
+  riskBorder: string;
+  highlighterWash: string;
+  solidBadgeInk: string;
+}
+
 interface ForensicStageFrameProps extends BaseForensicProps {
   defaultTitle: string;
   defaultSubtitle?: string;
@@ -37,24 +67,62 @@ interface ForensicStageFrameProps extends BaseForensicProps {
   defaultVerdict: string;
   defaultCitation: string;
   panVerticalPx?: number;
-  children: (ctx: {
-    elapsed: number;
-    enter: number;
-    progress: number;
-    isGlass: boolean;
-    inkPrimary: string;
-    inkSecondary: string;
-    inkMuted: string;
-    ruleHairline: string;
-    ruleOxford: string;
-    accentLiability: string;
-    accentSolvent: string;
-    accentCapital: string;
-    accentStatutory: string;
-    bgElevated: string;
-    bgRecessed: string;
-  }) => React.ReactNode;
+  children: (ctx: ForensicRenderContext) => React.ReactNode;
 }
+
+interface FittedSvgLabelProps {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  fontSize: number;
+  minFontSize?: number;
+  fontKind?: FontMetricFamily;
+  fontFamily: string;
+  fontWeight?: number | string;
+  fill: string;
+  textAnchor?: "start" | "middle" | "end";
+  opacity?: number;
+}
+
+const FittedSvgLabel: React.FC<FittedSvgLabelProps> = ({
+  text,
+  x,
+  y,
+  maxWidth,
+  fontSize,
+  minFontSize,
+  fontKind = "mono",
+  fontFamily,
+  fontWeight = 700,
+  fill,
+  textAnchor = "start",
+  opacity = 1,
+}) => {
+  const fitted = fitSvgTextToWidth(
+    text,
+    Math.max(16, maxWidth),
+    fontSize,
+    minFontSize ?? Math.max(9, fontSize * 0.68),
+    fontKind,
+    { fontWeight }
+  );
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor={textAnchor}
+      fontFamily={fontFamily}
+      fontSize={fitted.fontSize}
+      fontWeight={fontWeight}
+      fill={fill}
+      opacity={opacity}
+      style={TABULAR_NUM_STYLE}
+    >
+      {fitted.text}
+    </text>
+  );
+};
 
 const ForensicStageFrame: React.FC<ForensicStageFrameProps> = ({
   title,
@@ -80,6 +148,7 @@ const ForensicStageFrame: React.FC<ForensicStageFrameProps> = ({
   const elapsed = frame - atFrame;
   const enter = spring({ frame: elapsed, fps, config: CINEMA_SPRINGS.editorialSnap });
   const progress = interpolate(elapsed, [4, 40], [0, 1], CLAMP);
+  const settleProgress = interpolate(progress, [0.1, 0.56], [0, 1], CLAMP);
 
   const resolvedTitle = title ?? defaultTitle;
   const resolvedSub = subtitle ?? defaultSubtitle;
@@ -102,7 +171,7 @@ const ForensicStageFrame: React.FC<ForensicStageFrameProps> = ({
           WebkitBackdropFilter: "blur(12px) saturate(165%) brightness(0.68)",
           border: `1.5px solid ${OVER_FOOTAGE_PALETTE.glassBorder}`,
           borderRadius: "18px",
-          padding: "26px 28px",
+          padding: "24px 26px",
           boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
@@ -111,48 +180,114 @@ const ForensicStageFrame: React.FC<ForensicStageFrameProps> = ({
           opacity: enter,
           transform: `translate3d(${((1 - enter) * 30).toFixed(2)}px, 0, 0)`,
           userSelect: "none",
+          overflow: "hidden",
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: OVER_FOOTAGE_PALETTE.accentPrimary,
+            opacity: 0.72,
+          }}
+        />
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontFamily: FONTS.mono, fontSize: "11px", fontWeight: 700, color: OVER_FOOTAGE_PALETTE.accentPrimary, letterSpacing: "0.09em" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+            <span
+              style={{
+                fontFamily: FONTS.mono,
+                fontSize: "11.5px",
+                fontWeight: 700,
+                color: OVER_FOOTAGE_PALETTE.accentPrimary,
+                letterSpacing: "0.08em",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
               {resolvedDocket}
             </span>
-            <span style={{ backgroundColor: OVER_FOOTAGE_PALETTE.brickRedFill, color: OVER_FOOTAGE_PALETTE.textHeadline, fontFamily: FONTS.mono, fontSize: "11.5px", fontWeight: 700, padding: "3px 9px", borderRadius: "4px", ...TABULAR_NUM_STYLE }}>
+            <span
+              style={{
+                backgroundColor: OVER_FOOTAGE_PALETTE.brickRedFill,
+                color: OVER_FOOTAGE_PALETTE.textHeadline,
+                fontFamily: FONTS.mono,
+                fontSize: "12px",
+                fontWeight: 700,
+                padding: "4px 9px",
+                borderRadius: "4px",
+                flexShrink: 0,
+                ...TABULAR_NUM_STYLE,
+              }}
+            >
               {resolvedVerdict}
             </span>
           </div>
-          <h2 style={{ margin: "10px 0 0 0", fontFamily: FONTS.serif, fontSize: "25px", lineHeight: 1.18, color: OVER_FOOTAGE_PALETTE.textHeadline }}>
+          <h2
+            style={{
+              margin: "10px 0 0 0",
+              fontFamily: FONTS.serif,
+              fontSize: "24px",
+              fontWeight: 700,
+              lineHeight: 1.18,
+              color: OVER_FOOTAGE_PALETTE.textHeadline,
+              textShadow: OVER_FOOTAGE_PALETTE.textShadow,
+            }}
+          >
             {resolvedTitle}
           </h2>
           {resolvedSub && (
-            <div style={{ marginTop: "5px", fontFamily: FONTS.sans, fontSize: "13.5px", color: OVER_FOOTAGE_PALETTE.textBody, lineHeight: 1.4 }}>
+            <div style={{ marginTop: "5px", fontFamily: FONTS.sans, fontSize: "14px", color: OVER_FOOTAGE_PALETTE.textBody, lineHeight: 1.38 }}>
               {resolvedSub}
             </div>
           )}
         </div>
 
-        <div style={{ flex: 1, marginTop: "16px", marginBottom: "14px", overflow: "hidden", position: "relative" }}>
+        <div style={{ flex: 1, minHeight: 0, marginTop: "14px", marginBottom: "12px", overflow: "hidden", position: "relative" }}>
           {children({
             elapsed,
             enter,
             progress,
+            settleProgress,
             isGlass: true,
+            isDark: true,
+            registerId: register,
+            viewW: 600,
+            viewH: 380,
             inkPrimary: OVER_FOOTAGE_PALETTE.textHeadline,
             inkSecondary: OVER_FOOTAGE_PALETTE.textBody,
             inkMuted: OVER_FOOTAGE_PALETTE.textMuted,
             ruleHairline: OVER_FOOTAGE_PALETTE.glassInnerHairline,
             ruleOxford: OVER_FOOTAGE_PALETTE.accentPrimary,
             accentLiability: OVER_FOOTAGE_PALETTE.brickRedText,
+            accentLiabilityStroke: OVER_FOOTAGE_PALETTE.brickRedFill,
             accentSolvent: OVER_FOOTAGE_PALETTE.chartSecondary,
             accentCapital: OVER_FOOTAGE_PALETTE.accentWarm,
             accentStatutory: OVER_FOOTAGE_PALETTE.accentPrimary,
             bgElevated: OVER_FOOTAGE_PALETTE.glassDarkWell,
             bgRecessed: "rgba(15, 25, 35, 0.62)",
+            riskFill: OVER_FOOTAGE_PALETTE.riskFill,
+            riskBorder: OVER_FOOTAGE_PALETTE.riskBorder,
+            highlighterWash: OVER_FOOTAGE_PALETTE.highlightSweep,
+            solidBadgeInk: "#FFF6E5",
           })}
         </div>
 
-        <div style={{ borderTop: `1px solid ${OVER_FOOTAGE_PALETTE.glassInnerHairline}`, paddingTop: "10px", fontFamily: FONTS.mono, fontSize: "11px", color: OVER_FOOTAGE_PALETTE.textMuted }}>
+        <div
+          style={{
+            borderTop: `1px solid ${OVER_FOOTAGE_PALETTE.glassInnerHairline}`,
+            paddingTop: "10px",
+            fontFamily: FONTS.mono,
+            fontSize: "11.5px",
+            color: OVER_FOOTAGE_PALETTE.textMuted,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           § {resolvedCite}
         </div>
       </div>
@@ -161,6 +296,13 @@ const ForensicStageFrame: React.FC<ForensicStageFrameProps> = ({
 
   const pal = resolveRegisterPalette(register);
   const panY = interpolate(progress, [0, 1], [0, panVerticalPx], CLAMP);
+  const enterY = interpolate(enter, [0, 1], [28, 0]);
+  const cardShadow = pal.isDark
+    ? "0 24px 52px -14px rgba(4, 8, 14, 0.56), 0 4px 16px rgba(4, 8, 14, 0.36)"
+    : "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)";
+  const riskFill = pal.isDark ? "rgba(232, 93, 78, 0.16)" : PAGE_PALETTE.riskFill;
+  const riskBorder = pal.isDark ? pal.accent.liabilityStroke : PAGE_PALETTE.riskBorder;
+  const badgeFill = pal.isDark ? pal.accent.liabilityStroke : pal.rule.oxford;
 
   return (
     <ReadingRoomStage
@@ -175,49 +317,139 @@ const ForensicStageFrame: React.FC<ForensicStageFrameProps> = ({
           position: "absolute",
           left: LAYOUT.safeMargin,
           right: LAYOUT.safeMargin,
-          top: 98,
-          bottom: 76,
+          top: 94,
+          bottom: 70,
           display: "flex",
           flexDirection: "column",
           opacity: enter,
-          transform: `translate3d(0, ${panY.toFixed(2)}px, 0)`,
+          transform: `translate3d(0, ${(enterY + panY).toFixed(2)}px, 0)`,
           userSelect: "none",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", paddingBottom: "16px", borderBottom: `2px solid ${pal.rule.oxford}` }}>
-          <div style={{ maxWidth: "1260px" }}>
-            <h1 style={{ margin: 0, fontFamily: FONTS.serif, fontSize: "42px", fontWeight: 700, lineHeight: 1.12, color: pal.ink.primary }}>
-              {resolvedTitle}
-            </h1>
-            {resolvedSub && (
-              <div style={{ marginTop: "6px", fontFamily: FONTS.sans, fontSize: "18px", color: pal.ink.secondary, ...TABULAR_NUM_STYLE }}>
-                {resolvedSub}
-              </div>
-            )}
-          </div>
-          <div style={{ backgroundColor: pal.bg.elevated, border: `2px solid ${pal.accent.liabilityStroke}`, padding: "8px 18px", borderRadius: "6px", fontFamily: FONTS.mono, fontSize: "18px", fontWeight: 700, color: pal.accent.liability, flexShrink: 0, ...TABULAR_NUM_STYLE }}>
-            {resolvedVerdict}
-          </div>
-        </div>
+        {/* Elevated Broadcast Exhibit Card */}
+        <div
+          style={{
+            position: "relative",
+            flex: 1,
+            minHeight: 0,
+            backgroundColor: pal.bg.elevated,
+            border: `1px solid ${pal.rule.hairline}`,
+            borderRadius: "12px",
+            boxShadow: cardShadow,
+            padding: "28px 42px 24px 42px",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          {/* 4px Top Accent Rule */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "4px",
+              backgroundColor: pal.isDark ? pal.accent.statutory : pal.rule.oxford,
+              borderTopLeftRadius: "12px",
+              borderTopRightRadius: "12px",
+            }}
+          />
 
-        <div style={{ flex: 1, marginTop: "20px", position: "relative" }}>
-          {children({
-            elapsed,
-            enter,
-            progress,
-            isGlass: false,
-            inkPrimary: pal.ink.primary,
-            inkSecondary: pal.ink.secondary,
-            inkMuted: pal.ink.muted,
-            ruleHairline: pal.rule.hairline,
-            ruleOxford: pal.rule.oxford,
-            accentLiability: pal.accent.liability,
-            accentSolvent: pal.accent.solvent,
-            accentCapital: pal.accent.capital,
-            accentStatutory: pal.accent.statutory,
-            bgElevated: pal.bg.elevated,
-            bgRecessed: pal.bg.recessed,
-          })}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-end",
+              gap: "32px",
+              paddingBottom: "16px",
+              borderBottom: `2px solid ${pal.rule.oxford}`,
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ maxWidth: "1240px", minWidth: 0 }}>
+              <div
+                style={{
+                  fontFamily: FONTS.mono,
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  color: pal.accent.liability,
+                  marginBottom: "5px",
+                  textTransform: "uppercase",
+                }}
+              >
+                {resolvedDocket}
+              </div>
+              <h1 style={{ margin: 0, fontFamily: FONTS.serif, fontSize: "38px", fontWeight: 700, lineHeight: 1.13, letterSpacing: "-0.01em", color: pal.ink.primary }}>
+                {resolvedTitle}
+              </h1>
+              {resolvedSub && (
+                <div style={{ marginTop: "6px", fontFamily: FONTS.sans, fontSize: "17.5px", color: pal.ink.secondary, lineHeight: 1.35, ...TABULAR_NUM_STYLE }}>
+                  {resolvedSub}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0 }}>
+              <div
+                style={{
+                  backgroundColor: badgeFill,
+                  color: "#FAF8F3",
+                  padding: "8px 16px",
+                  borderRadius: "6px",
+                  fontFamily: FONTS.mono,
+                  fontSize: "19px",
+                  fontWeight: 700,
+                  ...TABULAR_NUM_STYLE,
+                }}
+              >
+                {resolvedVerdict}
+              </div>
+              <div
+                style={{
+                  fontFamily: FONTS.mono,
+                  fontSize: "11px",
+                  color: pal.ink.muted,
+                  maxWidth: "340px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {resolvedCite}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, minHeight: 0, marginTop: "20px", position: "relative" }}>
+            {children({
+              elapsed,
+              enter,
+              progress,
+              settleProgress,
+              isGlass: false,
+              isDark: pal.isDark,
+              registerId: pal.id,
+              viewW: 1560,
+              viewH: 620,
+              inkPrimary: pal.ink.primary,
+              inkSecondary: pal.ink.secondary,
+              inkMuted: pal.ink.muted,
+              ruleHairline: pal.rule.hairline,
+              ruleOxford: pal.rule.oxford,
+              accentLiability: pal.accent.liability,
+              accentLiabilityStroke: pal.accent.liabilityStroke,
+              accentSolvent: pal.accent.solvent,
+              accentCapital: pal.accent.capital,
+              accentStatutory: pal.accent.statutory,
+              bgElevated: pal.bg.elevated,
+              bgRecessed: pal.bg.recessed,
+              riskFill,
+              riskBorder,
+              highlighterWash: pal.accent.highlighterWash,
+              solidBadgeInk: "#FAF8F3",
+            })}
+          </div>
         </div>
       </div>
     </ReadingRoomStage>
@@ -260,66 +492,120 @@ export const FiscalLedgerTableStage: React.FC<FiscalLedgerTableStageProps> = ({
       panVerticalPx={-10}
       {...base}
     >
-      {(ctx) => (
-        <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "24px 30px", display: "flex", flexDirection: "column", gap: "12px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "90px 1.6fr 0.7fr 0.7fr 0.8fr", paddingBottom: "12px", borderBottom: `2px solid ${ctx.ruleOxford}`, fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.inkMuted, letterSpacing: "0.08em" }}>
-            <span>CODE</span>
-            <span>STATUTORY LINE ITEM</span>
-            <span style={{ textAlign: "right" }}>PRIOR FY</span>
-            <span style={{ textAlign: "right" }}>AUDITED</span>
-            <span style={{ textAlign: "right" }}>DELTA / SHARE</span>
-          </div>
+      {(ctx) => {
+        if (ctx.isGlass) {
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", height: "100%", justifyContent: "space-between" }}>
+              {rows.map((r, i) => (
+                <div
+                  key={`fltg-${r.lineCode}-${i}`}
+                  style={{
+                    backgroundColor: r.highlighted ? ctx.riskFill : ctx.bgElevated,
+                    border: `1px solid ${r.highlighted ? ctx.riskBorder : ctx.ruleHairline}`,
+                    borderRadius: "8px",
+                    padding: "11px 14px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: "11px", fontWeight: 700, color: ctx.inkMuted }}>
+                      {r.lineCode}{r.statuteNote ? ` · ${r.statuteNote}` : ""}
+                    </div>
+                    <div style={{ fontFamily: FONTS.sans, fontSize: "15px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "2px", lineHeight: 1.25 }}>
+                      {r.category}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: "18px", fontWeight: 700, color: r.highlighted ? ctx.accentLiability : ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
+                      {r.currentValue}
+                    </div>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: "11.5px", fontWeight: 700, color: r.highlighted ? ctx.accentLiability : ctx.inkMuted, ...TABULAR_NUM_STYLE }}>
+                      {r.deltaBadge}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        }
 
-          {rows.map((r, i) => {
-            const rowSweep = interpolate(ctx.elapsed, [8 + i * 5, 26 + i * 5], [0, 1], CLAMP);
-            return (
-              <div
-                key={`flt-${r.lineCode}-${i}`}
-                style={{
-                  position: "relative",
-                  display: "grid",
-                  gridTemplateColumns: "90px 1.6fr 0.7fr 0.7fr 0.8fr",
-                  alignItems: "center",
-                  padding: "18px 12px",
-                  borderRadius: "6px",
-                  backgroundColor: r.highlighted ? ctx.bgRecessed : "transparent",
-                  borderBottom: `1px solid ${ctx.ruleHairline}`,
-                }}
-              >
-                {r.highlighted && !ctx.isGlass && (
-                  <div style={{ position: "absolute", left: "96px", top: "12px", zIndex: 0 }}>
-                    <HighlighterStroke width={520} height={34} progress={rowSweep} register="archival_parchment" seed={17 + i} />
-                  </div>
-                )}
-                <span style={{ position: "relative", zIndex: 1, fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.inkMuted, ...TABULAR_NUM_STYLE }}>
-                  {r.lineCode}
-                </span>
-                <div style={{ position: "relative", zIndex: 1 }}>
-                  <div style={{ fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "15px" : "20px", fontWeight: 700, color: ctx.inkPrimary }}>
-                    {r.category}
-                  </div>
-                  {r.statuteNote && (
-                    <div style={{ fontFamily: FONTS.mono, fontSize: "11.5px", color: ctx.accentStatutory, marginTop: "2px" }}>
-                      {r.statuteNote}
+        return (
+          <div style={{ backgroundColor: ctx.bgRecessed, border: `1px solid ${ctx.ruleHairline}`, borderRadius: "10px", padding: "22px 28px", display: "flex", flexDirection: "column", gap: "10px", height: "100%", boxSizing: "border-box", justifyContent: "space-between" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "90px 1.6fr 0.7fr 0.7fr 0.85fr", paddingBottom: "10px", borderBottom: `2px solid ${ctx.ruleOxford}`, fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.inkMuted, letterSpacing: "0.08em" }}>
+              <span>CODE</span>
+              <span>STATUTORY LINE ITEM</span>
+              <span style={{ textAlign: "right" }}>PRIOR FY</span>
+              <span style={{ textAlign: "right" }}>AUDITED</span>
+              <span style={{ textAlign: "right" }}>DELTA / SHARE</span>
+            </div>
+
+            {rows.map((r, i) => {
+              const rowSweep = interpolate(ctx.elapsed, [8 + i * 4, 24 + i * 4], [0, 1], CLAMP);
+              return (
+                <div
+                  key={`flt-${r.lineCode}-${i}`}
+                  style={{
+                    position: "relative",
+                    display: "grid",
+                    gridTemplateColumns: "90px 1.6fr 0.7fr 0.7fr 0.85fr",
+                    alignItems: "center",
+                    padding: "16px 12px",
+                    borderRadius: "6px",
+                    backgroundColor: r.highlighted ? ctx.bgElevated : "transparent",
+                    borderBottom: `1px solid ${ctx.ruleHairline}`,
+                  }}
+                >
+                  {r.highlighted && (
+                    <div style={{ position: "absolute", left: "96px", top: "10px", zIndex: 0 }}>
+                      <HighlighterStroke width={520} height={34} progress={rowSweep} register={ctx.registerId} seed={17 + i} />
                     </div>
                   )}
-                </div>
-                <span style={{ position: "relative", zIndex: 1, textAlign: "right", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "15px" : "21px", color: ctx.inkSecondary, ...TABULAR_NUM_STYLE }}>
-                  {r.priorValue}
-                </span>
-                <span style={{ position: "relative", zIndex: 1, textAlign: "right", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "17px" : "24px", fontWeight: 700, color: r.highlighted ? ctx.accentLiability : ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
-                  {r.currentValue}
-                </span>
-                <div style={{ position: "relative", zIndex: 1, textAlign: "right" }}>
-                  <span style={{ display: "inline-block", padding: "4px 10px", borderRadius: "4px", backgroundColor: r.highlighted ? PAGE_PALETTE.brickRed : ctx.bgRecessed, color: r.highlighted ? "#FAF8F3" : ctx.inkSecondary, fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, ...TABULAR_NUM_STYLE }}>
-                    {r.deltaBadge}
+                  <span style={{ position: "relative", zIndex: 1, fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.inkMuted, ...TABULAR_NUM_STYLE }}>
+                    {r.lineCode}
                   </span>
+                  <div style={{ position: "relative", zIndex: 1 }}>
+                    <div style={{ fontFamily: FONTS.sans, fontSize: "20px", fontWeight: 700, color: ctx.inkPrimary }}>
+                      {r.category}
+                    </div>
+                    {r.statuteNote && (
+                      <div style={{ fontFamily: FONTS.mono, fontSize: "12px", color: ctx.accentStatutory, marginTop: "2px" }}>
+                        {r.statuteNote}
+                      </div>
+                    )}
+                  </div>
+                  <span style={{ position: "relative", zIndex: 1, textAlign: "right", fontFamily: FONTS.mono, fontSize: "21px", color: ctx.inkSecondary, ...TABULAR_NUM_STYLE }}>
+                    {r.priorValue}
+                  </span>
+                  <span style={{ position: "relative", zIndex: 1, textAlign: "right", fontFamily: FONTS.mono, fontSize: "24px", fontWeight: 700, color: r.highlighted ? ctx.accentLiability : ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
+                    {r.currentValue}
+                  </span>
+                  <div style={{ position: "relative", zIndex: 1, textAlign: "right" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "4px 10px",
+                        borderRadius: "4px",
+                        backgroundColor: r.highlighted ? ctx.accentLiabilityStroke : ctx.bgRecessed,
+                        border: `1px solid ${r.highlighted ? ctx.accentLiabilityStroke : ctx.ruleHairline}`,
+                        color: r.highlighted ? "#FAF8F3" : ctx.inkSecondary,
+                        fontFamily: FONTS.mono,
+                        fontSize: "12.5px",
+                        fontWeight: 700,
+                        ...TABULAR_NUM_STYLE,
+                      }}
+                    >
+                      {r.deltaBadge}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      }}
     </ForensicStageFrame>
   );
 };
@@ -357,41 +643,61 @@ export const ClaimVsRealityCollision: React.FC<ClaimVsRealityCollisionProps> = (
       {...base}
     >
       {(ctx) => {
-        const collide = interpolate(ctx.progress, [0, 0.65], [48, 0], CLAMP);
+        const collide = interpolate(ctx.settleProgress, [0, 0.85], [38, 0], CLAMP);
         return (
-          <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", gap: "32px", height: "100%", alignItems: "stretch", position: "relative" }}>
-            {/* Left Verified Post / Podcast Card */}
-            <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "12px", padding: "36px", display: "flex", flexDirection: "column", justifyContent: "space-between", transform: `translate3d(${(-collide).toFixed(1)}px, 0, 0)` }}>
+          <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", gap: ctx.isGlass ? "14px" : "28px", height: "100%", alignItems: "stretch", position: "relative" }}>
+            <div
+              style={{
+                backgroundColor: ctx.bgRecessed,
+                border: `1.5px solid ${ctx.ruleOxford}`,
+                borderRadius: "12px",
+                padding: ctx.isGlass ? "16px 18px" : "34px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                transform: `translate3d(${(-collide).toFixed(1)}px, 0, 0)`,
+              }}
+            >
               <div>
                 <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentStatutory, letterSpacing: "0.08em" }}>
                   ● {speakerHandle}
                 </div>
-                <div style={{ fontFamily: FONTS.sans, fontSize: "21px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "6px" }}>
+                <div style={{ fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "17px" : "21px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "6px" }}>
                   {speakerName}
                 </div>
-                <blockquote style={{ margin: "24px 0 0 0", fontFamily: FONTS.serif, fontStyle: "italic", fontSize: ctx.isGlass ? "19px" : "30px", lineHeight: 1.34, color: ctx.inkPrimary }}>
+                <blockquote style={{ margin: ctx.isGlass ? "10px 0 0 0" : "22px 0 0 0", fontFamily: FONTS.serif, fontStyle: "italic", fontSize: ctx.isGlass ? "16px" : "29px", lineHeight: 1.35, color: ctx.inkPrimary }}>
                   {claimText}
                 </blockquote>
               </div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: "12px", color: ctx.inkMuted }}>
+              <div style={{ fontFamily: FONTS.mono, fontSize: "12px", color: ctx.inkMuted, marginTop: "8px" }}>
                 {claimDate}
               </div>
             </div>
 
-            {/* Right Brick-Red Hard Ledger Wall */}
-            <div style={{ backgroundColor: ctx.isGlass ? OVER_FOOTAGE_PALETTE.riskFill : PAGE_PALETTE.riskFill, border: `2.5px solid ${PAGE_PALETTE.brickRed}`, borderRadius: "12px", padding: "36px", display: "flex", flexDirection: "column", justifyContent: "space-between", transform: `translate3d(${collide.toFixed(1)}px, 0, 0)` }}>
+            <div
+              style={{
+                backgroundColor: ctx.riskFill,
+                border: `2px solid ${ctx.accentLiabilityStroke}`,
+                borderRadius: "12px",
+                padding: ctx.isGlass ? "16px 18px" : "34px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                transform: `translate3d(${collide.toFixed(1)}px, 0, 0)`,
+              }}
+            >
               <div>
-                <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentLiability, letterSpacing: "0.1em" }}>
+                <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentLiability, letterSpacing: "0.1em" }}>
                   ■ {realityTitle}
                 </div>
-                <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "26px" : "42px", fontWeight: 700, color: ctx.accentLiability, marginTop: "18px", lineHeight: 1.12, ...TABULAR_NUM_STYLE }}>
+                <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "21px" : "38px", fontWeight: 700, color: ctx.accentLiability, marginTop: ctx.isGlass ? "8px" : "16px", lineHeight: 1.14, overflowWrap: "break-word", ...TABULAR_NUM_STYLE }}>
                   {realityFigure}
                 </div>
-                <p style={{ margin: "20px 0 0 0", fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "14.5px" : "20px", lineHeight: 1.5, color: ctx.inkPrimary }}>
+                <p style={{ margin: ctx.isGlass ? "8px 0 0 0" : "18px 0 0 0", fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "14.5px" : "20px", lineHeight: 1.46, color: ctx.inkPrimary }}>
                   {realityDetail}
                 </p>
               </div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentLiability }}>
+              <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentLiability, marginTop: "8px" }}>
                 VERDICT: NON-NEGOTIABLE CASH SETTLEMENT REQUIRED
               </div>
             </div>
@@ -403,7 +709,7 @@ export const ClaimVsRealityCollision: React.FC<ClaimVsRealityCollisionProps> = (
 };
 
 // ============================================================================
-// 3. SupremeCourtSyllabusStage (Wielechowski v. State · $3,900 -> $1,000 Drop)
+// 3. SupremeCourtSyllabusStage (Museum-Grade Judicial Exhibit + PFD Sparkline)
 // ============================================================================
 export interface SupremeCourtSyllabusStageProps extends BaseForensicProps {
   caseCaption?: string;
@@ -414,63 +720,379 @@ export interface SupremeCourtSyllabusStageProps extends BaseForensicProps {
   actualPayout?: number;
 }
 
+const JudicialBalanceSealSvg: React.FC<{ stroke: string; accent: string; size?: number }> = ({
+  stroke,
+  accent,
+  size = 52,
+}) => (
+  <svg width={size} height={size} viewBox="0 0 56 56" style={{ flexShrink: 0 }}>
+    <circle cx={28} cy={28} r={25} fill="none" stroke={accent} strokeWidth="2" />
+    <circle cx={28} cy={28} r={21} fill="none" stroke={stroke} strokeWidth="1" strokeDasharray="3 2" />
+    {/* Balance Beam */}
+    <line x1={28} y1={12} x2={28} y2={42} stroke={stroke} strokeWidth="2.2" strokeLinecap="round" />
+    <line x1={18} y1={42} x2={38} y2={42} stroke={stroke} strokeWidth="2.4" strokeLinecap="round" />
+    <line x1={14} y1={20} x2={42} y2={20} stroke={accent} strokeWidth="2.2" strokeLinecap="round" />
+    {/* Left & Right Pans */}
+    <path d="M 14 20 L 10 30 L 18 30 Z" fill="none" stroke={stroke} strokeWidth="1.4" strokeLinejoin="round" />
+    <path d="M 10 30 Q 14 34 18 30" fill={accent} opacity={0.45} stroke={stroke} strokeWidth="1.4" />
+    <path d="M 42 20 L 38 30 L 46 30 Z" fill="none" stroke={stroke} strokeWidth="1.4" strokeLinejoin="round" />
+    <path d="M 38 30 Q 42 34 46 30" fill={accent} opacity={0.45} stroke={stroke} strokeWidth="1.4" />
+    <circle cx={28} cy={14} r={2.4} fill={accent} />
+  </svg>
+);
+
 export const SupremeCourtSyllabusStage: React.FC<SupremeCourtSyllabusStageProps> = ({
   caseCaption = "Wielechowski v. State of Alaska",
   citationNumber = "403 P.3d 1141 (Alaska 2017)",
-  voteSplit = "UNANIMOUS HOLDING",
+  voteSplit,
   holdingSummary = "Statutory dividend formulas do not bind annual legislative appropriations; resource dividends remain subject to executive line-item veto whenever state fiscal deficits widen.",
-  formulaPayout = 3900,
-  actualPayout = 1000,
+  formulaPayout,
+  actualPayout,
   ...base
 }) => {
+  // Align 2016 Wielechowski ($2,052 -> $1,022, -50%) vs 2025 ($3,900 -> $1,000, -74%) coherently
+  const badgeOrTitleHints2016 =
+    base.verdictBadge?.includes("-50") ||
+    voteSplit?.includes("-50") ||
+    /2016/.test(`${caseCaption} ${base.title ?? ""} ${base.sourceCitation ?? ""}`);
+
+  const resolvedFormula =
+    formulaPayout !== undefined
+      ? formulaPayout
+      : badgeOrTitleHints2016 && actualPayout === undefined
+      ? 2052
+      : 3900;
+
+  const resolvedActual =
+    actualPayout !== undefined
+      ? actualPayout
+      : badgeOrTitleHints2016 && formulaPayout === undefined
+      ? 1022
+      : 1000;
+
+  const cutPct = Math.round(((resolvedActual - resolvedFormula) / Math.max(1, resolvedFormula)) * 100);
+  const cutLabel = `${cutPct}%`;
+  const resolvedVerdict =
+    base.verdictBadge && !/^-?\d+%$/.test(base.verdictBadge.trim())
+      ? base.verdictBadge
+      : voteSplit && !/^-?\d+%$/.test(voteSplit.trim())
+      ? voteSplit
+      : `VETO CUT: ${cutLabel}`;
+
+  const sparkMilestones: ReadonlyArray<{ yr: string; usd: number }> = [
+    { yr: "1982", usd: 1000 },
+    { yr: "2008", usd: 2069 },
+    { yr: "2015", usd: 2072 },
+    { yr: "2016", usd: 1022 },
+    { yr: "2025", usd: 1000 },
+  ];
+
   return (
     <ForensicStageFrame
       defaultDocket={`SUPREME COURT SYLLABUS · ${citationNumber}`}
       defaultTitle={caseCaption}
-      defaultVerdict={voteSplit}
+      defaultVerdict={resolvedVerdict}
       defaultCitation={`${caseCaption}, ${citationNumber} · Permanent Fund Dividend Veto`}
       {...base}
+      verdictBadge={resolvedVerdict}
     >
       {(ctx) => {
-        const dropMix = interpolate(ctx.progress, [0.25, 0.85], [0, 1], CLAMP);
-        const currentBarVal = Math.round(formulaPayout - (formulaPayout - actualPayout) * dropMix);
-        return (
-          <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1.2fr 0.8fr", gap: "36px", height: "100%" }}>
-            <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "36px 42px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-              <div>
-                <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentStatutory, letterSpacing: "0.1em" }}>
-                  SYLLABUS OF THE COURT · CONSTITUTIONAL APPROPRIATIONS CLAUSE
+        const dropMix = interpolate(ctx.progress, [0.12, 0.56], [0, 1], CLAMP);
+        const currentBarVal = Math.round(resolvedFormula - (resolvedFormula - resolvedActual) * dropMix);
+        const sweepProgress = interpolate(ctx.progress, [0.22, 0.58], [0, 1], CLAMP);
+
+        if (ctx.isGlass) {
+          const barW = 540;
+          const barH = 165;
+          const leftBarH = 104;
+          const rightBarH = Math.max(22, (currentBarVal / Math.max(1, resolvedFormula)) * leftBarH);
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", gap: "10px" }}>
+              {/* Compact Docket Header & 3-Row Ledger */}
+              <div style={{ backgroundColor: ctx.bgElevated, border: `1px solid ${ctx.ruleHairline}`, borderRadius: "8px", padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                  <JudicialBalanceSealSvg stroke={ctx.inkPrimary} accent={ctx.accentCapital} size={36} />
+                  <div>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: "11px", fontWeight: 700, color: ctx.accentStatutory }}>ALASKA SUPREME COURT (EN BANC)</div>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: "12px", color: ctx.inkMuted, ...TABULAR_NUM_STYLE }}>{citationNumber}</div>
+                  </div>
                 </div>
-                <p style={{ margin: "22px 0 0 0", fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "18px" : "26px", lineHeight: 1.48, color: ctx.inkPrimary }}>
+                <div style={{ borderTop: `1px solid ${ctx.ruleHairline}`, paddingTop: "6px", fontFamily: FONTS.mono, fontSize: "11.5px", color: ctx.accentCapital }}>
+                  CLAUSE: Alaska Const. art. IX, § 15
+                </div>
+                <p style={{ margin: "8px 0 0 0", fontFamily: FONTS.serif, fontSize: "14.5px", lineHeight: 1.38, color: ctx.inkPrimary }}>
                   {holdingSummary}
                 </p>
               </div>
-              <div style={{ borderTop: `1px solid ${ctx.ruleHairline}`, paddingTop: "16px", fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.accentLiability }}>
+
+              {/* Compact Comparative Bar Drop + Sparkline Readout */}
+              <div style={{ backgroundColor: ctx.bgRecessed, border: `1px solid ${ctx.ruleHairline}`, borderRadius: "8px", padding: "10px 12px" }}>
+                <svg viewBox={`0 0 ${barW} ${barH}`} style={{ width: "100%", height: "152px", display: "block" }}>
+                  <line x1={24} y1={134} x2={barW - 24} y2={134} stroke={ctx.ruleOxford} strokeWidth="2" />
+                  {/* Statutory Bar */}
+                  <rect x={84} y={134 - leftBarH} width={116} height={leftBarH} rx={5} fill={ctx.accentStatutory} />
+                  <FittedSvgLabel text={`$${resolvedFormula.toLocaleString()}`} x={142} y={134 - leftBarH - 8} maxWidth={140} fontSize={18} fontFamily={FONTS.mono} fill={ctx.inkPrimary} textAnchor="middle" />
+                  <FittedSvgLabel text="STATUTORY" x={142} y={156} maxWidth={150} fontSize={14.5} fontFamily={FONTS.mono} fill={ctx.inkSecondary} textAnchor="middle" />
+
+                  {/* Reference Line */}
+                  <line x1={200} y1={134 - leftBarH} x2={340} y2={134 - leftBarH} stroke={ctx.accentLiability} strokeWidth="1.6" strokeDasharray="5 4" />
+
+                  {/* Appropriated Veto Bar */}
+                  <rect x={340} y={134 - rightBarH} width={116} height={rightBarH} rx={5} fill={ctx.accentLiability} />
+                  <FittedSvgLabel text={`$${currentBarVal.toLocaleString()}`} x={398} y={134 - rightBarH - 8} maxWidth={140} fontSize={19} fontFamily={FONTS.mono} fill={ctx.accentLiability} textAnchor="middle" />
+                  <FittedSvgLabel text={`AFTER VETO (${cutLabel})`} x={398} y={156} maxWidth={190} fontSize={14.5} fontFamily={FONTS.mono} fill={ctx.accentLiability} textAnchor="middle" />
+                </svg>
+                <div style={{ borderTop: `1px solid ${ctx.ruleHairline}`, paddingTop: "6px", fontFamily: FONTS.mono, fontSize: "11.5px", color: ctx.inkMuted, textAlign: "center", ...TABULAR_NUM_STYLE }}>
+                  PFD EROSION: 2015 $2,072 → 2016 $1,022 → 2025 $1,000
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Fullscreen Museum-Grade Judicial Exhibit (Page Mode)
+        const barSvgW = 480;
+        const barSvgH = 264;
+        const barBaseY = 224;
+        const maxBarH = 160;
+        const leftH = maxBarH;
+        const rightH = Math.max(26, (currentBarVal / Math.max(1, resolvedFormula)) * maxBarH);
+
+        const spW = 480;
+        const spH = 148;
+        const spPadL = 36;
+        const spPadR = 36;
+        const spBaseY = 104;
+        const spTopY = 28;
+        const spMaxUsd = 2300;
+        const spX = (idx: number): number => spPadL + (idx / (sparkMilestones.length - 1)) * (spW - spPadL - spPadR);
+        const spY = (usd: number): number => spBaseY - (usd / spMaxUsd) * (spBaseY - spTopY);
+        const spPts = sparkMilestones.map((m, idx) => `${idx === 0 ? "M" : "L"} ${spX(idx).toFixed(1)} ${spY(m.usd).toFixed(1)}`).join(" ");
+        const spEv = evolvePath(ctx.settleProgress, spPts);
+
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "1.22fr 0.78fr", gap: "28px", height: "100%" }}>
+            {/* LEFT COLUMN: Official Judicial Docket & Syllabus Plate */}
+            <div
+              style={{
+                backgroundColor: ctx.bgRecessed,
+                border: `1.5px solid ${ctx.ruleOxford}`,
+                borderRadius: "10px",
+                padding: "26px 32px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "16px",
+              }}
+            >
+              {/* Court Header + Brass/Ink Balance Seal */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1.5px solid ${ctx.ruleOxford}`, paddingBottom: "14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <JudicialBalanceSealSvg stroke={ctx.ruleOxford} accent={ctx.accentCapital} size={54} />
+                  <div>
+                    <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, letterSpacing: "0.1em", color: ctx.accentStatutory }}>
+                      SUPREME COURT OF THE STATE OF ALASKA
+                    </div>
+                    <div style={{ fontFamily: FONTS.serif, fontSize: "22px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "2px" }}>
+                      Syllabus of the Court · Constitutional Appropriations Clause
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Structured 3-Row Docket Ledger */}
+              <div
+                style={{
+                  backgroundColor: ctx.bgElevated,
+                  border: `1px solid ${ctx.ruleHairline}`,
+                  borderRadius: "8px",
+                  overflow: "hidden",
+                }}
+              >
+                {[
+                  { k: "COURT", v: "Alaska Supreme Court (En Banc · Slip Opinion)" },
+                  { k: "DOCKET / CITATION", v: citationNumber },
+                  { k: "CONTROLLING CLAUSE", v: "Alaska Const. art. IX, § 15 (Dedicated Funds & Veto Power)" },
+                ].map((row, idx) => (
+                  <div
+                    key={`sc-row-${row.k}`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "190px 1fr",
+                      alignItems: "center",
+                      padding: "10px 16px",
+                      borderBottom: idx < 2 ? `1px solid ${ctx.ruleHairline}` : "none",
+                      gap: "12px",
+                    }}
+                  >
+                    <span style={{ fontFamily: FONTS.mono, fontSize: "11.5px", fontWeight: 700, letterSpacing: "0.08em", color: ctx.inkMuted }}>
+                      {row.k}
+                    </span>
+                    <span style={{ fontFamily: FONTS.mono, fontSize: "14px", fontWeight: 700, color: idx === 2 ? ctx.accentLiability : ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
+                      {row.v}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Syllabus Holding With Animated Yellow Highlighter Sweep */}
+              <div
+                style={{
+                  position: "relative",
+                  backgroundColor: ctx.bgElevated,
+                  border: `1px solid ${ctx.ruleHairline}`,
+                  borderLeft: `5px solid ${ctx.accentStatutory}`,
+                  borderRadius: "8px",
+                  padding: "20px 24px",
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ position: "relative", width: "100%" }}>
+                  <div style={{ position: "absolute", left: 0, top: "42px", zIndex: 0 }}>
+                    <HighlighterStroke width={680} height={34} progress={sweepProgress} register={ctx.registerId} seed={33} />
+                  </div>
+                  <p style={{ position: "relative", zIndex: 1, margin: 0, fontFamily: FONTS.serif, fontSize: "23.5px", lineHeight: 1.44, color: ctx.inkPrimary }}>
+                    “{holdingSummary}”
+                  </p>
+                </div>
+              </div>
+
+              {/* Precedent Rule Callout */}
+              <div
+                style={{
+                  backgroundColor: ctx.riskFill,
+                  border: `1px solid ${ctx.riskBorder}`,
+                  borderRadius: "6px",
+                  padding: "12px 16px",
+                  fontFamily: FONTS.mono,
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color: ctx.accentLiability,
+                  letterSpacing: "0.04em",
+                }}
+              >
                 PRECEDENT: SOVEREIGN DEFICITS OVERRIDE UNIVERSAL DIVIDEND FORMULAS
               </div>
             </div>
 
-            <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "32px 36px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-              <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.inkMuted }}>
-                STATUTORY FORMULA VS. APPROPRIATED PAYOUT
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", height: "300px", paddingBottom: "12px", borderBottom: `2px solid ${ctx.ruleOxford}` }}>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: "20px", fontWeight: 700, color: ctx.inkSecondary, marginBottom: "8px", ...TABULAR_NUM_STYLE }}>
-                    ${formulaPayout.toLocaleString()}
-                  </div>
-                  <div style={{ width: "96px", height: "230px", backgroundColor: ctx.accentStatutory, borderRadius: "4px" }} />
+            {/* RIGHT COLUMN: Comparative Payout Drop + 1982-2025 PFD Erosion Sparkline */}
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "16px" }}>
+              {/* Comparative Bar Drop Card */}
+              <div
+                style={{
+                  flex: 1,
+                  backgroundColor: ctx.bgRecessed,
+                  border: `1.5px solid ${ctx.ruleOxford}`,
+                  borderRadius: "10px",
+                  padding: "20px 24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, letterSpacing: "0.08em", color: ctx.inkMuted }}>
+                    STATUTORY FORMULA VS. APPROPRIATED PAYOUT
+                  </span>
+                  <span style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentLiability, ...TABULAR_NUM_STYLE }}>
+                    {cutLabel} CUT
+                  </span>
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: "24px", fontWeight: 700, color: ctx.accentLiability, marginBottom: "8px", ...TABULAR_NUM_STYLE }}>
-                    ${currentBarVal.toLocaleString()}
-                  </div>
-                  <div style={{ width: "96px", height: `${Math.max(36, (currentBarVal / Math.max(1, formulaPayout)) * 230).toFixed(1)}px`, backgroundColor: ctx.accentLiability, borderRadius: "4px" }} />
-                </div>
+
+                <svg viewBox={`0 0 ${barSvgW} ${barSvgH}`} style={{ width: "100%", height: "252px" }}>
+                  {[0, 0.5, 1].map((u, idx) => {
+                    const gy = barBaseY - u * maxBarH;
+                    const gVal = Math.round(u * resolvedFormula);
+                    return (
+                      <g key={`sc-bg-${idx}`}>
+                        <line x1={68} y1={gy} x2={barSvgW - 24} y2={gy} stroke={ctx.ruleHairline} strokeWidth="1" strokeDasharray={idx === 0 ? undefined : "4 4"} />
+                        <FittedSvgLabel text={`$${gVal.toLocaleString()}`} x={60} y={gy + 4} maxWidth={56} fontSize={12} fontFamily={FONTS.mono} fontWeight={500} fill={ctx.inkMuted} textAnchor="end" />
+                      </g>
+                    );
+                  })}
+
+                  <line x1={68} y1={barBaseY} x2={barSvgW - 24} y2={barBaseY} stroke={ctx.ruleOxford} strokeWidth="2" />
+
+                  {/* Statutory Bar */}
+                  <rect x={118} y={barBaseY - leftH} width={104} height={leftH} rx={5} fill={ctx.accentStatutory} />
+                  <FittedSvgLabel text={`$${resolvedFormula.toLocaleString()}`} x={170} y={barBaseY - leftH - 12} maxWidth={140} fontSize={22} fontFamily={FONTS.mono} fill={ctx.inkPrimary} textAnchor="middle" />
+                  <FittedSvgLabel text="STATUTORY" x={170} y={barBaseY + 26} maxWidth={140} fontSize={13.5} fontFamily={FONTS.mono} fill={ctx.inkSecondary} textAnchor="middle" />
+
+                  {/* Dashed Drop Guide + Arrow */}
+                  <line x1={222} y1={barBaseY - leftH} x2={382} y2={barBaseY - leftH} stroke={ctx.accentLiability} strokeWidth="1.8" strokeDasharray="5 4" />
+                  <line x1={330} y1={barBaseY - leftH + 6} x2={330} y2={barBaseY - rightH - 8} stroke={ctx.accentLiability} strokeWidth="2" opacity={dropMix} />
+
+                  {/* Vetoed Bar */}
+                  <rect x={278} y={barBaseY - rightH} width={104} height={rightH} rx={5} fill={ctx.accentLiability} />
+                  <FittedSvgLabel text={`$${currentBarVal.toLocaleString()}`} x={330} y={barBaseY - rightH - 12} maxWidth={140} fontSize={24} fontFamily={FONTS.mono} fill={ctx.accentLiability} textAnchor="middle" />
+                  <FittedSvgLabel text={`AFTER VETO (${cutLabel})`} x={330} y={barBaseY + 26} maxWidth={180} fontSize={13.5} fontFamily={FONTS.mono} fill={ctx.accentLiability} textAnchor="middle" />
+                </svg>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-around", fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.inkPrimary }}>
-                <span>STATUTORY</span>
-                <span style={{ color: ctx.accentLiability }}>AFTER VETO (-74%)</span>
+
+              {/* 1982–2025 PFD Erosion Mini-Sparkline Strip */}
+              <div
+                style={{
+                  backgroundColor: ctx.bgElevated,
+                  border: `1px solid ${ctx.ruleHairline}`,
+                  borderRadius: "10px",
+                  padding: "16px 20px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontFamily: FONTS.mono, fontSize: "11.5px", fontWeight: 700, letterSpacing: "0.08em", color: ctx.inkMuted }}>
+                    1982–2025 PFD PAYOUT EROSION STRIP
+                  </span>
+                  <span style={{ fontFamily: FONTS.mono, fontSize: "11.5px", fontWeight: 700, color: ctx.accentLiability, ...TABULAR_NUM_STYLE }}>
+                    2015: $2,072 → 2016: $1,022 → 2025: $1,000
+                  </span>
+                </div>
+
+                <svg viewBox={`0 0 ${spW} ${spH}`} style={{ width: "100%", height: "136px", display: "block" }}>
+                  <line x1={spPadL} y1={spBaseY} x2={spW - spPadR} y2={spBaseY} stroke={ctx.ruleHairline} strokeWidth="1.2" />
+                  <path
+                    d={spPts}
+                    fill="none"
+                    stroke={ctx.accentLiability}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray={spEv.strokeDasharray}
+                    strokeDashoffset={spEv.strokeDashoffset}
+                  />
+                  {sparkMilestones.map((m, idx) => {
+                    const cx = spX(idx);
+                    const cy = spY(m.usd);
+                    const isVeto = m.yr === "2016" || m.yr === "2025";
+                    return (
+                      <g key={`pfd-sp-${m.yr}`} opacity={ctx.settleProgress}>
+                        <circle cx={cx} cy={cy} r={isVeto ? 5.5 : 4.5} fill={isVeto ? ctx.accentLiability : ctx.accentStatutory} />
+                        <FittedSvgLabel
+                          text={`$${m.usd.toLocaleString()}`}
+                          x={cx}
+                          y={cy - 10}
+                          maxWidth={78}
+                          fontSize={12.5}
+                          fontFamily={FONTS.mono}
+                          fill={isVeto ? ctx.accentLiability : ctx.inkPrimary}
+                          textAnchor="middle"
+                        />
+                        <FittedSvgLabel
+                          text={m.yr}
+                          x={cx}
+                          y={spH - 12}
+                          maxWidth={64}
+                          fontSize={12.5}
+                          fontFamily={FONTS.mono}
+                          fill={ctx.inkMuted}
+                          textAnchor="middle"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
               </div>
             </div>
           </div>
@@ -519,14 +1141,14 @@ export const EscapeHatchSwitchboard: React.FC<EscapeHatchSwitchboardProps> = ({
       {...base}
     >
       {(ctx) => (
-        <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr 1fr", gap: "26px", height: "100%" }}>
+        <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr 1fr", gap: ctx.isGlass ? "10px" : "24px", height: "100%" }}>
           {bays.map((bay, idx) => {
             const isPriorLocked = idx < activeBayIndex && bay.isFailed;
             const isCurrentSlam = idx === activeBayIndex && bay.isFailed;
             const stampScale = isPriorLocked
               ? 1
               : isCurrentSlam
-              ? spring({ frame: Math.max(0, frame - (base.atFrame ?? 0) - 14), fps, config: CINEMA_SPRINGS.heavyStamp })
+              ? spring({ frame: Math.max(0, frame - (base.atFrame ?? 0) - 10), fps, config: CINEMA_SPRINGS.heavyStamp })
               : 0;
 
             return (
@@ -534,32 +1156,40 @@ export const EscapeHatchSwitchboard: React.FC<EscapeHatchSwitchboardProps> = ({
                 key={`ehs-${bay.bayNumber}`}
                 style={{
                   position: "relative",
-                  backgroundColor: bay.isFailed ? (ctx.isGlass ? OVER_FOOTAGE_PALETTE.riskFill : PAGE_PALETTE.riskFill) : ctx.bgElevated,
-                  border: `2px solid ${bay.isFailed ? PAGE_PALETTE.brickRed : ctx.ruleOxford}`,
-                  borderRadius: "12px",
-                  padding: "30px",
+                  backgroundColor: bay.isFailed ? ctx.riskFill : ctx.bgElevated,
+                  border: `2px solid ${bay.isFailed ? ctx.accentLiabilityStroke : ctx.ruleOxford}`,
+                  borderRadius: "10px",
+                  padding: ctx.isGlass ? "12px 16px" : "28px",
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "space-between",
+                  gap: ctx.isGlass ? "8px" : "16px",
                 }}
               >
                 <div>
-                  <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentLiability, letterSpacing: "0.1em", ...TABULAR_NUM_STYLE }}>
-                    {bay.bayNumber}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentLiability, letterSpacing: "0.1em", ...TABULAR_NUM_STYLE }}>
+                      {bay.bayNumber}
+                    </span>
+                    {ctx.isGlass && stampScale > 0.02 && (
+                      <span style={{ border: `2px solid ${ctx.accentLiabilityStroke}`, color: ctx.accentLiability, padding: "2px 8px", borderRadius: "4px", fontFamily: FONTS.mono, fontSize: "11px", fontWeight: 700 }}>
+                        ✗ {bay.stampText}
+                      </span>
+                    )}
                   </div>
-                  <h3 style={{ margin: "12px 0 0 0", fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "20px" : "30px", lineHeight: 1.18, color: ctx.inkPrimary }}>
+                  <h3 style={{ margin: ctx.isGlass ? "4px 0 0 0" : "12px 0 0 0", fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "17.5px" : "29px", lineHeight: 1.18, color: ctx.inkPrimary }}>
                     {bay.title}
                   </h3>
-                  <p style={{ margin: "16px 0 0 0", fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "13.5px" : "18px", lineHeight: 1.5, color: ctx.inkSecondary }}>
+                  <p style={{ margin: ctx.isGlass ? "4px 0 0 0" : "14px 0 0 0", fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "13.5px" : "18px", lineHeight: 1.44, color: ctx.inkSecondary }}>
                     {bay.mechanism}
                   </p>
                 </div>
 
-                {stampScale > 0.02 && (
+                {!ctx.isGlass && stampScale > 0.02 && (
                   <div
                     style={{
                       alignSelf: "flex-start",
-                      border: `3px solid ${PAGE_PALETTE.brickRed}`,
+                      border: `3px solid ${ctx.accentLiabilityStroke}`,
                       color: ctx.accentLiability,
                       padding: "8px 16px",
                       borderRadius: "4px",
@@ -612,10 +1242,55 @@ export const ArchivalRationBook1941: React.FC<ArchivalRationBook1941Props> = ({
       {...base}
     >
       {(ctx) => {
-        const stampedCount = Math.round(interpolate(ctx.progress, [0.1, 0.9], [2, redeemedCoupons], CLAMP));
+        const stampedCount = Math.round(interpolate(ctx.settleProgress, [0, 1], [2, redeemedCoupons], CLAMP));
+
+        if (ctx.isGlass) {
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "100%", justifyContent: "space-between" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "7px", backgroundColor: ctx.bgElevated, border: `1.5px dashed ${ctx.ruleOxford}`, borderRadius: "8px", padding: "12px", flex: 1 }}>
+                {cells.map((idx) => {
+                  const isUsed = idx < stampedCount;
+                  return (
+                    <div
+                      key={`rb41g-${idx}`}
+                      style={{
+                        border: `1.2px dashed ${isUsed ? ctx.accentLiability : ctx.ruleOxford}`,
+                        borderRadius: "5px",
+                        backgroundColor: isUsed ? ctx.bgRecessed : ctx.bgElevated,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "5px 4px",
+                        opacity: isUsed ? 0.68 : 1,
+                      }}
+                    >
+                      <span style={{ fontFamily: FONTS.mono, fontSize: "11px", color: ctx.inkMuted, ...TABULAR_NUM_STYLE }}>
+                        U{idx + 1 < 10 ? `0${idx + 1}` : idx + 1}
+                      </span>
+                      <span style={{ fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: isUsed ? ctx.accentLiability : ctx.accentSolvent, marginTop: "2px" }}>
+                        {isUsed ? "VOID" : "VALID"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ backgroundColor: ctx.bgRecessed, border: `1px solid ${ctx.ruleOxford}`, borderRadius: "8px", padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                <div style={{ fontFamily: FONTS.sans, fontSize: "13px", fontWeight: 700, color: ctx.inkSecondary, lineHeight: 1.25 }}>
+                  {cashBalanceLabel}
+                </div>
+                <div style={{ fontFamily: FONTS.mono, fontSize: "20px", fontWeight: 700, color: ctx.accentLiability, flexShrink: 0, ...TABULAR_NUM_STYLE }}>
+                  {count - stampedCount}/{count} LEFT
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
-          <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1.15fr 0.85fr", gap: "36px", height: "100%" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", backgroundColor: ctx.bgElevated, border: `2px dashed ${ctx.ruleOxford}`, borderRadius: "10px", padding: "24px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: "32px", height: "100%" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", backgroundColor: ctx.bgRecessed, border: `2px dashed ${ctx.ruleOxford}`, borderRadius: "10px", padding: "22px" }}>
               {cells.map((idx) => {
                 const isUsed = idx < stampedCount;
                 return (
@@ -630,7 +1305,7 @@ export const ArchivalRationBook1941: React.FC<ArchivalRationBook1941Props> = ({
                       alignItems: "center",
                       justifyContent: "center",
                       padding: "10px",
-                      opacity: isUsed ? 0.62 : 1,
+                      opacity: isUsed ? 0.65 : 1,
                     }}
                   >
                     <span style={{ fontFamily: FONTS.mono, fontSize: "12px", color: ctx.inkMuted, ...TABULAR_NUM_STYLE }}>
@@ -644,12 +1319,12 @@ export const ArchivalRationBook1941: React.FC<ArchivalRationBook1941Props> = ({
               })}
             </div>
 
-            <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "36px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+            <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "34px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div>
                 <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.inkMuted }}>
                   UNSPENT NOMINAL CURRENCY
                 </div>
-                <div style={{ fontFamily: FONTS.serif, fontSize: "30px", fontWeight: 700, color: ctx.inkSecondary, marginTop: "14px", lineHeight: 1.25 }}>
+                <div style={{ fontFamily: FONTS.serif, fontSize: "29px", fontWeight: 700, color: ctx.inkSecondary, marginTop: "14px", lineHeight: 1.25 }}>
                   {cashBalanceLabel}
                 </div>
               </div>
@@ -695,19 +1370,21 @@ export const FoiaRedactionDeclassify: React.FC<FoiaRedactionDeclassifyProps> = (
       {...base}
     >
       {(ctx) => {
-        const peel = interpolate(ctx.progress, [0.2, 0.85], [1, 0], CLAMP);
+        const peel = interpolate(ctx.settleProgress, [0.1, 0.95], [1, 0], CLAMP);
+        const blackoutColor = ctx.isDark ? ctx.ruleOxford : PAGE_PALETTE.navyDeep;
+
         return (
-          <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "42px 48px", display: "flex", flexDirection: "column", gap: "26px" }}>
+          <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "38px 46px", display: "flex", flexDirection: "column", gap: ctx.isGlass ? "14px" : "24px", height: "100%", boxSizing: "border-box", justifyContent: "center" }}>
             {clauses.map((cl, i) => (
-              <div key={`foia-${i}`} style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "14.5px" : "21px", lineHeight: 1.65, color: ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
+              <div key={`foia-${i}`} style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "14.5px" : "21px", lineHeight: 1.58, color: ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
                 <span>{cl.prefix}</span>
-                <span style={{ position: "relative", display: "inline-block", padding: "2px 8px", backgroundColor: cl.declassify ? "rgba(233, 196, 106, 0.35)" : "transparent", fontWeight: 700, color: cl.declassify ? ctx.accentLiability : ctx.inkPrimary }}>
+                <span style={{ position: "relative", display: "inline-block", padding: "2px 8px", backgroundColor: cl.declassify ? ctx.highlighterWash : "transparent", fontWeight: 700, color: cl.declassify ? ctx.accentLiability : ctx.inkPrimary }}>
                   {cl.classifiedSpan}
                   <span
                     style={{
                       position: "absolute",
                       inset: 0,
-                      backgroundColor: PAGE_PALETTE.navyDeep,
+                      backgroundColor: blackoutColor,
                       transform: `scaleX(${(cl.declassify ? peel : 1).toFixed(4)})`,
                       transformOrigin: "right center",
                     }}
@@ -748,26 +1425,28 @@ export const Sec10KFootnoteStretch: React.FC<Sec10KFootnoteStretchProps> = ({
       {...base}
     >
       {(ctx) => {
-        const stretchW = interpolate(ctx.progress, [0.15, 0.85], [420, 840], CLAMP);
+        const stretchPct = interpolate(ctx.settleProgress, [0, 1], [50, 100], CLAMP);
+        const barTextColor = ctx.isDark ? "#111315" : "#FAF8F3";
+
         return (
-          <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "38px 44px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", boxSizing: "border-box" }}>
+          <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "36px 42px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", boxSizing: "border-box" }}>
             <div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.inkMuted }}>
+              <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "11.5px" : "13px", fontWeight: 700, color: ctx.inkMuted }}>
                 PHYSICAL SILICON OBSOLESCENCE CADENCE (18–36 MONTHS)
               </div>
-              <div style={{ marginTop: "10px", width: "420px", height: "48px", backgroundColor: ctx.accentStatutory, borderRadius: "6px", display: "flex", alignItems: "center", paddingLeft: "18px", fontFamily: FONTS.mono, fontSize: "17px", fontWeight: 700, color: "#FAF8F3", ...TABULAR_NUM_STYLE }}>
-                PRIOR SCHEDULE · {priorLifeYears} YEARS
+              <div style={{ marginTop: "10px", width: "50%", minWidth: "210px", height: ctx.isGlass ? "44px" : "52px", backgroundColor: ctx.accentStatutory, borderRadius: "6px", display: "flex", alignItems: "center", paddingLeft: "16px", paddingRight: "12px", boxSizing: "border-box", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "14.5px" : "17px", fontWeight: 700, color: barTextColor, ...TABULAR_NUM_STYLE }}>
+                PRIOR · {priorLifeYears} YEARS
               </div>
 
-              <div style={{ marginTop: "34px", fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.accentLiability }}>
+              <div style={{ marginTop: ctx.isGlass ? "22px" : "34px", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "11.5px" : "13px", fontWeight: 700, color: ctx.accentLiability }}>
                 REVISED ACCOUNTING FOOTNOTE SCHEDULE
               </div>
-              <div style={{ marginTop: "10px", width: `${ctx.isGlass ? Math.min(500, stretchW) : stretchW}px`, height: "58px", backgroundColor: ctx.accentLiability, borderRadius: "6px", display: "flex", alignItems: "center", paddingLeft: "18px", fontFamily: FONTS.mono, fontSize: "18px", fontWeight: 700, color: "#FAF8F3", ...TABULAR_NUM_STYLE }}>
-                STRETCHED SCHEDULE · {newLifeYears} YEARS
+              <div style={{ marginTop: "10px", width: `${stretchPct.toFixed(1)}%`, height: ctx.isGlass ? "50px" : "60px", backgroundColor: ctx.accentLiability, borderRadius: "6px", display: "flex", alignItems: "center", paddingLeft: "16px", paddingRight: "12px", boxSizing: "border-box", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "15px" : "18px", fontWeight: 700, color: barTextColor, ...TABULAR_NUM_STYLE }}>
+                STRETCHED · {newLifeYears} YEARS
               </div>
             </div>
 
-            <div style={{ borderTop: `1px solid ${ctx.ruleHairline}`, paddingTop: "18px", fontFamily: FONTS.mono, fontSize: "22px", fontWeight: 700, color: ctx.accentLiability, ...TABULAR_NUM_STYLE }}>
+            <div style={{ borderTop: `1px solid ${ctx.ruleHairline}`, paddingTop: "14px", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "16px" : "22px", fontWeight: 700, color: ctx.accentLiability, ...TABULAR_NUM_STYLE }}>
               {epsBoostB}
             </div>
           </div>
@@ -809,12 +1488,19 @@ export const BdcPikScheduleExhibit: React.FC<BdcPikScheduleExhibitProps> = ({
       {...base}
     >
       {(ctx) => (
-        <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "30px 36px", display: "flex", flexDirection: "column", gap: "18px" }}>
+        <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "14px" : "28px 34px", display: "flex", flexDirection: "column", gap: ctx.isGlass ? "10px" : "16px", height: "100%", boxSizing: "border-box", justifyContent: "center" }}>
           {loans.map((ln, i) => (
-            <div key={`pik-${i}`} style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr auto" : "1.4fr 1fr 0.6fr 0.9fr", alignItems: "center", padding: "18px 20px", borderRadius: "8px", backgroundColor: ctx.bgRecessed, border: `1px solid ${ctx.ruleHairline}`, gap: "14px" }}>
-              <span style={{ fontFamily: FONTS.sans, fontSize: "19px", fontWeight: 700, color: ctx.inkPrimary }}>{ln.borrower}</span>
+            <div key={`pik-${i}`} style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr auto" : "1.4fr 1fr 0.6fr 0.9fr", alignItems: "center", padding: ctx.isGlass ? "12px 14px" : "18px 20px", borderRadius: "8px", backgroundColor: ctx.bgElevated, border: `1px solid ${ctx.ruleHairline}`, gap: "12px" }}>
+              <div>
+                <div style={{ fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "15.5px" : "19px", fontWeight: 700, color: ctx.inkPrimary }}>{ln.borrower}</div>
+                {ctx.isGlass && (
+                  <div style={{ fontFamily: FONTS.mono, fontSize: "12px", color: ctx.accentCapital, fontWeight: 700, marginTop: "3px", ...TABULAR_NUM_STYLE }}>
+                    {ln.couponSpec} · {ln.pikStatus}
+                  </div>
+                )}
+              </div>
               {!ctx.isGlass && <span style={{ fontFamily: FONTS.mono, fontSize: "15px", color: ctx.accentCapital, fontWeight: 700, ...TABULAR_NUM_STYLE }}>{ln.couponSpec}</span>}
-              <span style={{ fontFamily: FONTS.mono, fontSize: "20px", fontWeight: 700, color: ctx.inkPrimary, textAlign: "right", ...TABULAR_NUM_STYLE }}>{ln.parMillions}</span>
+              <span style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "17px" : "20px", fontWeight: 700, color: ctx.inkPrimary, textAlign: "right", ...TABULAR_NUM_STYLE }}>{ln.parMillions}</span>
               {!ctx.isGlass && <span style={{ fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.accentLiability, textAlign: "right" }}>{ln.pikStatus}</span>}
             </div>
           ))}
@@ -851,17 +1537,17 @@ export const StatutoryClauseHighlighter: React.FC<StatutoryClauseHighlighterProp
     >
       {(ctx) => {
         const inner = (
-          <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "48px 56px", position: "relative" }}>
-            <div style={{ fontFamily: FONTS.mono, fontSize: "14px", fontWeight: 700, color: ctx.accentStatutory, letterSpacing: "0.1em" }}>
+          <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "20px 22px" : "44px 52px", position: "relative" }}>
+            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "12.5px" : "14px", fontWeight: 700, color: ctx.accentStatutory, letterSpacing: "0.08em" }}>
               § {statuteHeading}
             </div>
-            <div style={{ position: "relative", marginTop: "24px" }}>
+            <div style={{ position: "relative", marginTop: ctx.isGlass ? "14px" : "24px" }}>
               {!ctx.isGlass && (
                 <div style={{ position: "absolute", left: 0, top: "6px", zIndex: 0 }}>
-                  <HighlighterStroke width={1040} height={42} progress={ctx.progress} register="archival_parchment" />
+                  <HighlighterStroke width={1040} height={42} progress={ctx.settleProgress} register={ctx.registerId} />
                 </div>
               )}
-              <p style={{ position: "relative", zIndex: 1, margin: 0, fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "20px" : "34px", lineHeight: 1.45, color: ctx.inkPrimary }}>
+              <p style={{ position: "relative", zIndex: 1, margin: 0, fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "18px" : "33px", lineHeight: 1.45, color: ctx.inkPrimary }}>
                 {clauseText}
               </p>
             </div>
@@ -871,8 +1557,8 @@ export const StatutoryClauseHighlighter: React.FC<StatutoryClauseHighlighterProp
         return (
           <div style={{ position: "relative", width: "100%", height: "100%" }}>
             {inner}
-            {enableLoupe && !ctx.isGlass && ctx.progress > 0.55 && (
-              <OpticalLoupe x={1180} y={210} radius={130} zoom={1.95} register="archival_parchment" label="OPERATIVE CLAUSE" enterFrame={18}>
+            {enableLoupe && !ctx.isGlass && ctx.settleProgress > 0.55 && (
+              <OpticalLoupe x={1140} y={200} radius={130} zoom={1.95} register={ctx.registerId} label="OPERATIVE CLAUSE" enterFrame={18}>
                 {inner}
               </OpticalLoupe>
             )}
@@ -907,21 +1593,21 @@ export const InsuranceRateHikeNotice: React.FC<InsuranceRateHikeNoticeProps> = (
       {...base}
     >
       {(ctx) => (
-        <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "40px 48px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", boxSizing: "border-box" }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: "13.5px", fontWeight: 700, color: ctx.accentLiability }}>
+        <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "38px 44px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", boxSizing: "border-box", gap: ctx.isGlass ? "12px" : "20px" }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "12px" : "13.5px", fontWeight: 700, color: ctx.accentLiability }}>
             ▲ {inspectionFlag}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "28px" }}>
-            <div style={{ backgroundColor: ctx.bgRecessed, padding: "28px", borderRadius: "8px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", gap: ctx.isGlass ? "12px" : "28px" }}>
+            <div style={{ backgroundColor: ctx.bgElevated, border: `1px solid ${ctx.ruleHairline}`, padding: ctx.isGlass ? "14px 16px" : "28px", borderRadius: "8px" }}>
               <div style={{ fontFamily: FONTS.mono, fontSize: "12px", color: ctx.inkMuted }}>PRIOR ANNUAL PREMIUM</div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "26px" : "46px", fontWeight: 700, color: ctx.inkSecondary, marginTop: "8px", ...TABULAR_NUM_STYLE }}>{priorPremium}</div>
+              <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "26px" : "46px", fontWeight: 700, color: ctx.inkSecondary, marginTop: "6px", ...TABULAR_NUM_STYLE }}>{priorPremium}</div>
             </div>
-            <div style={{ backgroundColor: PAGE_PALETTE.riskFill, border: `2px solid ${PAGE_PALETTE.brickRed}`, padding: "28px", borderRadius: "8px" }}>
-              <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: PAGE_PALETTE.brickRed }}>RENEWAL / DICTATED ESCROW</div>
-              <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "26px" : "46px", fontWeight: 700, color: PAGE_PALETTE.brickRed, marginTop: "8px", ...TABULAR_NUM_STYLE }}>{renewalPremium}</div>
+            <div style={{ backgroundColor: ctx.riskFill, border: `2px solid ${ctx.accentLiabilityStroke}`, padding: ctx.isGlass ? "14px 16px" : "28px", borderRadius: "8px" }}>
+              <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentLiability }}>RENEWAL / DICTATED ESCROW</div>
+              <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "26px" : "46px", fontWeight: 700, color: ctx.accentLiability, marginTop: "6px", ...TABULAR_NUM_STYLE }}>{renewalPremium}</div>
             </div>
           </div>
-          <div style={{ fontFamily: FONTS.sans, fontSize: "18px", color: ctx.inkSecondary }}>
+          <div style={{ fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "14.5px" : "18px", color: ctx.inkSecondary, lineHeight: 1.38 }}>
             Mortgage covenant mandates continuous replacement-cost coverage; non-payment triggers technical loan default.
           </div>
         </div>
@@ -955,17 +1641,17 @@ export const IrsForm941FicaSplit: React.FC<IrsForm941FicaSplitProps> = ({
       {...base}
     >
       {(ctx) => (
-        <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", gap: "28px", height: "100%" }}>
-          <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "34px" }}>
-            <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentStatutory }}>LINE 5a/5c · EMPLOYEE WITHHOLDING</div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: "34px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "14px", ...TABULAR_NUM_STYLE }}>{employeeShare}</div>
-            <div style={{ marginTop: "28px", fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentCapital }}>EMPLOYER MATCHING PAYROLL TAX</div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: "34px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "14px", ...TABULAR_NUM_STYLE }}>{employerShare}</div>
+        <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", gap: ctx.isGlass ? "12px" : "28px", height: "100%" }}>
+          <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "16px 18px" : "34px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentStatutory }}>LINE 5a/5c · EMPLOYEE WITHHOLDING</div>
+            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "18px" : "32px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "8px", ...TABULAR_NUM_STYLE }}>{employeeShare}</div>
+            <div style={{ marginTop: ctx.isGlass ? "14px" : "28px", fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentCapital }}>EMPLOYER MATCHING PAYROLL TAX</div>
+            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "18px" : "32px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "8px", ...TABULAR_NUM_STYLE }}>{employerShare}</div>
           </div>
-          <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.accentLiability}`, borderRadius: "10px", padding: "34px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            <div style={{ fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.accentLiability }}>HUMAN VS. SILICON TAX WEDGE</div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "28px" : "42px", fontWeight: 700, color: ctx.accentLiability, marginTop: "14px", ...TABULAR_NUM_STYLE }}>{combinedRate}</div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: "18px", color: ctx.accentSolvent, marginTop: "18px", fontWeight: 700 }}>CLOUD GPU INFERENCE API · 0.00% FICA</div>
+          <div style={{ backgroundColor: ctx.riskFill, border: `2px solid ${ctx.accentLiabilityStroke}`, borderRadius: "10px", padding: ctx.isGlass ? "16px 18px" : "34px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentLiability }}>HUMAN VS. SILICON TAX WEDGE</div>
+            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "22px" : "40px", fontWeight: 700, color: ctx.accentLiability, marginTop: "10px", lineHeight: 1.15, ...TABULAR_NUM_STYLE }}>{combinedRate}</div>
+            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "14.5px" : "18px", color: ctx.accentSolvent, marginTop: "14px", fontWeight: 700 }}>CLOUD GPU INFERENCE API · 0.00% FICA</div>
           </div>
         </div>
       )}
@@ -1005,11 +1691,18 @@ export const SubseaSabotageIncidentLog: React.FC<SubseaSabotageIncidentLogProps>
       {...base}
     >
       {(ctx) => (
-        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: ctx.isGlass ? "12px" : "18px", height: "100%", justifyContent: "center" }}>
           {events.map((ev, i) => (
-            <div key={`ssil-${i}`} style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "90px 1fr" : "150px 1.2fr 0.7fr 1.1fr", alignItems: "center", padding: "22px 26px", backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "8px", fontFamily: FONTS.mono, ...TABULAR_NUM_STYLE }}>
-              <span style={{ fontSize: "16px", fontWeight: 700, color: ctx.accentCapital }}>{ev.utcTime}</span>
-              <span style={{ fontFamily: FONTS.sans, fontSize: "20px", fontWeight: 700, color: ctx.inkPrimary }}>{ev.cableName}</span>
+            <div key={`ssil-${i}`} style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "92px 1fr" : "150px 1.2fr 0.7fr 1.1fr", alignItems: "center", padding: ctx.isGlass ? "14px 16px" : "22px 26px", backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "8px", fontFamily: FONTS.mono, gap: "10px", ...TABULAR_NUM_STYLE }}>
+              <span style={{ fontSize: ctx.isGlass ? "13.5px" : "16px", fontWeight: 700, color: ctx.accentCapital }}>{ev.utcTime}</span>
+              <div>
+                <div style={{ fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "16px" : "20px", fontWeight: 700, color: ctx.inkPrimary }}>{ev.cableName}</div>
+                {ctx.isGlass && (
+                  <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentLiability, marginTop: "3px" }}>
+                    {ev.depthMeters} · {ev.status}
+                  </div>
+                )}
+              </div>
               {!ctx.isGlass && <span style={{ fontSize: "16px", color: ctx.inkSecondary }}>{ev.depthMeters}</span>}
               {!ctx.isGlass && <span style={{ fontSize: "15px", fontWeight: 700, color: ctx.accentLiability, textAlign: "right" }}>{ev.status}</span>}
             </div>
@@ -1047,10 +1740,16 @@ export const CongressionalHearingSlate: React.FC<CongressionalHearingSlateProps>
     {...base}
   >
     {(ctx) => (
-      <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderLeft: `8px solid ${ctx.accentLiability}`, borderRadius: "10px", padding: "48px 56px" }}>
-        <blockquote style={{ margin: 0, fontFamily: FONTS.serif, fontStyle: "italic", fontSize: ctx.isGlass ? "20px" : "36px", lineHeight: 1.4, color: ctx.inkPrimary }}>
+      <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderLeft: `8px solid ${ctx.accentLiabilityStroke}`, borderRadius: "10px", padding: ctx.isGlass ? "22px 24px" : "44px 52px", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, letterSpacing: "0.08em", color: ctx.accentLiability }}>
+          SWORN CONGRESSIONAL RECORD · OFFICIAL TRANSCRIPT
+        </div>
+        <blockquote style={{ margin: 0, fontFamily: FONTS.serif, fontStyle: "italic", fontSize: ctx.isGlass ? "19px" : "35px", lineHeight: 1.4, color: ctx.inkPrimary }}>
           {swornExcerpt}
         </blockquote>
+        <div style={{ borderTop: `1px solid ${ctx.ruleHairline}`, paddingTop: "12px", fontFamily: FONTS.mono, fontSize: "12.5px", color: ctx.inkMuted }}>
+          WITNESS: {witnessName.toUpperCase()} · {committee}
+        </div>
       </div>
     )}
   </ForensicStageFrame>
@@ -1077,14 +1776,14 @@ export const TreasuryTicLedgerExhibit: React.FC<TreasuryTicLedgerExhibitProps> =
     {...base}
   >
     {(ctx) => (
-      <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", gap: "28px" }}>
-        <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "36px" }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: "13px", color: ctx.inkMuted }}>OFFICIAL SOVEREIGN RESERVE SHARE</div>
-          <div style={{ fontFamily: FONTS.mono, fontSize: "28px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "14px", ...TABULAR_NUM_STYLE }}>{officialShare}</div>
+      <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", gap: ctx.isGlass ? "14px" : "28px", height: "100%" }}>
+        <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "36px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.inkMuted }}>OFFICIAL SOVEREIGN RESERVE SHARE</div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "20px" : "28px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "12px", lineHeight: 1.3, ...TABULAR_NUM_STYLE }}>{officialShare}</div>
         </div>
-        <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.accentSolvent}`, borderRadius: "10px", padding: "36px" }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: "13px", color: ctx.accentSolvent, fontWeight: 700 }}>CAPTIVE PRIVATE T-BILL CUSTODIANS</div>
-          <div style={{ fontFamily: FONTS.mono, fontSize: "28px", fontWeight: 700, color: ctx.accentSolvent, marginTop: "14px", ...TABULAR_NUM_STYLE }}>{privateRailShare}</div>
+        <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.accentSolvent}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "36px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", color: ctx.accentSolvent, fontWeight: 700 }}>CAPTIVE PRIVATE T-BILL CUSTODIANS</div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "20px" : "28px", fontWeight: 700, color: ctx.accentSolvent, marginTop: "12px", lineHeight: 1.3, ...TABULAR_NUM_STYLE }}>{privateRailShare}</div>
         </div>
       </div>
     )}
@@ -1114,10 +1813,27 @@ export const SpvCircularFlowSheet: React.FC<SpvCircularFlowSheetProps> = ({
     {...base}
   >
     {(ctx) => (
-      <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr 1fr", gap: "24px", alignItems: "stretch", height: "100%" }}>
+      <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr 1fr", gap: ctx.isGlass ? "12px" : "24px", alignItems: "stretch", height: "100%" }}>
         {nodes.map((nd, i) => (
-          <div key={`spv-${i}`} style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${i === 2 ? ctx.accentLiability : ctx.ruleOxford}`, borderRadius: "10px", padding: "32px", display: "flex", alignItems: "center", fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "16px" : "22px", fontWeight: 700, color: ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
-            {nd}
+          <div
+            key={`spv-${i}`}
+            style={{
+              backgroundColor: i === 2 ? ctx.riskFill : ctx.bgRecessed,
+              border: `2px solid ${i === 2 ? ctx.accentLiabilityStroke : ctx.ruleOxford}`,
+              borderRadius: "10px",
+              padding: ctx.isGlass ? "16px 18px" : "32px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: "8px",
+            }}
+          >
+            <span style={{ fontFamily: FONTS.mono, fontSize: "11.5px", fontWeight: 700, color: i === 2 ? ctx.accentLiability : ctx.inkMuted }}>
+              STEP 0{i + 1} {i === 2 ? "· REVENUE RECOGNIZED" : "→"}
+            </span>
+            <div style={{ fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "15.5px" : "22px", fontWeight: 700, color: ctx.inkPrimary, lineHeight: 1.32, ...TABULAR_NUM_STYLE }}>
+              {nd}
+            </div>
           </div>
         ))}
       </div>
@@ -1148,11 +1864,24 @@ export const FannieMaeCovenantExhibit: React.FC<FannieMaeCovenantExhibitProps> =
     {...base}
   >
     {(ctx) => (
-      <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: ctx.isGlass ? "12px" : "18px", height: "100%", justifyContent: "center" }}>
         {covenantChecks.map((ck, i) => (
-          <div key={`fmc-${i}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "22px 28px", backgroundColor: ctx.bgElevated, border: `1.5px solid ${ck.breached ? ctx.accentLiability : ctx.ruleOxford}`, borderRadius: "8px" }}>
-            <span style={{ fontFamily: FONTS.sans, fontSize: "20px", fontWeight: 700, color: ctx.inkPrimary }}>{ck.requirement}</span>
-            <span style={{ fontFamily: FONTS.mono, fontSize: "15px", fontWeight: 700, color: ck.breached ? ctx.accentLiability : ctx.accentSolvent }}>{ck.status}</span>
+          <div
+            key={`fmc-${i}`}
+            style={{
+              display: "flex",
+              flexDirection: ctx.isGlass ? "column" : "row",
+              justifyContent: "space-between",
+              alignItems: ctx.isGlass ? "flex-start" : "center",
+              gap: ctx.isGlass ? "6px" : "18px",
+              padding: ctx.isGlass ? "14px 16px" : "22px 28px",
+              backgroundColor: ck.breached ? ctx.riskFill : ctx.bgRecessed,
+              border: `1.5px solid ${ck.breached ? ctx.accentLiabilityStroke : ctx.ruleOxford}`,
+              borderRadius: "8px",
+            }}
+          >
+            <span style={{ fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "16px" : "20px", fontWeight: 700, color: ctx.inkPrimary }}>{ck.requirement}</span>
+            <span style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "13.5px" : "15px", fontWeight: 700, color: ck.breached ? ctx.accentLiability : ctx.accentSolvent, flexShrink: 0 }}>{ck.status}</span>
           </div>
         ))}
       </div>
@@ -1181,11 +1910,11 @@ export const RedlineContractDiffStage: React.FC<RedlineContractDiffStageProps> =
     {...base}
   >
     {(ctx) => (
-      <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "40px 48px", display: "flex", flexDirection: "column", gap: "26px" }}>
-        <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "18px" : "27px", color: ctx.inkMuted, textDecoration: "line-through", lineHeight: 1.4 }}>
+      <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "20px 22px" : "40px 48px", display: "flex", flexDirection: "column", gap: ctx.isGlass ? "18px" : "28px", height: "100%", boxSizing: "border-box", justifyContent: "center" }}>
+        <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "16.5px" : "27px", color: ctx.inkMuted, textDecoration: "line-through", lineHeight: 1.4 }}>
           {deletedClause}
         </div>
-        <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "19px" : "29px", fontWeight: 700, color: ctx.accentLiability, borderLeft: `5px solid ${ctx.accentLiability}`, paddingLeft: "22px", lineHeight: 1.4 }}>
+        <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "17.5px" : "29px", fontWeight: 700, color: ctx.accentLiability, borderLeft: `5px solid ${ctx.accentLiabilityStroke}`, paddingLeft: "18px", lineHeight: 1.4 }}>
           + {insertedClause}
         </div>
       </div>
@@ -1214,10 +1943,16 @@ export const PatentFiling1910Stage: React.FC<PatentFiling1910StageProps> = ({
     {...base}
   >
     {(ctx) => (
-      <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "48px 56px" }}>
-        <p style={{ margin: 0, fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "20px" : "32px", lineHeight: 1.48, color: ctx.inkPrimary }}>
+      <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "22px" : "44px 52px", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ fontFamily: FONTS.mono, fontSize: "12px", fontWeight: 700, color: ctx.accentCapital, letterSpacing: "0.08em" }}>
+          ARCHIVAL SPECIFICATION · CLAIM 1
+        </div>
+        <p style={{ margin: 0, fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "19px" : "32px", lineHeight: 1.48, color: ctx.inkPrimary }}>
           {claimExcerpt}
         </p>
+        <div style={{ borderTop: `1px solid ${ctx.ruleHairline}`, paddingTop: "12px", fontFamily: FONTS.mono, fontSize: "12px", color: ctx.inkMuted }}>
+          {patentId}
+        </div>
       </div>
     )}
   </ForensicStageFrame>
@@ -1244,14 +1979,14 @@ export const BankCallReportTAccount: React.FC<BankCallReportTAccountProps> = ({
     {...base}
   >
     {(ctx) => (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: `4px solid ${ctx.ruleOxford}`, backgroundColor: ctx.bgElevated, borderRadius: "0 0 10px 10px", height: "100%" }}>
-        <div style={{ padding: "36px", borderRight: `2px solid ${ctx.ruleOxford}` }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.accentLiability }}>ASSETS (MARK-TO-MARKET)</div>
-          <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "20px" : "30px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "18px", ...TABULAR_NUM_STYLE }}>{assetSide}</div>
+      <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1fr 1fr", borderTop: `4px solid ${ctx.ruleOxford}`, backgroundColor: ctx.bgRecessed, border: `1px solid ${ctx.ruleHairline}`, borderRadius: "0 0 10px 10px", height: "100%" }}>
+        <div style={{ padding: ctx.isGlass ? "18px 20px" : "36px", borderRight: ctx.isGlass ? "none" : `2px solid ${ctx.ruleOxford}`, borderBottom: ctx.isGlass ? `2px solid ${ctx.ruleOxford}` : "none", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentLiability }}>ASSETS (MARK-TO-MARKET)</div>
+          <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "18.5px" : "30px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "12px", lineHeight: 1.3, ...TABULAR_NUM_STYLE }}>{assetSide}</div>
         </div>
-        <div style={{ padding: "36px" }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: "13px", fontWeight: 700, color: ctx.accentStatutory }}>LIABILITIES & CAPITAL</div>
-          <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "20px" : "30px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "18px", ...TABULAR_NUM_STYLE }}>{liabilitySide}</div>
+        <div style={{ padding: ctx.isGlass ? "18px 20px" : "36px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: "12.5px", fontWeight: 700, color: ctx.accentStatutory }}>LIABILITIES & CAPITAL</div>
+          <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "18.5px" : "30px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "12px", lineHeight: 1.3, ...TABULAR_NUM_STYLE }}>{liabilitySide}</div>
         </div>
       </div>
     )}
@@ -1279,12 +2014,12 @@ export const VetoPenBudgetLedger: React.FC<VetoPenBudgetLedgerProps> = ({
     {...base}
   >
     {(ctx) => (
-      <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "44px 52px", position: "relative" }}>
-        <div style={{ position: "relative", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "16px" : "25px", color: ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
+      <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "22px 24px" : "44px 52px", position: "relative", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ position: "relative", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "16px" : "24px", lineHeight: 1.4, color: ctx.inkPrimary, ...TABULAR_NUM_STYLE }}>
           {originalLine}
-          <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: "5px", backgroundColor: PAGE_PALETTE.brickRed, transform: `scaleX(${ctx.progress.toFixed(3)})`, transformOrigin: "left center" }} />
+          <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: "4px", backgroundColor: ctx.accentLiabilityStroke, transform: `scaleX(${ctx.settleProgress.toFixed(3)})`, transformOrigin: "left center" }} />
         </div>
-        <div style={{ marginTop: "28px", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "16px" : "23px", fontWeight: 700, color: ctx.accentLiability, ...TABULAR_NUM_STYLE }}>
+        <div style={{ marginTop: "24px", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "15.5px" : "22px", fontWeight: 700, color: ctx.accentLiability, lineHeight: 1.38, ...TABULAR_NUM_STYLE }}>
           ✎ {vetoedLine}
         </div>
       </div>
@@ -1325,17 +2060,17 @@ export const AchAutopayDraftReceipt: React.FC<AchAutopayDraftReceiptProps> = ({
     {...base}
   >
     {(ctx) => (
-      <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "30px 38px", display: "flex", flexDirection: "column", gap: "14px", fontFamily: FONTS.mono, ...TABULAR_NUM_STYLE }}>
-        <div style={{ fontSize: "20px", fontWeight: 700, color: ctx.accentSolvent, paddingBottom: "10px", borderBottom: `1px solid ${ctx.ruleHairline}` }}>
+      <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "30px 38px", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: ctx.isGlass ? "10px" : "14px", height: "100%", boxSizing: "border-box", fontFamily: FONTS.mono, ...TABULAR_NUM_STYLE }}>
+        <div style={{ fontSize: ctx.isGlass ? "17px" : "20px", fontWeight: 700, color: ctx.accentSolvent, paddingBottom: "10px", borderBottom: `1px solid ${ctx.ruleHairline}` }}>
           {grossDeposit}
         </div>
         {drafts.map((d, i) => (
-          <div key={`ach-${i}`} style={{ display: "flex", justifyContent: "space-between", fontSize: ctx.isGlass ? "14px" : "19px", color: ctx.inkPrimary }}>
+          <div key={`ach-${i}`} style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: ctx.isGlass ? "14px" : "19px", color: ctx.inkPrimary }}>
             <span>{d.payee}</span>
-            <span style={{ color: ctx.accentLiability, fontWeight: 700 }}>{d.amount}</span>
+            <span style={{ color: ctx.accentLiability, fontWeight: 700, flexShrink: 0 }}>{d.amount}</span>
           </div>
         ))}
-        <div style={{ marginTop: "10px", paddingTop: "14px", borderTop: `2px solid ${ctx.ruleOxford}`, fontSize: "24px", fontWeight: 700, color: ctx.accentLiability }}>
+        <div style={{ marginTop: "6px", paddingTop: "12px", borderTop: `2px solid ${ctx.ruleOxford}`, fontSize: ctx.isGlass ? "17.5px" : "24px", fontWeight: 700, color: ctx.accentLiability }}>
           ENDING BALANCE · {remainingBalance}
         </div>
       </div>
@@ -1364,8 +2099,33 @@ export const CreditRatingDowngradeMemo: React.FC<CreditRatingDowngradeMemoProps>
     {...base}
   >
     {(ctx) => (
-      <div style={{ backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.accentLiability}`, borderRadius: "10px", padding: "44px 52px" }}>
-        <p style={{ margin: 0, fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "17px" : "26px", lineHeight: 1.5, color: ctx.inkPrimary }}>
+      <div style={{ backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.accentLiabilityStroke}`, borderRadius: "10px", padding: ctx.isGlass ? "20px 22px" : "38px 46px", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "18px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+          {[
+            { grade: "AAA", era: "1941–2011", active: false },
+            { grade: "AA+", era: "2011–2023", active: false },
+            { grade: "AA-", era: "DOWNGRADE WATCH", active: true },
+          ].map((step) => (
+            <div
+              key={`cr-${step.grade}`}
+              style={{
+                backgroundColor: step.active ? ctx.riskFill : ctx.bgElevated,
+                border: `1.5px solid ${step.active ? ctx.accentLiabilityStroke : ctx.ruleHairline}`,
+                borderRadius: "8px",
+                padding: ctx.isGlass ? "10px" : "14px 18px",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "20px" : "26px", fontWeight: 700, color: step.active ? ctx.accentLiability : ctx.inkMuted, ...TABULAR_NUM_STYLE }}>
+                {step.grade}
+              </div>
+              <div style={{ fontFamily: FONTS.mono, fontSize: "11px", color: step.active ? ctx.accentLiability : ctx.inkMuted, marginTop: "2px" }}>
+                {step.era}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p style={{ margin: 0, fontFamily: FONTS.sans, fontSize: ctx.isGlass ? "16px" : "25px", lineHeight: 1.48, color: ctx.inkPrimary }}>
           {rationale}
         </p>
       </div>
@@ -1391,17 +2151,17 @@ export const AntitrustMarketExhibit: React.FC<AntitrustMarketExhibitProps> = ({
   <ForensicStageFrame
     register="page_editorial"
     defaultDocket={`U.S. DISTRICT COURT · ${exhibitNumber}`}
-    defaultTitle=" evidentiary Discovery: Bottleneck Pricing Power"
+    defaultTitle="Evidentiary Discovery: Bottleneck Pricing Power"
     defaultVerdict={exhibitNumber}
     defaultCitation="DOJ / FTC Federal Antitrust Trial Evidentiary Record"
     {...base}
   >
     {(ctx) => (
-      <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1.3fr 0.7fr", gap: "28px", height: "100%" }}>
-        <div style={{ backgroundColor: ctx.bgElevated, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "38px", fontFamily: FONTS.serif, fontStyle: "italic", fontSize: ctx.isGlass ? "19px" : "30px", lineHeight: 1.4, color: ctx.inkPrimary }}>
+      <div style={{ display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr" : "1.3fr 0.7fr", gap: ctx.isGlass ? "14px" : "28px", height: "100%" }}>
+        <div style={{ backgroundColor: ctx.bgRecessed, border: `1.5px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "38px", fontFamily: FONTS.serif, fontStyle: "italic", fontSize: ctx.isGlass ? "18px" : "30px", lineHeight: 1.4, color: ctx.inkPrimary, display: "flex", alignItems: "center" }}>
           {internalQuote}
         </div>
-        <div style={{ backgroundColor: PAGE_PALETTE.riskFill, border: `2px solid ${PAGE_PALETTE.brickRed}`, borderRadius: "10px", padding: "38px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.mono, fontSize: "34px", fontWeight: 700, color: PAGE_PALETTE.brickRed, textAlign: "center", ...TABULAR_NUM_STYLE }}>
+        <div style={{ backgroundColor: ctx.riskFill, border: `2px solid ${ctx.accentLiabilityStroke}`, borderRadius: "10px", padding: ctx.isGlass ? "18px 20px" : "38px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "24px" : "34px", fontWeight: 700, color: ctx.accentLiability, textAlign: "center", ...TABULAR_NUM_STYLE }}>
           {marketShareFigure}
         </div>
       </div>
@@ -1439,18 +2199,18 @@ export const EvidenceCorkboardChronology: React.FC<EvidenceCorkboardChronologyPr
     {...base}
   >
     {(ctx) => (
-      <div style={{ position: "relative", display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr 1fr" : "repeat(4, 1fr)", gap: "22px", alignItems: "center", height: "100%" }}>
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: ctx.isGlass ? "1fr 1fr" : "repeat(4, 1fr)", gap: ctx.isGlass ? "12px" : "22px", alignItems: "center", height: "100%" }}>
         {!ctx.isGlass && (
           <svg viewBox="0 0 1560 400" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-            <line x1={160} y1={180} x2={160 + 1240 * ctx.progress} y2={180} stroke={PAGE_PALETTE.brickRed} strokeWidth="3.5" />
+            <line x1={160} y1={180} x2={160 + 1240 * ctx.settleProgress} y2={180} stroke={ctx.accentLiabilityStroke} strokeWidth="3.5" />
           </svg>
         )}
         {pins.map((p, i) => (
-          <div key={`ecc-${p.year}-${i}`} style={{ position: "relative", zIndex: 1, backgroundColor: ctx.bgElevated, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: "28px", textAlign: "center" }}>
-            <div style={{ width: "14px", height: "14px", borderRadius: "50%", backgroundColor: PAGE_PALETTE.brickRed, margin: "0 auto 12px auto" }} />
-            <div style={{ fontFamily: FONTS.mono, fontSize: "24px", fontWeight: 700, color: ctx.accentLiability, ...TABULAR_NUM_STYLE }}>{p.year}</div>
-            <div style={{ fontFamily: FONTS.serif, fontSize: "22px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "8px" }}>{p.event}</div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: "15px", color: ctx.inkSecondary, marginTop: "10px", ...TABULAR_NUM_STYLE }}>{p.figure}</div>
+          <div key={`ecc-${p.year}-${i}`} style={{ position: "relative", zIndex: 1, backgroundColor: ctx.bgRecessed, border: `2px solid ${ctx.ruleOxford}`, borderRadius: "10px", padding: ctx.isGlass ? "14px 12px" : "28px", textAlign: "center" }}>
+            <div style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: ctx.accentLiabilityStroke, margin: "0 auto 10px auto" }} />
+            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "19px" : "24px", fontWeight: 700, color: ctx.accentLiability, ...TABULAR_NUM_STYLE }}>{p.year}</div>
+            <div style={{ fontFamily: FONTS.serif, fontSize: ctx.isGlass ? "16px" : "22px", fontWeight: 700, color: ctx.inkPrimary, marginTop: "6px", lineHeight: 1.2 }}>{p.event}</div>
+            <div style={{ fontFamily: FONTS.mono, fontSize: ctx.isGlass ? "13.5px" : "15px", color: ctx.inkSecondary, marginTop: "8px", ...TABULAR_NUM_STYLE }}>{p.figure}</div>
           </div>
         ))}
       </div>
@@ -1472,7 +2232,7 @@ export interface ForensicExhibitStyleRecipe {
 export const FORENSIC_EXHIBIT_STYLES: readonly ForensicExhibitStyleRecipe[] = [
   { id: "forensic-fiscal-ledger-table", name: "Treasury & CBO Multi-Row Ledger Stage", componentName: "FiscalLedgerTableStage", defaultFraming: "fullscreen-cutaway", description: "Multi-row statutory table inspector with chisel-nib row sweep, delta badges, and vertical pan." },
   { id: "forensic-claim-vs-reality-collision", name: "Claim vs. Contractual Reality Collision", componentName: "ClaimVsRealityCollision", defaultFraming: "fullscreen-cutaway", description: "Public post/podcast promise colliding against nominal ACH drafts and CBO $2.1T interest wall." },
-  { id: "forensic-supreme-court-syllabus", name: "Supreme Court Syllabus & Veto Bar Drop", componentName: "SupremeCourtSyllabusStage", defaultFraming: "fullscreen-cutaway", description: "Judicial holding (Wielechowski v. State) paired with $3,900 -> $1,000 payout bar drop." },
+  { id: "forensic-supreme-court-syllabus", name: "Supreme Court Syllabus & Veto Bar Drop", componentName: "SupremeCourtSyllabusStage", defaultFraming: "fullscreen-cutaway", description: "Judicial holding (Wielechowski v. State) paired with statutory vs. vetoed payout bar drop and 1982–2025 PFD sparkline." },
   { id: "forensic-escape-hatch-switchboard", name: "Persistent 3-Bay Escape-Hatch Switchboard", componentName: "EscapeHatchSwitchboard", defaultFraming: "fullscreen-cutaway", description: "Monotonic 3-bay investigation board locking heavy brick-red failure stamps onto prior bays." },
   { id: "forensic-archival-ration-book-1941", name: "1941 16-Coupon Ration Book vs. Idle Cash", componentName: "ArchivalRationBook1941", defaultFraming: "fullscreen-cutaway", description: "16 perforated ration coupons stamping VOID while unspent sterling notes sit unusable." },
   { id: "forensic-foia-redaction-declassify", name: "FOIA Exemption (b)(4) Selective Unseal", componentName: "FoiaRedactionDeclassify", defaultFraming: "fullscreen-cutaway", description: "Declassified government memorandum peeling back redaction bars over key dollar commitments." },

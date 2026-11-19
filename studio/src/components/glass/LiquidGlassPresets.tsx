@@ -1,5 +1,6 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { fitAndBalanceText } from "../../design/fitText";
 import { FONTS, TABULAR_NUM_STYLE } from "../../design/fonts";
 import { CINEMA_SPRINGS, OVER_FOOTAGE_PALETTE } from "../../design/tokens";
 import {
@@ -80,6 +81,72 @@ function sanitizeDockText(raw: string | undefined): string {
   return (lastSpace > 10 ? cut.slice(0, lastSpace) : cut).trim();
 }
 
+function hashSeedString(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function buildChannelSparkline(ch: GlassTelemetryChannel, idx: number): number[] {
+  if (ch.sparkline && ch.sparkline.length >= 2) {
+    return [...ch.sparkline];
+  }
+  const seed = hashSeedString(`${ch.id ?? ""}|${ch.label}|${ch.value}|${idx}`);
+  const deltaText = (ch.delta ?? "").trim();
+  const isNegativeTrend =
+    deltaText.startsWith("-") ||
+    (Boolean(ch.isRisk) &&
+      !deltaText.startsWith("+") &&
+      /(?:share|wage|drop|cut|fall|erosion|shrink|ratio)/i.test(ch.label));
+  const isSurgeTrend =
+    deltaText.startsWith("+") ||
+    (Boolean(ch.isRisk) && !isNegativeTrend);
+
+  const count = 7;
+  const phase = ((seed % 360) * Math.PI) / 180;
+  const freq = 1.15 + ((seed >> 4) % 7) * 0.22;
+  const amp = 0.08 + ((seed >> 8) % 5) * 0.02;
+  const pts: number[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    const wave = Math.sin(t * Math.PI * freq + phase) * amp;
+    let base: number;
+    if (isNegativeTrend) {
+      base = 0.84 - Math.pow(t, 1.15) * 0.58;
+    } else if (isSurgeTrend) {
+      base = 0.22 + Math.pow(t, 1.45) * 0.68;
+    } else if (idx % 2 === 0) {
+      base = 0.34 + t * 0.44;
+    } else {
+      base = 0.56 + Math.cos(t * Math.PI * 1.1 + phase * 0.5) * 0.22;
+    }
+    pts.push(Math.max(0.08, Math.min(0.96, Number((base + wave).toFixed(3)))));
+  }
+  return pts;
+}
+
+function resolveMagnifierHeaderTags(
+  clauseCode: string,
+  zoomFactor: number
+): { leftTag: string; zoomPill: string } {
+  const hasOpticalOrLoupe = /\b(?:optical|loupe)\b/i.test(clauseCode);
+  const cleaned = clauseCode
+    .replace(/\b(?:optical|loupe|\d+(?:\.\d+)?x)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[·/|:—\-\s]+|[·/|:—\-\s]+$/g, "")
+    .trim();
+
+  const leftTag = hasOpticalOrLoupe ? cleaned || "FILING EXCERPT" : clauseCode;
+  return {
+    leftTag,
+    zoomPill: `OPTICAL ${zoomFactor.toFixed(2)}x`,
+  };
+}
+
 // ============================================================================
 // 1. GlassCard — Crystal smoked-navy glass card with header tag, metric & citation
 // ============================================================================
@@ -138,6 +205,22 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   const surface = getSurfacePalette(tint);
   const tone = resolveBadgeTone(badgeTone);
   const isWarningCard = badgeTone === "warning" || surface.isRisk;
+  const numericWidth = typeof width === "number" ? width : 580;
+  const cleanMetricValue = metric?.value ? metric.value.replace(/\s+/g, " ").trim() : "";
+  const fittedMetric =
+    cleanMetricValue.length > 0
+      ? fitAndBalanceText({
+          text: cleanMetricValue,
+          fontFamily: "mono",
+          fontWeight: 800,
+          maxWidth: Math.max(160, numericWidth - 220),
+          maxHeight: 68,
+          maxLines: cleanMetricValue.length > 14 ? 2 : 1,
+          minFontSize: 18,
+          maxFontSize: 38,
+          lineHeight: 1.08,
+        })
+      : null;
 
   return (
     <LiquidGlassObject
@@ -172,6 +255,11 @@ export const GlassCard: React.FC<GlassCardProps> = ({
               borderRadius: "8px",
               padding: "4px 10px",
               textShadow: surface.textShadow,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              maxWidth: "220px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             {badge}
@@ -185,6 +273,12 @@ export const GlassCard: React.FC<GlassCardProps> = ({
                 color: surface.body,
                 letterSpacing: "0.04em",
                 textShadow: surface.textShadow,
+                minWidth: 0,
+                flex: "0 1 auto",
+                textAlign: "right",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {subtitle}
@@ -209,33 +303,39 @@ export const GlassCard: React.FC<GlassCardProps> = ({
         </h3>
 
         {/* Optional Headline Metric */}
-        {metric && (
+        {metric && cleanMetricValue.length > 0 && fittedMetric && (
           <div
             style={{
               display: "flex",
               alignItems: "baseline",
+              flexWrap: cleanMetricValue.length > 16 ? "wrap" : "nowrap",
               gap: "16px",
               marginTop: "18px",
               padding: "16px 20px",
               borderRadius: "16px",
               backgroundColor: isWarningCard ? surface.riskBg : surface.subBg,
               border: `1px solid ${isWarningCard ? surface.riskBorder : surface.subBorder}`,
+              overflow: "hidden",
             }}
           >
             <span
               style={{
                 fontFamily: FONTS.mono,
-                fontSize: "38px",
+                fontSize: `${fittedMetric.fontSize}px`,
                 fontWeight: 800,
-                fontVariantNumeric: "tabular-nums",
                 color: isWarningCard ? surface.riskText : surface.title,
                 textShadow: surface.textShadow,
-                lineHeight: 1,
+                lineHeight: 1.08,
+                maxWidth: "100%",
+                minWidth: 0,
+                overflowWrap: "anywhere",
+                flexShrink: cleanMetricValue.length <= 16 ? 0 : 1,
+                ...TABULAR_NUM_STYLE,
               }}
             >
-              {metric.value}
+              {cleanMetricValue}
             </span>
-            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: 0 }}>
               {metric.label && (
                 <span
                   style={{
@@ -379,11 +479,13 @@ export const GlassCornerPill: React.FC<GlassCornerPillProps> = ({
           gap: "12px",
           padding: "12px 22px",
           userSelect: "none",
-          whiteSpace: "nowrap",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          overflow: "hidden",
         }}
       >
         {icon ? (
-          <span style={{ display: "inline-flex", alignItems: "center" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
             {icon}
           </span>
         ) : (
@@ -392,6 +494,7 @@ export const GlassCornerPill: React.FC<GlassCornerPillProps> = ({
               width: "9px",
               height: "9px",
               borderRadius: "50%",
+              flexShrink: 0,
               backgroundColor: dotColor,
               boxShadow: `0 0 10px ${dotColor}88`,
               transform: `scale(${dotScale})`,
@@ -418,6 +521,11 @@ export const GlassCornerPill: React.FC<GlassCornerPillProps> = ({
               padding: "3px 10px",
               borderRadius: "999px",
               textShadow: surface.textShadow,
+              flexShrink: 0,
+              maxWidth: "160px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {badge}
@@ -432,6 +540,11 @@ export const GlassCornerPill: React.FC<GlassCornerPillProps> = ({
             color: surface.body,
             letterSpacing: "0.01em",
             textShadow: surface.textShadow,
+            minWidth: 0,
+            flex: "0 1 auto",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
           {label}
@@ -448,6 +561,11 @@ export const GlassCornerPill: React.FC<GlassCornerPillProps> = ({
               paddingLeft: "10px",
               borderLeft: `1px solid ${surface.divider}`,
               textShadow: surface.textShadow,
+              flexShrink: 0,
+              maxWidth: "180px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {value}
@@ -503,6 +621,9 @@ export const GlassBottomDock: React.FC<GlassBottomDockProps> = ({
           gap: "12px",
           padding: "14px 20px",
           userSelect: "none",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          overflow: "hidden",
         }}
       >
         {caption && (
@@ -521,6 +642,10 @@ export const GlassBottomDock: React.FC<GlassBottomDockProps> = ({
               }`,
               borderRadius: "10px",
               padding: "6px 12px",
+              flexShrink: 0,
+              maxWidth: "210px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               textShadow: surface.textShadow,
             }}
@@ -549,8 +674,10 @@ export const GlassBottomDock: React.FC<GlassBottomDockProps> = ({
                 border: isActive
                   ? `1.5px solid ${accent}`
                   : `1px solid ${surface.subBorder}`,
-                minWidth: "160px",
+                minWidth: "152px",
                 maxWidth: "280px",
+                flex: "0 1 auto",
+                overflow: "hidden",
               }}
             >
               {item.icon && (
@@ -578,7 +705,16 @@ export const GlassBottomDock: React.FC<GlassBottomDockProps> = ({
                 </div>
               )}
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                  minWidth: 0,
+                  flex: 1,
+                  overflow: "hidden",
+                }}
+              >
                 {safeValue && (
                   <span
                     style={{
@@ -589,6 +725,8 @@ export const GlassBottomDock: React.FC<GlassBottomDockProps> = ({
                       color: isActive ? surface.accentWarm : surface.title,
                       lineHeight: 1.15,
                       whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                       textShadow: surface.textShadow,
                     }}
                   >
@@ -603,6 +741,9 @@ export const GlassBottomDock: React.FC<GlassBottomDockProps> = ({
                     color: isActive ? surface.title : surface.muted,
                     letterSpacing: "0.01em",
                     lineHeight: 1.25,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                     textShadow: surface.textShadow,
                   }}
                 >
@@ -685,6 +826,9 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
           gap: "10px",
           padding: "10px 14px",
           userSelect: "none",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          overflow: "hidden",
         }}
       >
         {prefix && (
@@ -697,6 +841,10 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
               color: surface.isRisk ? surface.riskText : surface.accentWarm,
               textTransform: "uppercase",
               padding: "0 10px 0 6px",
+              flexShrink: 0,
+              maxWidth: "180px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               textShadow: surface.textShadow,
             }}
@@ -714,6 +862,9 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
             borderRadius: "14px",
             backgroundColor: surface.subBg,
             border: `1px solid ${surface.subBorder}`,
+            minWidth: 0,
+            flex: "0 1 auto",
+            overflow: "hidden",
           }}
         >
           {items.map((item, idx) => {
@@ -727,6 +878,9 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
                   gap: "6px",
                   padding: "7px 14px",
                   borderRadius: "10px",
+                  minWidth: 0,
+                  maxWidth: "240px",
+                  overflow: "hidden",
                   backgroundColor: isActive
                     ? "rgba(28, 43, 58, 0.88)"
                     : "transparent",
@@ -742,6 +896,7 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
                   <span
                     style={{
                       display: "inline-flex",
+                      flexShrink: 0,
                       color: isActive ? surface.accentWarm : surface.muted,
                     }}
                   >
@@ -754,6 +909,7 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
                       fontFamily: FONTS.mono,
                       fontSize: "10px",
                       fontWeight: 700,
+                      flexShrink: 0,
                       color: isActive ? surface.accentText : surface.muted,
                       textShadow: surface.textShadow,
                     }}
@@ -767,6 +923,9 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
                     fontSize: "13px",
                     fontWeight: isActive ? 700 : 500,
                     color: isActive ? surface.title : surface.muted,
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                     textShadow: surface.textShadow,
                   }}
@@ -787,6 +946,10 @@ export const GlassFloatingToolbar: React.FC<GlassFloatingToolbarProps> = ({
               fontSize: "13px",
               fontWeight: 700,
               color: surface.title,
+              flexShrink: 0,
+              maxWidth: "200px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               textShadow: surface.textShadow,
             }}
@@ -1306,42 +1469,46 @@ export const GlassDossierStack: React.FC<GlassDossierStackProps> = ({
   const clampedActive = Math.max(0, Math.min(safeSheets.length - 1, activeIndex));
   const topSheet = safeSheets[clampedActive];
   const settle = spring({ frame, fps, config: CINEMA_SPRINGS.archivalSettle });
+  const backingSheets = safeSheets
+    .map((s, idx) => ({ s, idx, depth: Math.abs(idx - clampedActive) }))
+    .filter((item) => item.idx !== clampedActive)
+    .slice(0, 2);
+  const maxDepth = backingSheets.reduce((acc, item) => Math.max(acc, item.depth), 0);
+  const stackTopPad = maxDepth * 7;
 
   return (
-    <div style={{ position: "relative", width, paddingTop: "18px" }}>
-      {/* Recessed Backing Dossier Tabs */}
-      {safeSheets.map((s, idx) => {
-        if (idx === clampedActive) return null;
-        const depth = Math.abs(idx - clampedActive);
-        const offsetY = -depth * 8 * settle;
-        const offsetX = depth * 6 * settle;
-        const scaleBack = 1 - depth * 0.028;
+    <div style={{ position: "relative", width, paddingTop: `${stackTopPad}px` }}>
+      {/* Concentric Symmetrically-Aligned Backing Dossier Tabs */}
+      {backingSheets.map(({ s, idx, depth }) => {
+        const offsetY = -depth * 7 * settle;
+        const scaleBack = 1 - depth * 0.032;
+        const backRadius = Math.max(12, borderRadius - depth * 2);
         return (
           <div
             key={s.id ?? `${s.exhibitCode}-${idx}`}
             style={{
               position: "absolute",
-              inset: "18px 0 0 0",
-              borderRadius,
-              background: "rgba(15, 25, 35, 0.46)",
-              border: `1px solid ${surface.divider}`,
-              transform: `translate3d(${offsetX.toFixed(1)}px, ${offsetY.toFixed(
-                1
-              )}px, 0) scale(${scaleBack.toFixed(3)})`,
+              inset: `${stackTopPad}px 0 0 0`,
+              borderRadius: backRadius,
+              background: `rgba(19, 30, 43, ${(0.76 - depth * 0.14).toFixed(2)})`,
+              border: `1px solid rgba(191, 214, 234, ${(0.28 - depth * 0.06).toFixed(2)})`,
+              boxShadow: "inset 0 1px 0 rgba(255, 250, 240, 0.18)",
+              transform: `translate3d(0, ${offsetY.toFixed(1)}px, 0) scale(${scaleBack.toFixed(3)})`,
               transformOrigin: "top center",
               pointerEvents: "none",
-              zIndex: 0,
+              zIndex: Math.max(0, 4 - depth),
             }}
           />
         );
       })}
 
-      <LiquidGlassObject
-        {...pickGlassProps(glassProps)}
-        width={width}
-        borderRadius={borderRadius}
-        tint={topSheet.isRisk ? "warning" : tint}
-      >
+      <div style={{ position: "relative", zIndex: 10 }}>
+        <LiquidGlassObject
+          {...pickGlassProps(glassProps)}
+          width={width}
+          borderRadius={borderRadius}
+          tint={topSheet.isRisk ? "warning" : tint}
+        >
         <div style={{ padding: "28px 32px", userSelect: "none" }}>
           <div
             style={{
@@ -1520,6 +1687,7 @@ export const GlassDossierStack: React.FC<GlassDossierStackProps> = ({
           )}
         </div>
       </LiquidGlassObject>
+      </div>
     </div>
   );
 };
@@ -1758,6 +1926,7 @@ export const GlassMagnifierCard: React.FC<GlassMagnifierCardProps> = ({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+  const { leftTag, zoomPill } = resolveMagnifierHeaderTags(clauseCode, zoomFactor);
 
   return (
     <LiquidGlassObject
@@ -1772,6 +1941,7 @@ export const GlassMagnifierCard: React.FC<GlassMagnifierCardProps> = ({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            gap: "12px",
             marginBottom: "14px",
           }}
         >
@@ -1784,23 +1954,30 @@ export const GlassMagnifierCard: React.FC<GlassMagnifierCardProps> = ({
               textTransform: "uppercase",
               color: surface.accentWarm,
               textShadow: surface.textShadow,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            {clauseCode}
+            {leftTag}
           </span>
           <span
             style={{
               fontFamily: FONTS.mono,
               fontSize: "11px",
               fontWeight: 600,
-              padding: "3px 9px",
+              padding: "3px 10px",
               borderRadius: "999px",
+              backgroundColor: "rgba(28, 43, 58, 0.85)",
               border: `1px solid ${surface.subBorderActive}`,
               color: surface.title,
+              flexShrink: 0,
+              whiteSpace: "nowrap",
               ...TABULAR_NUM_STYLE,
             }}
           >
-            OPTICAL {zoomFactor.toFixed(2)}x
+            {zoomPill}
           </span>
         </div>
 
@@ -1817,17 +1994,20 @@ export const GlassMagnifierCard: React.FC<GlassMagnifierCardProps> = ({
           {title}
         </div>
 
-        {/* Circular Rim-Lit Loupe Well */}
+        {/* Precision Rim-Lit Archival Lens Well */}
         <div
           style={{
             position: "relative",
             padding: "20px 22px",
             borderRadius: "20px",
-            background: "rgba(11, 18, 26, 0.62)",
-            border: "2px solid rgba(191, 214, 234, 0.56)",
+            background:
+              "linear-gradient(148deg, rgba(16, 26, 38, 0.86) 0%, rgba(11, 18, 28, 0.92) 100%)",
+            border: "1.5px solid rgba(191, 214, 234, 0.58)",
             boxShadow:
-              "inset 0 0 24px rgba(191, 214, 234, 0.14), 0 12px 26px rgba(8, 14, 22, 0.36)",
+              "inset 0 1px 0 rgba(255, 250, 240, 0.30), inset 0 0 28px rgba(191, 214, 234, 0.12), 0 12px 28px rgba(8, 14, 22, 0.42)",
             transform: `scale(${lensScale.toFixed(4)})`,
+            minWidth: 0,
+            overflow: "hidden",
           }}
         >
           {contextLineBefore && (
@@ -1836,8 +2016,9 @@ export const GlassMagnifierCard: React.FC<GlassMagnifierCardProps> = ({
                 fontFamily: FONTS.serif,
                 fontSize: "12.5px",
                 color: surface.muted,
-                opacity: 0.55,
+                opacity: 0.62,
                 marginBottom: "6px",
+                minWidth: 0,
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -1854,11 +2035,14 @@ export const GlassMagnifierCard: React.FC<GlassMagnifierCardProps> = ({
               fontWeight: 600,
               fontStyle: "italic",
               lineHeight: 1.35,
-              color: surface.title,
-              padding: "6px 10px",
-              borderRadius: "8px",
-              background: OVER_FOOTAGE_PALETTE.highlightSweep,
-              borderLeft: `3px solid ${surface.accentWarm}`,
+              color: OVER_FOOTAGE_PALETTE.textHeadline,
+              padding: "10px 14px",
+              borderRadius: "10px",
+              background:
+                "linear-gradient(135deg, rgba(62, 106, 148, 0.34) 0%, rgba(47, 143, 139, 0.16) 100%)",
+              border: "1px solid rgba(191, 214, 234, 0.34)",
+              borderLeft: `3.5px solid ${surface.accentWarm}`,
+              boxShadow: "inset 0 1px 0 rgba(255, 250, 240, 0.22)",
               textShadow: surface.textShadow,
             }}
           >
@@ -1871,8 +2055,9 @@ export const GlassMagnifierCard: React.FC<GlassMagnifierCardProps> = ({
                 fontFamily: FONTS.serif,
                 fontSize: "12.5px",
                 color: surface.muted,
-                opacity: 0.55,
+                opacity: 0.62,
                 marginTop: "6px",
+                minWidth: 0,
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -1956,6 +2141,8 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
   const { fps } = useVideoConfig();
   const surface = getSurfacePalette(tint);
   const sweep = spring({ frame, fps, config: CINEMA_SPRINGS.inkSweep });
+  const visibleChannels = channels.slice(0, 4);
+  const isDense = visibleChannels.length >= 4;
 
   return (
     <LiquidGlassObject
@@ -1969,9 +2156,12 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: "18px",
-          padding: "14px 24px",
+          gap: isDense ? "12px" : "18px",
+          padding: isDense ? "14px 20px" : "14px 24px",
           userSelect: "none",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          overflow: "hidden",
         }}
       >
         <div
@@ -1986,6 +2176,10 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
             backgroundColor: surface.subBgActive,
             border: `1px solid ${surface.subBorderActive}`,
             color: surface.accentWarm,
+            flexShrink: 0,
+            maxWidth: isDense ? "165px" : "190px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
             whiteSpace: "nowrap",
             textShadow: surface.textShadow,
           }}
@@ -1996,20 +2190,22 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
         <div
           style={{
             flex: 1,
+            minWidth: 0,
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-around",
-            gap: "16px",
+            justifyContent: "space-between",
+            gap: isDense ? "12px" : "18px",
+            overflow: "hidden",
           }}
         >
-          {channels.slice(0, 4).map((ch, idx) => {
-            const pts = ch.sparkline && ch.sparkline.length >= 2 ? ch.sparkline : [0.3, 0.48, 0.44, 0.72, 0.88];
+          {visibleChannels.map((ch, idx) => {
+            const pts = buildChannelSparkline(ch, idx);
             const minV = Math.min(...pts);
             const maxV = Math.max(...pts);
             const span = Math.max(1e-6, maxV - minV);
             const poly = pts
               .map((v, i) => {
-                const px = (i / (pts.length - 1)) * 58;
+                const px = 2 + (i / (pts.length - 1)) * 56;
                 const py = 20 - ((v - minV) / span) * 16;
                 return `${px.toFixed(1)},${py.toFixed(1)}`;
               })
@@ -2020,14 +2216,18 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
               <div
                 key={ch.id ?? `${ch.label}-${idx}`}
                 style={{
+                  flex: "1 1 0",
+                  minWidth: 0,
                   display: "flex",
                   alignItems: "center",
-                  gap: "12px",
-                  paddingLeft: idx > 0 ? "16px" : 0,
+                  justifyContent: "space-between",
+                  gap: isDense ? "8px" : "12px",
+                  paddingLeft: idx > 0 ? (isDense ? "12px" : "18px") : 0,
                   borderLeft: idx > 0 ? `1px solid ${surface.divider}` : "none",
+                  overflow: "hidden",
                 }}
               >
-                <div>
+                <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
                   <div
                     style={{
                       fontFamily: FONTS.mono,
@@ -2035,6 +2235,9 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
                       letterSpacing: "0.06em",
                       textTransform: "uppercase",
                       color: surface.muted,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                       textShadow: surface.textShadow,
                     }}
                   >
@@ -2044,8 +2247,10 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
                     style={{
                       display: "flex",
                       alignItems: "baseline",
-                      gap: "8px",
+                      gap: isDense ? "6px" : "8px",
                       marginTop: "2px",
+                      minWidth: 0,
+                      overflow: "hidden",
                     }}
                   >
                     <span
@@ -2055,6 +2260,8 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
                         fontWeight: 800,
                         color: ch.isRisk ? surface.riskText : surface.title,
                         textShadow: surface.textShadow,
+                        flexShrink: 0,
+                        whiteSpace: "nowrap",
                         ...TABULAR_NUM_STYLE,
                       }}
                     >
@@ -2068,6 +2275,12 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
                           fontWeight: 700,
                           color: strokeHex,
                           textShadow: surface.textShadow,
+                          minWidth: 0,
+                          flex: "0 1 auto",
+                          maxWidth: "88px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                           ...TABULAR_NUM_STYLE,
                         }}
                       >
@@ -2077,7 +2290,12 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
                   </div>
                 </div>
 
-                <svg width={60} height={24} viewBox="0 0 60 24">
+                <svg
+                  width={isDense ? 52 : 60}
+                  height={24}
+                  viewBox="0 0 60 24"
+                  style={{ flexShrink: 0 }}
+                >
                   <polyline
                     points={poly}
                     fill="none"
@@ -2099,6 +2317,10 @@ export const GlassTelemetryStrip: React.FC<GlassTelemetryStripProps> = ({
               fontFamily: FONTS.mono,
               fontSize: "11px",
               color: surface.muted,
+              flexShrink: 0,
+              maxWidth: isDense ? "210px" : "240px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               textShadow: surface.textShadow,
             }}
@@ -2158,6 +2380,24 @@ export const GlassVerdictSeal: React.FC<GlassVerdictSealProps> = ({
   });
 
   const sealColor = isAdverse ? surface.riskText : surface.secondaryMetric;
+  const numericWidth = typeof width === "number" ? width : 540;
+  const cleanImpactFigure = impactFigure ? impactFigure.replace(/\s+/g, " ").trim() : "";
+  const fittedImpact =
+    cleanImpactFigure.length > 0
+      ? fitAndBalanceText({
+          text: cleanImpactFigure,
+          fontFamily: "mono",
+          fontWeight: 800,
+          maxWidth: impactSubtext
+            ? Math.max(180, Math.round(numericWidth * 0.44))
+            : Math.max(220, numericWidth - 64),
+          maxHeight: 68,
+          maxLines: cleanImpactFigure.length > 16 ? 2 : 1,
+          minFontSize: 16,
+          maxFontSize: 32,
+          lineHeight: 1.15,
+        })
+      : null;
 
   return (
     <LiquidGlassObject
@@ -2176,7 +2416,7 @@ export const GlassVerdictSeal: React.FC<GlassVerdictSealProps> = ({
             gap: "16px",
           }}
         >
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             {docketOrStatute && (
               <div
                 style={{
@@ -2239,7 +2479,7 @@ export const GlassVerdictSeal: React.FC<GlassVerdictSealProps> = ({
           </div>
         </div>
 
-        {impactFigure && (
+        {cleanImpactFigure.length > 0 && fittedImpact && (
           <div
             style={{
               marginTop: "18px",
@@ -2247,28 +2487,38 @@ export const GlassVerdictSeal: React.FC<GlassVerdictSealProps> = ({
               borderTop: `1px solid ${surface.divider}`,
               display: "flex",
               alignItems: "baseline",
+              flexWrap: "wrap",
               gap: "12px",
+              overflow: "hidden",
             }}
           >
             <span
               style={{
                 fontFamily: FONTS.mono,
-                fontSize: "32px",
+                fontSize: `${fittedImpact.fontSize}px`,
                 fontWeight: 800,
+                lineHeight: 1.15,
                 color: sealColor,
                 textShadow: surface.textShadow,
+                maxWidth: "100%",
+                minWidth: 0,
+                overflowWrap: "anywhere",
+                flexShrink: cleanImpactFigure.length <= 18 && impactSubtext ? 0 : 1,
                 ...TABULAR_NUM_STYLE,
               }}
             >
-              {impactFigure}
+              {cleanImpactFigure}
             </span>
             {impactSubtext && (
               <span
                 style={{
                   fontFamily: FONTS.sans,
                   fontSize: "13.5px",
+                  lineHeight: 1.38,
                   color: surface.body,
                   textShadow: surface.textShadow,
+                  minWidth: 0,
+                  flex: "1 1 180px",
                 }}
               >
                 {impactSubtext}

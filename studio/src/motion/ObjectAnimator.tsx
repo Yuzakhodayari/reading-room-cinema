@@ -105,6 +105,61 @@ function coerceCamera(raw: string | undefined): CameraAction | undefined {
   return isCameraAction(resolved) ? resolved : "camera-dolly-in";
 }
 
+function splitShadowClauses(raw: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === "(") depth++;
+    else if (ch === ")" && depth > 0) depth--;
+    else if (ch === "," && depth === 0) {
+      const chunk = raw.slice(start, i).trim();
+      if (chunk) parts.push(chunk);
+      start = i + 1;
+    }
+  }
+  const tail = raw.slice(start).trim();
+  if (tail) parts.push(tail);
+  return parts;
+}
+
+function convertBoxShadowToDropShadow(boxShadow: string, tintOverride?: string): string {
+  const clauses = splitShadowClauses(boxShadow);
+  const filters: string[] = [];
+  for (const clause of clauses) {
+    if (/\binset\b/i.test(clause)) continue;
+    if (tintOverride) {
+      const m = clause.match(/^(-?[\d.]+(?:px)?)\s+(-?[\d.]+(?:px)?)\s+([\d.]+(?:px)?)/i);
+      if (m) {
+        const ox = m[1].endsWith("px") || m[1] === "0" ? m[1] : `${m[1]}px`;
+        const oy = m[2].endsWith("px") || m[2] === "0" ? m[2] : `${m[2]}px`;
+        const br = m[3].endsWith("px") ? m[3] : `${m[3]}px`;
+        filters.push(`drop-shadow(${ox} ${oy} ${br} ${tintOverride})`);
+        continue;
+      }
+    }
+    filters.push(`drop-shadow(${clause})`);
+  }
+  return filters.join(" ");
+}
+
+function normalizeRimGlowTransform(
+  mt: ReturnType<typeof calcInPlaceMotion> | undefined,
+  action: InPlaceAction | undefined
+): ReturnType<typeof calcInPlaceMotion> | undefined {
+  if (!mt || !mt.boxShadow || action !== "glow-rim") return mt;
+  const dropFilter = convertBoxShadowToDropShadow(mt.boxShadow, "rgba(191, 214, 234, 0.34)");
+  const { boxShadow: _omitBoxShadow, ...rest } = mt;
+  void _omitBoxShadow;
+  return {
+    ...rest,
+    ...(dropFilter
+      ? { filter: [mt.filter, dropFilter].filter(Boolean).join(" ") }
+      : {}),
+  };
+}
+
 /**
  * Unified Object Animator
  * Wraps any visual component with deterministic 2D/3D entry, exit, in-place mechanical/physics
@@ -197,6 +252,14 @@ export const ObjectAnimator: React.FC<ObjectAnimatorProps> = ({
       ls.clipInsetLeft > 0.01;
     const has3DRot = Math.abs(ls.rotateX) > 0.01 || Math.abs(ls.rotateY) > 0.01;
     lifecycleHighlight = ls.highlightProgress;
+    const focusDropShadow =
+      ls.focusGlow > 0.02
+        ? `drop-shadow(0 14px 28px rgba(15, 25, 35, ${(0.22 * ls.focusGlow).toFixed(
+            3
+          )})) drop-shadow(0 0 ${(18 * ls.focusGlow).toFixed(1)}px rgba(143, 180, 217, ${(
+            0.30 * ls.focusGlow
+          ).toFixed(3)}))`
+        : undefined;
     lifecycleTransform = compileMotionChannels({
       ...(Math.abs(ls.x) > 0.001 ? { translateX: ls.x } : {}),
       ...(Math.abs(ls.y) > 0.001 ? { translateY: ls.y } : {}),
@@ -217,18 +280,15 @@ export const ObjectAnimator: React.FC<ObjectAnimatorProps> = ({
             },
           }
         : {}),
-      ...(ls.focusGlow > 0.02
-        ? {
-            boxShadow: `0 18px 44px rgba(15, 25, 35, ${(0.18 * ls.focusGlow).toFixed(
-              3
-            )}), 0 0 ${(22 * ls.focusGlow).toFixed(1)}px rgba(143, 180, 217, ${(
-              0.26 * ls.focusGlow
-            ).toFixed(3)})`,
-          }
-        : {}),
       opacity: ls.opacity,
       highlightProgress: ls.highlightProgress,
     });
+    if (focusDropShadow) {
+      lifecycleTransform = {
+        ...lifecycleTransform,
+        filter: [lifecycleTransform.filter, focusDropShadow].filter(Boolean).join(" "),
+      };
+    }
   }
 
   // 3. Entry animation progress
@@ -256,19 +316,25 @@ export const ObjectAnimator: React.FC<ObjectAnimatorProps> = ({
   let inPlaceStyle: ReturnType<typeof calcInPlaceMotion> | undefined;
   if (resolvedEffect) {
     const effectStart = activeEffectStart ?? atFrame + safeEnterDur;
-    inPlaceStyle = calcInPlaceMotion(
-      resolvedEffect,
-      frame,
-      fps,
-      effectStart,
-      activeEffectDuration
+    inPlaceStyle = normalizeRimGlowTransform(
+      calcInPlaceMotion(
+        resolvedEffect,
+        frame,
+        fps,
+        effectStart,
+        activeEffectDuration
+      ),
+      resolvedEffect
     );
   }
 
   // 6. Continuous loop
   let loopStyle: ReturnType<typeof calcInPlaceMotion> | undefined;
   if (resolvedLoop) {
-    loopStyle = calcInPlaceMotion(resolvedLoop, frame, fps, atFrame, activeEffectDuration);
+    loopStyle = normalizeRimGlowTransform(
+      calcInPlaceMotion(resolvedLoop, frame, fps, atFrame, activeEffectDuration),
+      resolvedLoop
+    );
   }
 
   // 7. Exit animation progress
@@ -287,6 +353,18 @@ export const ObjectAnimator: React.FC<ObjectAnimatorProps> = ({
     inPlaceStyle,
     loopStyle
   );
+
+  // Convert any remaining unrounded wrapper boxShadow to silhouette-hugging drop-shadow
+  // unless caller explicitly gave the wrapper its own rounded borderRadius.
+  if (combinedStyles.boxShadow && !style?.borderRadius) {
+    const converted = convertBoxShadowToDropShadow(combinedStyles.boxShadow);
+    delete combinedStyles.boxShadow;
+    if (converted) {
+      combinedStyles.filter = [combinedStyles.filter, converted]
+        .filter(Boolean)
+        .join(" ");
+    }
+  }
 
   // Enforce 1100px perspective on any custom 3D rotateX/rotateY transform lacking perspective()
   if (

@@ -1,5 +1,6 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { fitSvgTextToWidth } from "../../design/fitText";
 import { FONTS } from "../../design/fonts";
 import {
   ArchivalArtifactParams,
@@ -77,6 +78,28 @@ export const BlueprintPlateFrame: React.FC<BlueprintPlateFrameProps> = ({
   children,
 }) => {
   const sw = strokeScale;
+  const plateSpan = 352; // x=24..376 inside 400x300 viewBox
+  const minColumnGap = 24; // >= 19px even at 320px plate width
+
+  const fittedMetric = fitSvgTextToWidth(primaryMetric, 134, 10.5, 7.5, "mono", {
+    fontWeight: 700,
+    letterSpacingEm: 0.05,
+  });
+  const leftDatumMaxW = Math.max(120, plateSpan - minColumnGap - fittedMetric.estimatedWidth);
+  const fittedDatum = fitSvgTextToWidth(datumCode.toUpperCase(), leftDatumMaxW, 9.2, 7.2, "mono", {
+    fontWeight: 600,
+    letterSpacingEm: 0.06,
+  });
+
+  const fittedSecondary = fitSvgTextToWidth(secondaryLabel, 152, 9.0, 7.2, "mono", {
+    fontWeight: 500,
+  });
+  const leftTitleMaxW = Math.max(120, plateSpan - minColumnGap - fittedSecondary.estimatedWidth);
+  const fittedTitle = fitSvgTextToWidth(title, leftTitleMaxW, 10.5, 7.8, "sans", {
+    fontWeight: 600,
+    letterSpacingEm: 0.02,
+  });
+
   return (
     <svg
       width={width}
@@ -106,17 +129,17 @@ export const BlueprintPlateFrame: React.FC<BlueprintPlateFrameProps> = ({
 
       {showAnnotations && (
         <g>
-          {/* Top technical datum eyebrow */}
+          {/* Top technical datum eyebrow + right metric with guaranteed >=24-unit clearance */}
           <text
             x="24"
             y="27"
             fill={palette.muted}
             fontFamily={FONTS.mono}
-            fontSize="9.5"
+            fontSize={fittedDatum.fontSize}
             fontWeight="600"
-            letterSpacing="0.09em"
+            letterSpacing="0.06em"
           >
-            {datumCode.toUpperCase()}
+            {fittedDatum.text}
           </text>
           <text
             x="376"
@@ -124,11 +147,11 @@ export const BlueprintPlateFrame: React.FC<BlueprintPlateFrameProps> = ({
             textAnchor="end"
             fill={palette.accent}
             fontFamily={FONTS.mono}
-            fontSize="10.5"
+            fontSize={fittedMetric.fontSize}
             fontWeight="700"
             letterSpacing="0.05em"
           >
-            {primaryMetric}
+            {fittedMetric.text}
           </text>
           <line
             x1="24"
@@ -153,11 +176,11 @@ export const BlueprintPlateFrame: React.FC<BlueprintPlateFrameProps> = ({
             y="280"
             fill={palette.ink}
             fontFamily={FONTS.sans}
-            fontSize="10.5"
+            fontSize={fittedTitle.fontSize}
             fontWeight="600"
             letterSpacing="0.02em"
           >
-            {title.length > 36 ? `${title.slice(0, 35)}.` : title}
+            {fittedTitle.text}
           </text>
           <text
             x="376"
@@ -165,10 +188,10 @@ export const BlueprintPlateFrame: React.FC<BlueprintPlateFrameProps> = ({
             textAnchor="end"
             fill={palette.muted}
             fontFamily={FONTS.mono}
-            fontSize="9"
+            fontSize={fittedSecondary.fontSize}
             fontWeight="500"
           >
-            {secondaryLabel.length > 26 ? secondaryLabel.slice(0, 26) : secondaryLabel}
+            {fittedSecondary.text}
           </text>
         </g>
       )}

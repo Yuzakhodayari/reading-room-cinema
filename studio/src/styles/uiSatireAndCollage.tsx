@@ -1,10 +1,14 @@
 import React from "react";
 import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { FONTS, TABULAR_NUM_STYLE, getOpticalTracking } from "../design/fonts";
+import { fitSvgTextToWidth, wrapSvgTextLines } from "../design/fitText";
 import {
   COLORS,
   OVER_FOOTAGE_PALETTE,
   PAGE_PALETTE,
+  REGISTERS,
+  RegisterId,
+  RegisterPalette,
   studioSpring,
 } from "../design/tokens";
 
@@ -26,50 +30,206 @@ export interface UiSatireBaseProps {
   badgeText?: string;
   paletteMode?: "page" | "over-footage";
   mode?: UiSatireDisplayMode;
+  register?: RegisterId;
   atFrame?: number;
 }
 
 interface UiSatireTheme {
   isGlass: boolean;
+  isCompact: boolean;
+  isDark: boolean;
   inkHeadline: string;
   inkBody: string;
   inkMuted: string;
   navyInk: string;
   accentAlert: string;
   accentTeal: string;
+  accentCapital: string;
+  accentSlate: string;
   cardBg: string;
   cardBorder: string;
   wellBg: string;
+  solidPanelBg: string;
+  solidPanelInk: string;
+  solidPanelMuted: string;
+  riskBg: string;
+  riskBorder: string;
+  highlightWash: string;
 }
 
-function getUiSatireTheme(isGlass: boolean): UiSatireTheme {
+function resolveSatireRegister(register?: RegisterId): RegisterPalette {
+  return REGISTERS[register ?? "page_editorial"];
+}
+
+function getUiSatireTheme(
+  isGlass: boolean,
+  isCompact: boolean,
+  reg: RegisterPalette
+): UiSatireTheme {
   if (isGlass) {
     return {
       isGlass: true,
+      isCompact,
+      isDark: true,
       inkHeadline: OVER_FOOTAGE_PALETTE.textHeadline,
       inkBody: OVER_FOOTAGE_PALETTE.textBody,
       inkMuted: OVER_FOOTAGE_PALETTE.textMuted,
       navyInk: OVER_FOOTAGE_PALETTE.accentPrimary,
       accentAlert: OVER_FOOTAGE_PALETTE.brickRedText,
       accentTeal: OVER_FOOTAGE_PALETTE.chartSecondary,
+      accentCapital: OVER_FOOTAGE_PALETTE.accentWarm,
+      accentSlate: OVER_FOOTAGE_PALETTE.accentPrimary,
       cardBg: "rgba(15, 25, 35, 0.58)",
       cardBorder: OVER_FOOTAGE_PALETTE.glassBorder,
       wellBg: OVER_FOOTAGE_PALETTE.glassDarkWell,
+      solidPanelBg: PAGE_PALETTE.navyDeep,
+      solidPanelInk: OVER_FOOTAGE_PALETTE.textHeadline,
+      solidPanelMuted: OVER_FOOTAGE_PALETTE.textBody,
+      riskBg: OVER_FOOTAGE_PALETTE.riskFill,
+      riskBorder: OVER_FOOTAGE_PALETTE.brickRedText,
+      highlightWash: OVER_FOOTAGE_PALETTE.highlightSweep,
     };
   }
   return {
     isGlass: false,
-    inkHeadline: PAGE_PALETTE.navy,
-    inkBody: PAGE_PALETTE.navy,
-    inkMuted: PAGE_PALETTE.muted,
-    navyInk: PAGE_PALETTE.navy,
-    accentAlert: PAGE_PALETTE.brickRed,
-    accentTeal: PAGE_PALETTE.chartSecondary,
-    cardBg: PAGE_PALETTE.paper,
-    cardBorder: PAGE_PALETTE.paperBorder,
-    wellBg: PAGE_PALETTE.paperLight,
+    isCompact,
+    isDark: reg.isDark,
+    inkHeadline: reg.ink.primary,
+    inkBody: reg.ink.secondary,
+    inkMuted: reg.ink.muted,
+    navyInk: reg.isDark ? reg.accent.statutory : reg.rule.oxford,
+    accentAlert: reg.accent.liability,
+    accentTeal: reg.accent.solvent,
+    accentCapital: reg.accent.capital,
+    accentSlate: reg.accent.statutory,
+    cardBg: reg.bg.elevated,
+    cardBorder: reg.rule.hairline,
+    wellBg: reg.bg.recessed,
+    solidPanelBg: reg.isDark ? reg.bg.recessed : PAGE_PALETTE.navyDeep,
+    solidPanelInk: reg.isDark ? reg.ink.primary : OVER_FOOTAGE_PALETTE.textHeadline,
+    solidPanelMuted: reg.isDark ? reg.ink.secondary : OVER_FOOTAGE_PALETTE.textBody,
+    riskBg: reg.isDark ? "rgba(163, 64, 46, 0.24)" : PAGE_PALETTE.riskFill,
+    riskBorder: reg.accent.liability,
+    highlightWash: reg.accent.highlighterWash,
   };
 }
+
+interface FittedSvgTextProps {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  fontSize: number;
+  minFontSize?: number;
+  fontFamily: string;
+  fontWeight?: number | string;
+  fill: string;
+  textAnchor?: "start" | "middle" | "end";
+  dominantBaseline?: "auto" | "central" | "hanging";
+  style?: React.CSSProperties;
+}
+
+const FittedSvgText: React.FC<FittedSvgTextProps> = ({
+  text,
+  x,
+  y,
+  maxWidth,
+  fontSize,
+  minFontSize,
+  fontFamily,
+  fontWeight = 700,
+  fill,
+  textAnchor = "start",
+  dominantBaseline,
+  style,
+}) => {
+  const fitted = fitSvgTextToWidth(
+    text,
+    maxWidth,
+    fontSize,
+    minFontSize ?? Math.max(10, fontSize * 0.66),
+    fontFamily,
+    { fontWeight }
+  );
+  return (
+    <text
+      x={x}
+      y={y}
+      fontFamily={fontFamily}
+      fontSize={fitted.fontSize}
+      fontWeight={fontWeight}
+      fill={fill}
+      textAnchor={textAnchor}
+      dominantBaseline={dominantBaseline}
+      style={style}
+    >
+      {fitted.text}
+    </text>
+  );
+};
+
+interface WrappedSvgTextProps {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  fontSize: number;
+  minFontSize?: number;
+  maxLines?: number;
+  lineHeight?: number;
+  fontFamily: string;
+  fontWeight?: number | string;
+  fill: string;
+  textAnchor?: "start" | "middle" | "end";
+  verticalCenter?: boolean;
+  style?: React.CSSProperties;
+}
+
+const WrappedSvgText: React.FC<WrappedSvgTextProps> = ({
+  text,
+  x,
+  y,
+  maxWidth,
+  fontSize,
+  minFontSize,
+  maxLines = 2,
+  lineHeight = 1.18,
+  fontFamily,
+  fontWeight = 700,
+  fill,
+  textAnchor = "start",
+  verticalCenter = false,
+  style,
+}) => {
+  const wrapped = wrapSvgTextLines(text, maxWidth, fontSize, fontFamily, maxLines, {
+    minFontSize: minFontSize ?? Math.max(10, fontSize * 0.66),
+    lineHeight,
+    fontWeight,
+  });
+  if (wrapped.lines.length === 0) return null;
+  const totalHeight = (wrapped.lines.length - 1) * wrapped.lineHeightPx;
+  const startY = verticalCenter ? y - totalHeight * 0.5 : y;
+
+  return (
+    <text
+      x={x}
+      y={startY}
+      fontFamily={fontFamily}
+      fontSize={wrapped.fontSize}
+      fontWeight={fontWeight}
+      fill={fill}
+      textAnchor={textAnchor}
+      dominantBaseline={verticalCenter ? "central" : undefined}
+      style={style}
+    >
+      {wrapped.lines.map((line, idx) => (
+        <tspan key={`sat-wl-${idx}`} x={x} dy={idx === 0 ? 0 : wrapped.lineHeightPx}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+};
 
 interface UiSatireShellProps {
   eyebrow: string;
@@ -79,6 +239,7 @@ interface UiSatireShellProps {
   badgeText?: string;
   mode?: UiSatireDisplayMode;
   paletteMode?: "page" | "over-footage";
+  register?: RegisterId;
   atFrame?: number;
   renderStage: (theme: UiSatireTheme, elapsed: number, fps: number) => React.ReactNode;
 }
@@ -91,6 +252,7 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
   badgeText,
   mode,
   paletteMode = "page",
+  register,
   atFrame = 0,
   renderStage,
 }) => {
@@ -103,50 +265,69 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
+  const highlightSweep = interpolate(elapsed, [10, 40], [0, 100], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
   const resolvedMode: UiSatireDisplayMode =
     mode ?? (paletteMode === "over-footage" ? "over-footage" : "page");
   const isGlass = resolvedMode === "over-footage";
-  const theme = getUiSatireTheme(isGlass);
+  const isCompact = resolvedMode !== "page";
+  const reg = resolveSatireRegister(register);
+  const theme = getUiSatireTheme(isGlass, isCompact, reg);
 
   if (resolvedMode !== "page") {
     return (
       <div
         style={{
+          position: "relative",
           width: "640px",
-          background: isGlass
-            ? OVER_FOOTAGE_PALETTE.glassPrimary
-            : PAGE_PALETTE.paperLight,
+          background: isGlass ? OVER_FOOTAGE_PALETTE.glassPrimary : reg.bg.elevated,
           backdropFilter: isGlass ? "blur(14px) saturate(160%)" : undefined,
           WebkitBackdropFilter: isGlass ? "blur(14px) saturate(160%)" : undefined,
-          border: `1px solid ${
-            isGlass ? OVER_FOOTAGE_PALETTE.glassBorder : PAGE_PALETTE.paperBorder
-          }`,
-          borderRadius: "18px",
-          padding: "24px 28px",
+          border: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassBorder : reg.rule.hairline}`,
+          borderRadius: "16px",
+          padding: "24px 26px 20px 26px",
           boxSizing: "border-box",
           boxShadow: isGlass
-            ? "0 22px 48px rgba(15, 25, 35, 0.48)"
-            : "0 20px 44px rgba(28, 43, 58, 0.12)",
+            ? "0 24px 52px -12px rgba(15, 25, 35, 0.52)"
+            : "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)",
           opacity: enter,
           transform: `translate3d(0, ${((1 - enter) * 16).toFixed(1)}px, 0)`,
           userSelect: "none",
+          overflow: "hidden",
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: isGlass
+              ? OVER_FOOTAGE_PALETTE.chartSecondary
+              : reg.isDark
+              ? reg.accent.statutory
+              : reg.rule.oxford,
+          }}
+        />
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            gap: "12px",
             marginBottom: "8px",
           }}
         >
           <span
             style={{
               fontFamily: FONTS.mono,
-              fontSize: "11px",
+              fontSize: "12px",
               fontWeight: 700,
-              letterSpacing: getOpticalTracking(11, "mono"),
+              letterSpacing: getOpticalTracking(12, "mono"),
               textTransform: "uppercase",
               color: theme.accentAlert,
             }}
@@ -158,9 +339,14 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
               style={{
                 ...TABULAR_NUM_STYLE,
                 fontFamily: FONTS.mono,
-                fontSize: "12px",
+                fontSize: "13px",
                 fontWeight: 700,
                 color: theme.accentTeal,
+                backgroundColor: isGlass ? OVER_FOOTAGE_PALETTE.glassDarkWell : reg.bg.recessed,
+                border: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
+                padding: "3px 10px",
+                borderRadius: "4px",
+                flexShrink: 0,
               }}
             >
               {badgeText}
@@ -170,7 +356,7 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
         <div
           style={{
             fontFamily: FONTS.serif,
-            fontSize: "24px",
+            fontSize: "23px",
             fontWeight: 700,
             lineHeight: 1.18,
             color: theme.inkHeadline,
@@ -182,16 +368,37 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
         <div
           style={{
             backgroundColor: theme.cardBg,
-            border: `1px solid ${theme.cardBorder}`,
+            border: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
             borderRadius: "12px",
-            padding: "12px",
+            padding: "11px",
           }}
         >
           {renderStage(theme, elapsed, fps)}
         </div>
+        <div
+          style={{
+            marginTop: "10px",
+            paddingTop: "8px",
+            borderTop: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
+            fontFamily: FONTS.mono,
+            fontSize: "11px",
+            color: theme.inkMuted,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            ...TABULAR_NUM_STYLE,
+          }}
+        >
+          {sourceCitation}
+        </div>
       </div>
     );
   }
+
+  const topAccentColor = reg.isDark ? reg.accent.statutory : reg.rule.oxford;
+  const dualShadow = reg.isDark
+    ? "0 24px 52px -14px rgba(3, 9, 18, 0.56), 0 4px 16px rgba(3, 9, 18, 0.30)"
+    : "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)";
 
   return (
     <div
@@ -199,8 +406,8 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
         position: "relative",
         width: "1920px",
         height: "1080px",
-        backgroundColor: PAGE_PALETTE.paperLight,
-        padding: "56px 88px 48px 88px",
+        backgroundColor: reg.bg.canvas,
+        padding: "54px 88px 46px 88px",
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -214,8 +421,8 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
           position: "absolute",
           inset: 0,
           backgroundImage: `
-            linear-gradient(to right, ${COLORS.gridLine} 1px, transparent 1px),
-            linear-gradient(to bottom, ${COLORS.gridLine} 1px, transparent 1px)
+            linear-gradient(to right, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(to bottom, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px)
           `,
           backgroundSize: "64px 64px",
           pointerEvents: "none",
@@ -229,8 +436,9 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-end",
-          borderBottom: `2.5px solid ${PAGE_PALETTE.navy}`,
-          paddingBottom: "20px",
+          borderBottom: `2px solid ${topAccentColor}`,
+          paddingBottom: "18px",
+          gap: "32px",
         }}
       >
         <div style={{ maxWidth: "1300px" }}>
@@ -241,8 +449,8 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
               fontWeight: 700,
               letterSpacing: "0.1em",
               textTransform: "uppercase",
-              color: PAGE_PALETTE.brickRed,
-              marginBottom: "8px",
+              color: reg.accent.liability,
+              marginBottom: "6px",
             }}
           >
             {eyebrow}
@@ -251,10 +459,10 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
             style={{
               margin: 0,
               fontFamily: FONTS.serif,
-              fontSize: "48px",
+              fontSize: "46px",
               fontWeight: 700,
               lineHeight: 1.08,
-              color: PAGE_PALETTE.navy,
+              color: reg.ink.primary,
             }}
           >
             {title}
@@ -265,7 +473,7 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
               fontFamily: FONTS.sans,
               fontSize: "19px",
               lineHeight: 1.4,
-              color: PAGE_PALETTE.muted,
+              color: reg.ink.muted,
             }}
           >
             {subtitle}
@@ -275,19 +483,35 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
         {badgeText && (
           <div
             style={{
+              position: "relative",
               padding: "12px 22px",
-              backgroundColor: PAGE_PALETTE.riskFill,
-              border: `2px solid ${PAGE_PALETTE.brickRed}`,
+              backgroundColor: reg.bg.elevated,
+              border: `1px solid ${reg.rule.hairline}`,
+              borderLeft: `4px solid ${reg.accent.liability}`,
               borderRadius: "8px",
               fontFamily: FONTS.mono,
               fontSize: "18px",
               fontWeight: 700,
-              color: PAGE_PALETTE.brickRed,
-              transform: "rotate(-1.5deg)",
+              color: reg.accent.liability,
+              boxShadow: dualShadow,
+              flexShrink: 0,
               ...TABULAR_NUM_STYLE,
             }}
           >
-            {badgeText}
+            <span
+              style={{
+                position: "absolute",
+                left: "14px",
+                bottom: "10px",
+                height: "14px",
+                width: `calc(${highlightSweep}% - 28px)`,
+                maxWidth: "calc(100% - 28px)",
+                backgroundColor: reg.accent.highlighterWash,
+                borderRadius: "3px",
+                zIndex: 0,
+              }}
+            />
+            <span style={{ position: "relative", zIndex: 1 }}>{badgeText}</span>
           </div>
         )}
       </div>
@@ -297,18 +521,29 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
           position: "relative",
           zIndex: 1,
           flex: 1,
-          margin: "24px 0",
-          backgroundColor: PAGE_PALETTE.paper,
-          border: `2px solid ${PAGE_PALETTE.navy}`,
-          borderRadius: "16px",
-          padding: "24px 32px",
+          margin: "22px 0",
+          backgroundColor: reg.bg.elevated,
+          border: `1px solid ${reg.rule.hairline}`,
+          borderRadius: "10px",
+          padding: "26px 32px 22px 32px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 20px 44px rgba(28, 43, 58, 0.09)",
+          boxShadow: dualShadow,
           opacity: enter,
+          overflow: "hidden",
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: topAccentColor,
+          }}
+        />
         {renderStage(theme, elapsed, fps)}
       </div>
 
@@ -318,9 +553,11 @@ const UiSatireShell: React.FC<UiSatireShellProps> = ({
           zIndex: 1,
           display: "flex",
           justifyContent: "space-between",
+          borderTop: `1px solid ${reg.rule.hairline}`,
+          paddingTop: "12px",
           fontFamily: FONTS.mono,
           fontSize: "12.5px",
-          color: PAGE_PALETTE.muted,
+          color: reg.ink.muted,
           ...TABULAR_NUM_STYLE,
         }}
       >
@@ -393,6 +630,7 @@ export const LongitudinalHouseholdDossier: React.FC<LongitudinalHouseholdDossier
   badgeText = "CASE #TX-2025-36",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <UiSatireShell
@@ -403,6 +641,7 @@ export const LongitudinalHouseholdDossier: React.FC<LongitudinalHouseholdDossier
     badgeText={badgeText}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderStage={(theme, elapsed) => {
       const stageIdx =
@@ -410,29 +649,155 @@ export const LongitudinalHouseholdDossier: React.FC<LongitudinalHouseholdDossier
           ? activeStage
           : (Math.min(3, Math.floor(elapsed / 42)) as 0 | 1 | 2 | 3);
 
+      if (theme.isCompact) {
+        const cur = snapshots[stageIdx] ?? snapshots[0];
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="548" height="106" rx="10" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="2" />
+            <FittedSvgText
+              text={`${cur.year} · ${cur.statusTag}`}
+              x={24}
+              y={34}
+              maxWidth={516}
+              fontSize={15}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.accentAlert}
+            />
+            <FittedSvgText
+              text={`IN: ${cur.monthlyInflow}`}
+              x={24}
+              y={66}
+              maxWidth={250}
+              fontSize={18}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.accentTeal}
+              style={TABULAR_NUM_STYLE}
+            />
+            <FittedSvgText
+              text={`OUT: ${cur.fixedMortgageLock}`}
+              x={540}
+              y={66}
+              maxWidth={250}
+              fontSize={18}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.accentAlert}
+              textAnchor="end"
+              style={TABULAR_NUM_STYLE}
+            />
+            <FittedSvgText
+              text={cur.auxiliaryShock}
+              x={24}
+              y={96}
+              maxWidth={516}
+              fontSize={15}
+              fontFamily={FONTS.sans}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+            />
+            {snapshots.map((sn, idx) => {
+              const y = 130 + idx * 54;
+              const isCur = idx === stageIdx;
+              return (
+                <g key={`cl-c-${idx}`} transform={`translate(8, ${y})`}>
+                  <rect
+                    width="548"
+                    height="46"
+                    rx="8"
+                    fill={isCur ? theme.solidPanelBg : theme.wellBg}
+                    stroke={isCur ? theme.accentAlert : theme.cardBorder}
+                    strokeWidth={isCur ? "2" : "1.2"}
+                  />
+                  <FittedSvgText
+                    text={sn.year}
+                    x={16}
+                    y={28}
+                    maxWidth={154}
+                    fontSize={15}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={isCur ? theme.solidPanelInk : theme.inkHeadline}
+                  />
+                  <FittedSvgText
+                    text={sn.monthlyInflow}
+                    x={365}
+                    y={28}
+                    maxWidth={165}
+                    fontSize={15}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={isCur ? theme.accentTeal : theme.inkMuted}
+                    textAnchor="end"
+                    style={TABULAR_NUM_STYLE}
+                  />
+                  <FittedSvgText
+                    text={sn.fixedMortgageLock.replace(" FIXED LOCK", "")}
+                    x={532}
+                    y={28}
+                    maxWidth={155}
+                    fontSize={15}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={theme.accentAlert}
+                    textAnchor="end"
+                    style={TABULAR_NUM_STYLE}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Left: Austin House Architectural Elevation */}
-          <rect x="36" y="42" width="560" height="536" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="2.2" />
-          <text x="68" y="88" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={theme.accentAlert}>
-            PROPERTY ELEVATION · SOUTH AUSTIN BUNGALOW
-          </text>
+          <rect x="36" y="42" width="560" height="536" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.2" />
+          <FittedSvgText
+            text="PROPERTY ELEVATION · SOUTH AUSTIN BUNGALOW"
+            x={68}
+            y={88}
+            maxWidth={496}
+            fontSize={14}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
 
           {/* Gabled Roof + Austin Sun / A/C Condenser */}
           <polygon points="110,270 316,142 522,270" fill={PAGE_PALETTE.navy} />
-          <rect x="146" y="270" width="340" height="190" fill={PAGE_PALETTE.paper} stroke={PAGE_PALETTE.navy} strokeWidth="3" />
-          <rect x="286" y="346" width="60" height="114" fill={PAGE_PALETTE.gold} />
+          <rect x="146" y="270" width="340" height="190" fill={theme.cardBg} stroke={theme.navyInk} strokeWidth="3" />
+          <rect x="286" y="346" width="60" height="114" fill={theme.accentSlate} />
           <rect x="180" y="308" width="68" height="58" fill={stageIdx === 3 ? PAGE_PALETTE.brickRed : PAGE_PALETTE.chartSecondary} opacity={0.85} />
           <rect x="384" y="308" width="68" height="58" fill={stageIdx === 3 ? PAGE_PALETTE.brickRed : PAGE_PALETTE.chartSecondary} opacity={0.85} />
 
           {/* Exterior HVAC Condenser Unit */}
           <rect x="494" y="396" width="52" height="64" rx="4" fill={stageIdx === 3 ? PAGE_PALETTE.brickRed : PAGE_PALETTE.navy} />
-          <text x="316" y="508" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={theme.inkHeadline} style={TABULAR_NUM_STYLE}>
-            LIEN: $3,400/MO · {snapshots[stageIdx].year}
-          </text>
-          <text x="316" y="540" textAnchor="middle" fontFamily={FONTS.sans} fontSize="15" fontWeight="600" fill={theme.accentAlert}>
-            {snapshots[stageIdx].auxiliaryShock}
-          </text>
+          <FittedSvgText
+            text={`LIEN: $3,400/MO · ${snapshots[stageIdx].year}`}
+            x={316}
+            y={506}
+            maxWidth={496}
+            fontSize={18}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+          <FittedSvgText
+            text={snapshots[stageIdx].auxiliaryShock}
+            x={316}
+            y={538}
+            maxWidth={496}
+            fontSize={15}
+            fontFamily={FONTS.sans}
+            fontWeight={600}
+            fill={theme.accentAlert}
+            textAnchor="middle"
+          />
 
           {/* Right: 4-Stage Longitudinal T-Account Ledger */}
           {snapshots.map((sn, idx) => {
@@ -444,22 +809,52 @@ export const LongitudinalHouseholdDossier: React.FC<LongitudinalHouseholdDossier
                   width="888"
                   height="122"
                   rx="10"
-                  fill={isCurrent ? (idx >= 1 ? PAGE_PALETTE.riskFill : theme.wellBg) : theme.wellBg}
-                  stroke={isCurrent ? PAGE_PALETTE.brickRed : PAGE_PALETTE.paperBorder}
-                  strokeWidth={isCurrent ? "3" : "1.5"}
+                  fill={isCurrent ? (idx >= 1 ? theme.riskBg : theme.wellBg) : theme.wellBg}
+                  stroke={isCurrent ? theme.riskBorder : theme.cardBorder}
+                  strokeWidth={isCurrent ? "2.6" : "1.4"}
                 />
-                <text x="26" y="36" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={isCurrent ? PAGE_PALETTE.brickRed : theme.inkMuted}>
-                  {sn.year} · {sn.statusTag}
-                </text>
-                <text x="26" y="74" fontFamily={FONTS.mono} fontSize="22" fontWeight="700" fill={PAGE_PALETTE.chartSecondary} style={TABULAR_NUM_STYLE}>
-                  IN: {sn.monthlyInflow}
-                </text>
-                <text x="450" y="74" fontFamily={FONTS.mono} fontSize="22" fontWeight="700" fill={PAGE_PALETTE.brickRed} style={TABULAR_NUM_STYLE}>
-                  OUT: {sn.fixedMortgageLock}
-                </text>
-                <text x="26" y="104" fontFamily={FONTS.sans} fontSize="15" fontWeight="600" fill={PAGE_PALETTE.navy}>
-                  {sn.verdictNote}
-                </text>
+                <FittedSvgText
+                  text={`${sn.year} · ${sn.statusTag}`}
+                  x={26}
+                  y={34}
+                  maxWidth={836}
+                  fontSize={14}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={isCurrent ? theme.accentAlert : theme.inkMuted}
+                />
+                <FittedSvgText
+                  text={`IN: ${sn.monthlyInflow}`}
+                  x={26}
+                  y={72}
+                  maxWidth={396}
+                  fontSize={22}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.accentTeal}
+                  style={TABULAR_NUM_STYLE}
+                />
+                <FittedSvgText
+                  text={`OUT: ${sn.fixedMortgageLock}`}
+                  x={450}
+                  y={72}
+                  maxWidth={412}
+                  fontSize={22}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.accentAlert}
+                  style={TABULAR_NUM_STYLE}
+                />
+                <FittedSvgText
+                  text={sn.verdictNote}
+                  x={26}
+                  y={104}
+                  maxWidth={836}
+                  fontSize={15}
+                  fontFamily={FONTS.sans}
+                  fontWeight={600}
+                  fill={theme.inkHeadline}
+                />
               </g>
             );
           })}
@@ -487,6 +882,7 @@ export const PerishableSeatVsComputeSplit: React.FC<PerishableSeatVsComputeSplit
   badgeText = "PERISHABLE CAPACITY",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <UiSatireShell
@@ -497,19 +893,124 @@ export const PerishableSeatVsComputeSplit: React.FC<PerishableSeatVsComputeSplit
     badgeText={badgeText}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderStage={(theme, elapsed) => {
       const pushbackX = Math.min(90, elapsed * 0.8);
       const secLeft = Math.max(0, 59 - Math.floor(elapsed / 4));
       const padSec = secLeft < 10 ? `0${secLeft}` : `${secLeft}`;
 
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="264" height="332" rx="12" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+            <FittedSvgText
+              text={seatCode}
+              x={24}
+              y={38}
+              maxWidth={232}
+              fontSize={15}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+            />
+            {["14A", "14B"].map((st, idx) => {
+              const isEmpty = st === "14A";
+              return (
+                <g key={`c-st-${st}`} transform={`translate(${28 + idx * 116}, 68)`}>
+                  <rect
+                    width="104"
+                    height="156"
+                    rx="12"
+                    fill={isEmpty ? theme.riskBg : theme.solidPanelBg}
+                    stroke={isEmpty ? theme.riskBorder : theme.navyInk}
+                    strokeWidth="2.5"
+                    strokeDasharray={isEmpty ? "6 5" : undefined}
+                  />
+                  <text x="52" y="76" textAnchor="middle" fontFamily={FONTS.mono} fontSize="24" fontWeight="700" fill={isEmpty ? theme.accentAlert : theme.solidPanelInk}>
+                    {st}
+                  </text>
+                  <FittedSvgText
+                    text={isEmpty ? "UNSOLD $0" : "OCCUPIED"}
+                    x={52}
+                    y={114}
+                    maxWidth={90}
+                    fontSize={14}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={isEmpty ? theme.accentAlert : theme.accentTeal}
+                    textAnchor="middle"
+                  />
+                </g>
+              );
+            })}
+            <WrappedSvgText
+              text="Cannot be stored in a warehouse for Friday peak."
+              x={24}
+              y={268}
+              maxWidth={232}
+              fontSize={15}
+              maxLines={2}
+              fontFamily={FONTS.sans}
+              fontWeight={700}
+              fill={theme.accentAlert}
+            />
+
+            <rect x="292" y="8" width="264" height="332" rx="12" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2" />
+            <FittedSvgText
+              text={gpuWindowLabel}
+              x={308}
+              y={38}
+              maxWidth={232}
+              fontSize={15}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.accentTeal}
+            />
+            <circle cx="424" cy="148" r="68" fill="none" stroke={OVER_FOOTAGE_PALETTE.brickRedText} strokeWidth="6" strokeDasharray="12 8" />
+            <text x="424" y="152" textAnchor="middle" fontFamily={FONTS.mono} fontSize="24" fontWeight="700" fill={theme.solidPanelInk} style={TABULAR_NUM_STYLE}>
+              00:00:{padSec}
+            </text>
+            <FittedSvgText
+              text="TOKENS EVAPORATE"
+              x={424}
+              y={180}
+              maxWidth={118}
+              fontSize={13}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.brickRedText}
+              textAnchor="middle"
+            />
+            <WrappedSvgText
+              text="Dumps idle off-peak cycles at near-zero marginal cost."
+              x={308}
+              y={268}
+              maxWidth={232}
+              fontSize={15}
+              maxLines={2}
+              fontFamily={FONTS.sans}
+              fontWeight={700}
+              fill={theme.solidPanelInk}
+            />
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Left: Airliner Cabin Row 14 */}
-          <rect x="40" y="44" width="716" height="532" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="2.5" />
-          <text x="76" y="92" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.inkHeadline}>
-            FLIGHT PUSHBACK · {seatCode}
-          </text>
+          <rect x="40" y="44" width="716" height="532" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.5" />
+          <FittedSvgText
+            text={`FLIGHT PUSHBACK · ${seatCode}`}
+            x={76}
+            y={92}
+            maxWidth={644}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
           <g transform={`translate(${(110 + pushbackX).toFixed(1)}, 168)`}>
             {["14A", "14B", "14C"].map((st, idx) => {
               const isEmpty = st === "14A";
@@ -519,8 +1020,8 @@ export const PerishableSeatVsComputeSplit: React.FC<PerishableSeatVsComputeSplit
                     width="138"
                     height="184"
                     rx="16"
-                    fill={isEmpty ? PAGE_PALETTE.riskFill : PAGE_PALETTE.navy}
-                    stroke={isEmpty ? PAGE_PALETTE.brickRed : PAGE_PALETTE.navy}
+                    fill={isEmpty ? theme.riskBg : theme.solidPanelBg}
+                    stroke={isEmpty ? theme.riskBorder : theme.navyInk}
                     strokeWidth="3"
                     strokeDasharray={isEmpty ? "8 6" : undefined}
                   />
@@ -531,44 +1032,75 @@ export const PerishableSeatVsComputeSplit: React.FC<PerishableSeatVsComputeSplit
                     fontFamily={FONTS.mono}
                     fontSize="26"
                     fontWeight="700"
-                    fill={isEmpty ? PAGE_PALETTE.brickRed : OVER_FOOTAGE_PALETTE.textHeadline}
+                    fill={isEmpty ? theme.accentAlert : theme.solidPanelInk}
                   >
                     {st}
                   </text>
-                  <text
-                    x="69"
-                    y="124"
-                    textAnchor="middle"
+                  <FittedSvgText
+                    text={isEmpty ? "UNSOLD · $0" : "OCCUPIED"}
+                    x={69}
+                    y={124}
+                    maxWidth={118}
+                    fontSize={13}
                     fontFamily={FONTS.mono}
-                    fontSize="13"
-                    fontWeight="700"
-                    fill={isEmpty ? PAGE_PALETTE.brickRed : OVER_FOOTAGE_PALETTE.accentPrimary}
-                  >
-                    {isEmpty ? "UNSOLD · $0" : "OCCUPIED"}
-                  </text>
+                    fontWeight={700}
+                    fill={isEmpty ? theme.accentAlert : OVER_FOOTAGE_PALETTE.accentPrimary}
+                    textAnchor="middle"
+                  />
                 </g>
               );
             })}
           </g>
-          <text x="76" y="514" fontFamily={FONTS.sans} fontSize="19" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-            Cannot Be Stored in a Warehouse for Friday Peak Demand
-          </text>
+          <WrappedSvgText
+            text="Cannot Be Stored in a Warehouse for Friday Peak Demand"
+            x={76}
+            y={496}
+            maxWidth={644}
+            fontSize={19}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
 
           {/* Right: Expiring Off-Peak GPU Window */}
-          <rect x="804" y="44" width="716" height="532" rx="14" fill={PAGE_PALETTE.navyDeep} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
-          <text x="840" y="92" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-            {gpuWindowLabel}
-          </text>
-          <circle cx="1162" cy="284" r="126" fill="none" stroke={OVER_FOOTAGE_PALETTE.brickRedText} strokeWidth="8" strokeDasharray="16 10" />
-          <text x="1162" y="274" textAnchor="middle" fontFamily={FONTS.mono} fontSize="42" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
+          <rect x="804" y="44" width="716" height="532" rx="14" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2.5" />
+          <FittedSvgText
+            text={gpuWindowLabel}
+            x={840}
+            y={92}
+            maxWidth={644}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+          />
+          <circle cx="1162" cy="276" r="126" fill="none" stroke={OVER_FOOTAGE_PALETTE.brickRedText} strokeWidth="8" strokeDasharray="16 10" />
+          <text x="1162" y="266" textAnchor="middle" fontFamily={FONTS.mono} fontSize="42" fontWeight="700" fill={theme.solidPanelInk} style={TABULAR_NUM_STYLE}>
             00:00:{padSec}
           </text>
-          <text x="1162" y="316" textAnchor="middle" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.brickRedText}>
-            UNBURNED TOKENS EVAPORATE
-          </text>
-          <text x="840" y="514" fontFamily={FONTS.sans} fontSize="19" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            Issuing Expiring Credits Dumps Idle Off-Peak Cycles at Near-Zero Marginal Cost
-          </text>
+          <FittedSvgText
+            text="UNBURNED TOKENS EVAPORATE"
+            x={1162}
+            y={308}
+            maxWidth={212}
+            fontSize={14}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.brickRedText}
+            textAnchor="middle"
+          />
+          <WrappedSvgText
+            text="Issuing Expiring Credits Dumps Idle Off-Peak Cycles at Near-Zero Marginal Cost"
+            x={840}
+            y={490}
+            maxWidth={644}
+            fontSize={19}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.solidPanelInk}
+          />
         </svg>
       );
     }}
@@ -576,7 +1108,7 @@ export const PerishableSeatVsComputeSplit: React.FC<PerishableSeatVsComputeSplit
 );
 
 // ============================================================================
-// 3. ClosedComputeScripWallet ($100k Credits = $0 Rent vs -20% Cash-Out Toll)
+// 3. ClosedComputeScripWallet (Documentary Wallet & Company-Scrip Satire Exhibit)
 // ============================================================================
 export interface ClosedComputeScripWalletProps extends UiSatireBaseProps {
   creditBalance?: string;
@@ -593,6 +1125,7 @@ export const ClosedComputeScripWallet: React.FC<ClosedComputeScripWalletProps> =
   badgeText = "$0.00 LEGAL TENDER",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <UiSatireShell
@@ -603,55 +1136,462 @@ export const ClosedComputeScripWallet: React.FC<ClosedComputeScripWalletProps> =
     badgeText={badgeText}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
-    renderStage={(theme) => (
-      <svg width="100%" height="100%" viewBox="0 0 1560 620">
-        {/* Left Mobile Scrip Wallet UI */}
-        <rect x="52" y="38" width="520" height="544" rx="28" fill={PAGE_PALETTE.navyDeep} stroke={PAGE_PALETTE.navy} strokeWidth="4" />
-        <text x="96" y="102" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.accentPrimary}>
-          WALLET BALANCE · NON-TRANSFERABLE
-        </text>
-        <text x="96" y="158" fontFamily={FONTS.mono} fontSize="34" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-          {creditBalance}
-        </text>
-        <rect x="88" y="204" width="448" height="156" rx="14" fill="rgba(163, 64, 46, 0.34)" stroke={OVER_FOOTAGE_PALETTE.brickRedText} strokeWidth="2" />
-        <text x="114" y="248" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.brickRedText}>
-          ACH PAYMENT ATTEMPT · CHASE MORTGAGE
-        </text>
-        <text x="114" y="296" fontFamily={FONTS.mono} fontSize="28" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-          DECLINED · $0.00 USD
-        </text>
-        <text x="114" y="332" fontFamily={FONTS.sans} fontSize="14" fill={OVER_FOOTAGE_PALETTE.textBody}>
-          Error 402: Compute Scrip Not Accepted by County Tax or Bank
-        </text>
-        <text x="96" y="520" fontFamily={FONTS.mono} fontSize="13" fill={OVER_FOOTAGE_PALETTE.textMuted}>
-          EXPIRES END OF BILLING QUARTER · NO ROLLOVER
-        </text>
+    renderStage={(theme, elapsed, fps) => {
+      const gaugeProg = interpolate(
+        studioSpring(elapsed, fps, "cameraGlide", 14),
+        [0, 1],
+        [0, 1],
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+      );
 
-        {/* Right Routing Comparison */}
-        <rect x="636" y="76" width="872" height="214" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
-        <text x="676" y="130" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.chartSecondary}>
-          RAIL A · CAPTIVE ECOSYSTEM PARTNERS (0.0% FEE)
-        </text>
-        <text x="676" y="182" fontFamily={FONTS.serif} fontSize="34" fontWeight="700" fill={PAGE_PALETTE.navy}>
-          100% Face Value Inside Approved Cloud & Delivery Apps
-        </text>
-        <text x="676" y="232" fontFamily={FONTS.sans} fontSize="18" fill={PAGE_PALETTE.muted}>
-          Revenue stays trapped on the issuer&apos;s consolidated income statement.
-        </text>
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            {/* Compact Mobile Wallet Header */}
+            <rect x="8" y="8" width="548" height="84" rx="10" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2" />
+            <FittedSvgText
+              text="WALLET BALANCE · NON-TRANSFERABLE"
+              x={24}
+              y={34}
+              maxWidth={310}
+              fontSize={13}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.accentPrimary}
+            />
+            <FittedSvgText
+              text={creditBalance}
+              x={24}
+              y={70}
+              maxWidth={340}
+              fontSize={22}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.solidPanelInk}
+              style={TABULAR_NUM_STYLE}
+            />
+            <rect x="374" y="24" width="166" height="52" rx="8" fill="rgba(197, 163, 103, 0.22)" stroke="#C5A367" strokeWidth="1.5" />
+            <FittedSvgText
+              text="1912 COAL SCRIP"
+              x={457}
+              y={45}
+              maxWidth={148}
+              fontSize={12.5}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill="#F7C35C"
+              textAnchor="middle"
+            />
+            <FittedSvgText
+              text="-25% CASH DISCOUNT"
+              x={457}
+              y={65}
+              maxWidth={148}
+              fontSize={12.5}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.textHeadline}
+              textAnchor="middle"
+            />
 
-        <rect x="636" y="330" width="872" height="214" rx="14" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
-        <text x="676" y="384" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-          RAIL B · EXTERNAL FIAT EXIT BOOTH ({cashHaircutPct})
-        </text>
-        <text x="676" y="436" fontFamily={FONTS.serif} fontSize="34" fontWeight="700" fill={PAGE_PALETTE.navy}>
-          $0.80 on the Dollar Secondary Broker Conversion
-        </text>
-        <text x="676" y="486" fontFamily={FONTS.sans} fontSize="18" fill={PAGE_PALETTE.navy}>
-          Paying off external bank debt triggers an immediate twenty-percent haircut.
-        </text>
-      </svg>
-    )}
+            {/* Compact Itemized Decline Log */}
+            {[
+              { label: "Mortgage ACH", status: "DECLINED $0.00", alert: true },
+              { label: "Property Tax", status: "BLOCKED", alert: true },
+              { label: "Partner Delivery", status: "100% PAR", alert: false },
+            ].map((row, idx) => {
+              const ry = 104 + idx * 48;
+              return (
+                <g key={`c-wrow-${idx}`} transform={`translate(8, ${ry})`}>
+                  <rect
+                    width="548"
+                    height="40"
+                    rx="7"
+                    fill={row.alert ? theme.riskBg : theme.wellBg}
+                    stroke={row.alert ? theme.riskBorder : theme.accentTeal}
+                    strokeWidth="1.5"
+                  />
+                  <FittedSvgText
+                    text={row.label}
+                    x={16}
+                    y={26}
+                    maxWidth={270}
+                    fontSize={15}
+                    fontFamily={FONTS.sans}
+                    fontWeight={700}
+                    fill={theme.inkHeadline}
+                  />
+                  <FittedSvgText
+                    text={row.status}
+                    x={532}
+                    y={26}
+                    maxWidth={220}
+                    fontSize={15}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={row.alert ? theme.accentAlert : theme.accentTeal}
+                    textAnchor="end"
+                    style={TABULAR_NUM_STYLE}
+                  />
+                </g>
+              );
+            })}
+
+            {/* Compact Captive-Rail Exit Gauge */}
+            <rect x="8" y="254" width="548" height="86" rx="10" fill={theme.wellBg} stroke={theme.cardBorder} strokeWidth="1.6" />
+            <FittedSvgText
+              text="$1.00 Credit -> $0.80 Cash (-20% Toll)"
+              x={24}
+              y={280}
+              maxWidth={516}
+              fontSize={15}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+              style={TABULAR_NUM_STYLE}
+            />
+            <rect x="24" y="294" width="516" height="24" rx="6" fill={theme.cardBorder} />
+            <rect x="24" y="294" width={412 * gaugeProg} height="24" rx="6" fill={theme.accentTeal} />
+            <rect x={24 + 412 * gaugeProg} y="294" width={Math.max(0, 104 * gaugeProg)} height="24" rx="4" fill={theme.accentAlert} />
+            <FittedSvgText
+              text="$0.80 USD"
+              x={36}
+              y={312}
+              maxWidth={140}
+              fontSize={14}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            />
+          </svg>
+        );
+      }
+
+      const declineRows = [
+        { item: "Mortgage ACH · Chase", result: "DECLINED $0.00", sub: "Error 402: Compute Scrip Not Accepted by County Tax or Bank", isAlert: true },
+        { item: "Property Tax · Travis Co.", result: "BLOCKED", sub: "Statutory USD Treasury Settlement Only", isAlert: true },
+        { item: "Partner Delivery & Cloud", result: "100% PAR", sub: "0.0% Fee Inside Approved Captive Wall", isAlert: false },
+      ];
+
+      return (
+        <svg width="100%" height="100%" viewBox="0 0 1560 620">
+          {/* Left Realistic Mobile Scrip Wallet Bezel */}
+          <rect x="36" y="20" width="504" height="580" rx="30" fill={PAGE_PALETTE.navyDeep} stroke={theme.navyInk} strokeWidth="3.5" />
+          {/* Phone Top Speaker Notch & Status Bar */}
+          <rect x="228" y="34" width="120" height="10" rx="5" fill="#2A3F54" />
+          <FittedSvgText
+            text="09:41 · CLOUDSCRIP OS"
+            x={70}
+            y={52}
+            maxWidth={160}
+            fontSize={11}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.accentPrimary}
+          />
+          <FittedSvgText
+            text="CLOSED RAIL"
+            x={506}
+            y={52}
+            maxWidth={120}
+            fontSize={11}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.brickRedText}
+            textAnchor="end"
+          />
+
+          {/* Balance Card inside Mobile Wallet */}
+          <rect x="64" y="68" width="448" height="118" rx="14" fill="#162E47" stroke={OVER_FOOTAGE_PALETTE.accentPrimary} strokeWidth="1.5" />
+          <FittedSvgText
+            text="WALLET BALANCE · NON-TRANSFERABLE"
+            x={88}
+            y={98}
+            maxWidth={400}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.accentPrimary}
+          />
+          <FittedSvgText
+            text={creditBalance}
+            x={88}
+            y={146}
+            maxWidth={400}
+            fontSize={31}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            style={TABULAR_NUM_STYLE}
+          />
+          <FittedSvgText
+            text="EXPIRES END OF BILLING QUARTER · NO ROLLOVER"
+            x={88}
+            y={172}
+            maxWidth={400}
+            fontSize={11.5}
+            fontFamily={FONTS.mono}
+            fontWeight={600}
+            fill={OVER_FOOTAGE_PALETTE.textMuted}
+          />
+
+          {/* Itemized Decline Log Header */}
+          <FittedSvgText
+            text="SETTLEMENT ATTEMPT LEDGER"
+            x={64}
+            y={214}
+            maxWidth={448}
+            fontSize={12.5}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.accentWarm}
+          />
+
+          {/* 3 Itemized Decline / Approval Rows */}
+          {declineRows.map((row, idx) => {
+            const ry = 228 + idx * 100;
+            return (
+              <g key={`w-log-${idx}`} transform={`translate(64, ${ry})`}>
+                <rect
+                  width="448"
+                  height="88"
+                  rx="10"
+                  fill={row.isAlert ? "rgba(163, 64, 46, 0.34)" : "rgba(47, 143, 139, 0.24)"}
+                  stroke={row.isAlert ? OVER_FOOTAGE_PALETTE.brickRedText : OVER_FOOTAGE_PALETTE.chartSecondary}
+                  strokeWidth="1.8"
+                />
+                <FittedSvgText
+                  text={row.item}
+                  x={18}
+                  y={30}
+                  maxWidth={228}
+                  fontSize={16}
+                  fontFamily={FONTS.sans}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                />
+                <FittedSvgText
+                  text={row.result}
+                  x={430}
+                  y={30}
+                  maxWidth={176}
+                  fontSize={16}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={row.isAlert ? OVER_FOOTAGE_PALETTE.brickRedText : OVER_FOOTAGE_PALETTE.chartSecondary}
+                  textAnchor="end"
+                  style={TABULAR_NUM_STYLE}
+                />
+                <WrappedSvgText
+                  text={row.sub}
+                  x={18}
+                  y={54}
+                  maxWidth={412}
+                  fontSize={13}
+                  minFontSize={10.5}
+                  maxLines={2}
+                  lineHeight={1.2}
+                  fontFamily={FONTS.sans}
+                  fontWeight={500}
+                  fill={OVER_FOOTAGE_PALETTE.textBody}
+                />
+              </g>
+            );
+          })}
+
+          {/* 1912 Coal Scrip Mini Parallel Badge inside Wallet Footer */}
+          <rect x="64" y="534" width="448" height="46" rx="8" fill="rgba(197, 163, 103, 0.16)" stroke="#C5A367" strokeWidth="1.4" />
+          <circle cx="90" cy="557" r="12" fill="#C5A367" stroke="#6E5225" strokeWidth="2" />
+          <text x="90" y="561" textAnchor="middle" fontFamily={FONTS.mono} fontSize="10" fontWeight="700" fill="#271E15">
+            ¢
+          </text>
+          <FittedSvgText
+            text="1912 COAL SCRIP PARALLEL · -25% COMMISSARY DISCOUNT"
+            x={112}
+            y={562}
+            maxWidth={386}
+            fontSize={12.5}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill="#F7C35C"
+          />
+
+          {/* Right Top: Rail A (Captive Partners) */}
+          <rect x="576" y="20" width="948" height="176" rx="14" fill={theme.wellBg} stroke={theme.accentTeal} strokeWidth="2.4" />
+          <FittedSvgText
+            text="RAIL A · CAPTIVE ECOSYSTEM PARTNERS (0.0% FEE)"
+            x={612}
+            y={58}
+            maxWidth={876}
+            fontSize={14}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentTeal}
+          />
+          <WrappedSvgText
+            text="100% Face Value Inside Approved Cloud & Delivery Apps"
+            x={612}
+            y={104}
+            maxWidth={876}
+            fontSize={30}
+            minFontSize={20}
+            maxLines={2}
+            lineHeight={1.16}
+            fontFamily={FONTS.serif}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
+          <FittedSvgText
+            text="Revenue stays trapped on the issuer's consolidated income statement."
+            x={612}
+            y={170}
+            maxWidth={876}
+            fontSize={17}
+            fontFamily={FONTS.sans}
+            fontWeight={500}
+            fill={theme.inkMuted}
+          />
+
+          {/* Right Middle: Rail B (External Fiat Exit Booth) */}
+          <rect x="576" y="216" width="948" height="176" rx="14" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="2.4" />
+          <FittedSvgText
+            text={`RAIL B · EXTERNAL FIAT EXIT BOOTH (${cashHaircutPct})`}
+            x={612}
+            y={254}
+            maxWidth={876}
+            fontSize={14}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
+          <WrappedSvgText
+            text="$0.80 on the Dollar Secondary Broker Conversion"
+            x={612}
+            y={300}
+            maxWidth={876}
+            fontSize={30}
+            minFontSize={20}
+            maxLines={2}
+            lineHeight={1.16}
+            fontFamily={FONTS.serif}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
+          <FittedSvgText
+            text="Paying off external bank debt triggers an immediate twenty-percent haircut."
+            x={612}
+            y={366}
+            maxWidth={876}
+            fontSize={17}
+            fontFamily={FONTS.sans}
+            fontWeight={600}
+            fill={theme.inkBody}
+          />
+
+          {/* Right Bottom: Illustrated Captive-Rail Exit Gauge ($1.00 Credit -> $0.80 Cash) */}
+          <rect x="576" y="414" width="948" height="186" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.2" />
+          <FittedSvgText
+            text="CAPTIVE-RAIL EXIT CONVERSION GAUGE"
+            x={612}
+            y={450}
+            maxWidth={440}
+            fontSize={13.5}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkMuted}
+          />
+          <FittedSvgText
+            text="$1.00 Credit -> $0.80 Cash (-20% Toll)"
+            x={1488}
+            y={450}
+            maxWidth={440}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+            textAnchor="end"
+            style={TABULAR_NUM_STYLE}
+          />
+
+          {/* Calibrated Gauge Bar */}
+          <rect x="612" y="476" width="876" height="52" rx="8" fill={theme.cardBg} stroke={theme.cardBorder} strokeWidth="1.5" />
+          <rect
+            x="614"
+            y="478"
+            width={Math.max(4, 698 * gaugeProg)}
+            height="48"
+            rx="6"
+            fill={PAGE_PALETTE.chartSecondary}
+          />
+          <rect
+            x={614 + 698 * gaugeProg}
+            y="478"
+            width={Math.max(0, 174 * gaugeProg)}
+            height="48"
+            rx="6"
+            fill={PAGE_PALETTE.brickRed}
+          />
+          <FittedSvgText
+            text="NET CASH CLEARED: $0.80 USD (80%)"
+            x={634}
+            y={508}
+            maxWidth={480}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            style={TABULAR_NUM_STYLE}
+          />
+          <FittedSvgText
+            text="-20% TOLL"
+            x={1474}
+            y={508}
+            maxWidth={150}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="end"
+            style={TABULAR_NUM_STYLE}
+          />
+
+          {/* Gauge Ticks */}
+          {[0, 0.25, 0.5, 0.8, 1].map((tick) => {
+            const tx = 614 + tick * 872;
+            const label = `$${tick.toFixed(2)}`;
+            return (
+              <g key={`gtick-${tick}`}>
+                <line x1={tx} y1="532" x2={tx} y2="544" stroke={theme.inkMuted} strokeWidth="2" />
+                <text
+                  x={tx}
+                  y="564"
+                  textAnchor={tick === 1 ? "end" : tick === 0 ? "start" : "middle"}
+                  fontFamily={FONTS.mono}
+                  fontSize="13"
+                  fontWeight="700"
+                  fill={tick === 0.8 ? theme.accentAlert : theme.inkMuted}
+                  style={TABULAR_NUM_STYLE}
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+          <FittedSvgText
+            text="1912 Company Store Scrip Discount: -25%  |  2034 Compute Credit Exit Toll: -20%"
+            x={612}
+            y={586}
+            maxWidth={876}
+            fontSize={13.5}
+            fontFamily={FONTS.mono}
+            fontWeight={600}
+            fill={theme.inkMuted}
+          />
+        </svg>
+      );
+    }}
   />
 );
 
@@ -673,6 +1613,7 @@ export const CoalScripVsDigitalYuan: React.FC<CoalScripVsDigitalYuanProps> = ({
   badgeText = "108-YEAR RHYME",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <UiSatireShell
@@ -683,52 +1624,187 @@ export const CoalScripVsDigitalYuan: React.FC<CoalScripVsDigitalYuanProps> = ({
     badgeText={badgeText}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
-    renderStage={(theme) => (
-      <svg width="100%" height="100%" viewBox="0 0 1560 620">
-        {/* Left 1912 Brass Token */}
-        <rect x="44" y="48" width="712" height="524" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="2.5" />
-        <text x="80" y="96" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.navy}>
-          {leftArtifact}
-        </text>
-        <circle cx="400" cy="296" r="138" fill="#C5A367" stroke="#6E5225" strokeWidth="6" />
-        <circle cx="400" cy="296" r="116" fill="none" stroke="#6E5225" strokeWidth="2" strokeDasharray="6 6" />
-        <text x="400" y="276" textAnchor="middle" fontFamily={FONTS.serif} fontSize="24" fontWeight="700" fill="#271E15">
-          ISLAND CREEK COAL
-        </text>
-        <text x="400" y="318" textAnchor="middle" fontFamily={FONTS.mono} fontSize="34" fontWeight="700" fill="#271E15" style={TABULAR_NUM_STYLE}>
-          $1.00 IN MERCHANDISE
-        </text>
-        <text x="400" y="352" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-          NOT TRANSFERABLE · -25% CASH DISCOUNT
-        </text>
-        <text x="80" y="518" fontFamily={FONTS.sans} fontSize="18" fontWeight="700" fill={PAGE_PALETTE.navy}>
-          Valid Only at Company Store · Outlawed by Fair Labor Standards Act (1938)
-        </text>
+    renderStage={(theme) => {
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="264" height="332" rx="12" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+            <FittedSvgText text="1912 · COAL SCRIP" x={24} y={36} maxWidth={232} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} />
+            <circle cx="140" cy="146" r="78" fill="#C5A367" stroke="#6E5225" strokeWidth="5" />
+            <circle cx="140" cy="146" r="64" fill="none" stroke="#6E5225" strokeWidth="1.5" strokeDasharray="5 5" />
+            <FittedSvgText text="$1.00 SCRIP" x={140} y={142} maxWidth={112} fontSize={18} fontFamily={FONTS.mono} fontWeight={700} fill="#271E15" textAnchor="middle" />
+            <FittedSvgText text="-25% CASH" x={140} y={168} maxWidth={112} fontSize={13} fontFamily={FONTS.mono} fontWeight={700} fill={PAGE_PALETTE.brickRed} textAnchor="middle" />
+            <WrappedSvgText
+              text="Valid only at company store. Outlawed 1938."
+              x={24}
+              y={268}
+              maxWidth={232}
+              fontSize={15}
+              maxLines={2}
+              fontFamily={FONTS.sans}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+            />
 
-        {/* Right 2020 Shenzhen Vanishing App */}
-        <rect x="804" y="48" width="712" height="524" rx="14" fill={PAGE_PALETTE.navyDeep} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
-        <text x="840" y="96" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.brickRedText}>
-          {rightArtifact}
-        </text>
-        <rect x="976" y="148" width="368" height="296" rx="22" fill="rgba(163, 64, 46, 0.28)" stroke={OVER_FOOTAGE_PALETTE.glassBorder} strokeWidth="2" />
-        <text x="1160" y="216" textAnchor="middle" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.accentWarm}>
-          LUOHU STIMULUS RED PACKET
-        </text>
-        <text x="1160" y="276" textAnchor="middle" fontFamily={FONTS.mono} fontSize="48" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-          ¥200.00
-        </text>
-        <text x="1160" y="332" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.brickRedText}>
-          VANISHES IN 6 DAYS 00:00
-        </text>
-        <text x="1160" y="376" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fill={OVER_FOOTAGE_PALETTE.textBody}>
-          3,389 WHITELISTED MERCHANTS ONLY
-        </text>
-        <text x="840" y="518" fontFamily={FONTS.sans} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-          Zero Savings Conversion · Unspent Balance Automatically Reclaimed by Issuer
-        </text>
-      </svg>
-    )}
+            <rect x="292" y="8" width="264" height="332" rx="12" fill={theme.solidPanelBg} stroke={theme.accentAlert} strokeWidth="2" />
+            <FittedSvgText text="2020 · DIGITAL YUAN" x={308} y={36} maxWidth={232} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.brickRedText} />
+            <rect x="322" y="64" width="204" height="162" rx="14" fill="rgba(163, 64, 46, 0.28)" stroke={OVER_FOOTAGE_PALETTE.glassBorder} strokeWidth="1.5" />
+            <text x="424" y="128" textAnchor="middle" fontFamily={FONTS.mono} fontSize="34" fontWeight="700" fill={theme.solidPanelInk} style={TABULAR_NUM_STYLE}>
+              ¥200.00
+            </text>
+            <FittedSvgText text="EXPIRES IN 6 DAYS" x={424} y={168} maxWidth={180} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.brickRedText} textAnchor="middle" />
+            <FittedSvgText text="3,389 MERCHANTS" x={424} y={196} maxWidth={180} fontSize={13} fontFamily={FONTS.mono} fontWeight={600} fill={theme.solidPanelMuted} textAnchor="middle" />
+            <WrappedSvgText
+              text="Zero savings; unspent funds auto-reclaimed."
+              x={308}
+              y={268}
+              maxWidth={232}
+              fontSize={15}
+              maxLines={2}
+              fontFamily={FONTS.sans}
+              fontWeight={700}
+              fill={theme.solidPanelInk}
+            />
+          </svg>
+        );
+      }
+
+      return (
+        <svg width="100%" height="100%" viewBox="0 0 1560 620">
+          {/* Left 1912 Brass Token */}
+          <rect x="44" y="48" width="712" height="524" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.5" />
+          <FittedSvgText
+            text={leftArtifact}
+            x={80}
+            y={96}
+            maxWidth={640}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
+          <circle cx="400" cy="292" r="138" fill="#C5A367" stroke="#6E5225" strokeWidth="6" />
+          <circle cx="400" cy="292" r="116" fill="none" stroke="#6E5225" strokeWidth="2" strokeDasharray="6 6" />
+          <FittedSvgText
+            text="ISLAND CREEK COAL"
+            x={400}
+            y={268}
+            maxWidth={210}
+            fontSize={22}
+            fontFamily={FONTS.serif}
+            fontWeight={700}
+            fill="#271E15"
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="$1.00 IN MERCHANDISE"
+            x={400}
+            y={308}
+            maxWidth={214}
+            fontSize={26}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill="#271E15"
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+          <FittedSvgText
+            text="NOT TRANSFERABLE · -25% CASH"
+            x={400}
+            y={346}
+            maxWidth={198}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={PAGE_PALETTE.brickRed}
+            textAnchor="middle"
+          />
+          <WrappedSvgText
+            text="Valid Only at Company Store · Outlawed by Fair Labor Standards Act (1938)"
+            x={80}
+            y={496}
+            maxWidth={640}
+            fontSize={18}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
+
+          {/* Right 2020 Shenzhen Vanishing App */}
+          <rect x="804" y="48" width="712" height="524" rx="14" fill={theme.solidPanelBg} stroke={theme.riskBorder} strokeWidth="2.5" />
+          <FittedSvgText
+            text={rightArtifact}
+            x={840}
+            y={96}
+            maxWidth={640}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.brickRedText}
+          />
+          <rect x="976" y="144" width="368" height="296" rx="22" fill="rgba(163, 64, 46, 0.28)" stroke={OVER_FOOTAGE_PALETTE.glassBorder} strokeWidth="2" />
+          <FittedSvgText
+            text="LUOHU STIMULUS RED PACKET"
+            x={1160}
+            y={212}
+            maxWidth={324}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.accentWarm}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="¥200.00"
+            x={1160}
+            y={274}
+            maxWidth={320}
+            fontSize={48}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.solidPanelInk}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+          <FittedSvgText
+            text="VANISHES IN 6 DAYS 00:00"
+            x={1160}
+            y={328}
+            maxWidth={324}
+            fontSize={18}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.brickRedText}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="3,389 WHITELISTED MERCHANTS ONLY"
+            x={1160}
+            y={372}
+            maxWidth={324}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={600}
+            fill={theme.solidPanelMuted}
+            textAnchor="middle"
+          />
+          <WrappedSvgText
+            text="Zero Savings Conversion · Unspent Balance Automatically Reclaimed by Issuer"
+            x={840}
+            y={496}
+            maxWidth={640}
+            fontSize={18}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.solidPanelInk}
+          />
+        </svg>
+      );
+    }}
   />
 );
 
@@ -752,6 +1828,7 @@ export const FountainPenVetoSlash: React.FC<FountainPenVetoSlashProps> = ({
   badgeText = "-50.2% INSTANT CUT",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <UiSatireShell
@@ -762,6 +1839,7 @@ export const FountainPenVetoSlash: React.FC<FountainPenVetoSlashProps> = ({
     badgeText={badgeText}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderStage={(theme, elapsed, fps) => {
       const slash = interpolate(
@@ -771,49 +1849,151 @@ export const FountainPenVetoSlash: React.FC<FountainPenVetoSlashProps> = ({
         { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
       );
 
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="548" height="332" rx="12" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+            <FittedSvgText text={clauseText} x={26} y={42} maxWidth={512} fontSize={13.5} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkMuted} />
+            <line x1="26" y1="58" x2="538" y2="58" stroke={theme.cardBorder} strokeWidth="1.5" />
+
+            <FittedSvgText
+              text={originalAmount}
+              x={26}
+              y={142}
+              maxWidth={240}
+              fontSize={38}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+              style={TABULAR_NUM_STYLE}
+            />
+            <line
+              x1="20"
+              y1="146"
+              x2={20 + 236 * slash}
+              y2={146 - 32 * slash}
+              stroke={PAGE_PALETTE.brickRed}
+              strokeWidth="8"
+              strokeLinecap="round"
+            />
+            <g opacity={slash}>
+              <FittedSvgText text="AMENDED 00:01" x={300} y={102} maxWidth={238} fontSize={13.5} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} />
+              <FittedSvgText
+                text={slashedAmount}
+                x={300}
+                y={148}
+                maxWidth={238}
+                fontSize={38}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={theme.accentAlert}
+                style={TABULAR_NUM_STYLE}
+              />
+            </g>
+
+            <rect x="26" y="216" width="512" height="100" rx="8" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="1.8" />
+            <WrappedSvgText
+              text="Zero collective bargaining. Instant server-side balance update."
+              x={44}
+              y={266}
+              maxWidth={476}
+              fontSize={16}
+              maxLines={2}
+              fontFamily={FONTS.serif}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+              verticalCenter
+            />
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Statutory Ledger Sheet */}
-          <rect x="110" y="54" width="1340" height="512" rx="10" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="2.5" />
-          <text x="170" y="128" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={PAGE_PALETTE.muted}>
-            {clauseText}
-          </text>
-          <line x1="170" y1="154" x2="1390" y2="154" stroke={PAGE_PALETTE.paperBorder} strokeWidth="2" />
+          <rect x="110" y="54" width="1340" height="512" rx="10" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.5" />
+          <FittedSvgText
+            text={clauseText}
+            x={170}
+            y={124}
+            maxWidth={1220}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkMuted}
+          />
+          <line x1="170" y1="154" x2="1390" y2="154" stroke={theme.cardBorder} strokeWidth="2" />
 
           {/* Original Amount + Crimson Fountain-Pen Slash */}
-          <text x="170" y="308" fontFamily={FONTS.mono} fontSize="96" fontWeight="700" fill={PAGE_PALETTE.navy} style={TABULAR_NUM_STYLE}>
-            {originalAmount}
-          </text>
+          <FittedSvgText
+            text={originalAmount}
+            x={170}
+            y={306}
+            maxWidth={540}
+            fontSize={86}
+            minFontSize={42}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            style={TABULAR_NUM_STYLE}
+          />
           <line
             x1="156"
             y1="322"
-            x2={156 + 630 * slash}
-            y2={322 - 86 * slash}
+            x2={156 + 550 * slash}
+            y2={322 - 78 * slash}
             stroke={PAGE_PALETTE.brickRed}
             strokeWidth="14"
             strokeLinecap="round"
           />
 
           {/* Fountain Pen Nib Icon */}
-          <g transform={`translate(${(156 + 630 * slash).toFixed(1)}, ${(322 - 86 * slash).toFixed(1)}) rotate(-25)`}>
+          <g transform={`translate(${(156 + 550 * slash).toFixed(1)}, ${(322 - 78 * slash).toFixed(1)}) rotate(-25)`}>
             <polygon points="0,0 44,-16 62,0 44,16" fill={PAGE_PALETTE.navyDeep} />
             <circle cx="24" cy="0" r="4" fill={OVER_FOOTAGE_PALETTE.textHeadline} />
           </g>
 
           {/* Revised Slashed Amount */}
           <g opacity={slash}>
-            <text x="880" y="232" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-              AMENDED BY EXECUTIVE ORDER · EFFECTIVE 00:01
-            </text>
-            <text x="880" y="318" fontFamily={FONTS.mono} fontSize="96" fontWeight="700" fill={PAGE_PALETTE.brickRed} style={TABULAR_NUM_STYLE}>
-              {slashedAmount}
-            </text>
+            <FittedSvgText
+              text="AMENDED BY EXECUTIVE ORDER · EFFECTIVE 00:01"
+              x={840}
+              y={224}
+              maxWidth={560}
+              fontSize={16}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.accentAlert}
+            />
+            <FittedSvgText
+              text={slashedAmount}
+              x={840}
+              y={312}
+              maxWidth={550}
+              fontSize={86}
+              minFontSize={42}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.accentAlert}
+              style={TABULAR_NUM_STYLE}
+            />
           </g>
 
-          <rect x="170" y="418" width="1220" height="96" rx="8" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="2" />
-          <text x="206" y="474" fontFamily={FONTS.serif} fontSize="26" fontWeight="700" fill={PAGE_PALETTE.navy}>
-            Zero Collective Bargaining · Zero Strike Leverage · Instant Server-Side Balance Update
-          </text>
+          <rect x="170" y="418" width="1220" height="96" rx="8" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="2" />
+          <WrappedSvgText
+            text="Zero Collective Bargaining · Zero Strike Leverage · Instant Server-Side Balance Update"
+            x={780}
+            y={466}
+            maxWidth={1148}
+            fontSize={25}
+            minFontSize={16}
+            maxLines={2}
+            fontFamily={FONTS.serif}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            textAnchor="middle"
+            verticalCenter
+          />
         </svg>
       );
     }}
@@ -838,6 +2018,7 @@ export const UnwrittenTruceToAllowance: React.FC<UnwrittenTruceToAllowanceProps>
   badgeText = "STRUCTURAL SHIFT",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <UiSatireShell
@@ -848,6 +2029,7 @@ export const UnwrittenTruceToAllowance: React.FC<UnwrittenTruceToAllowanceProps>
     badgeText={badgeText}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderStage={(theme, elapsed, fps) => {
       const strike = interpolate(
@@ -857,26 +2039,103 @@ export const UnwrittenTruceToAllowance: React.FC<UnwrittenTruceToAllowanceProps>
         { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
       );
 
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="548" height="332" rx="12" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+            <FittedSvgText
+              text="1825–2025 INDUSTRIAL COMPACT"
+              x={282}
+              y={42}
+              maxWidth={500}
+              fontSize={14}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.inkMuted}
+              textAnchor="middle"
+            />
+            <g opacity={1 - strike * 0.45}>
+              <FittedSvgText
+                text={oldTerm}
+                x={282}
+                y={128}
+                maxWidth={460}
+                fontSize={58}
+                fontFamily={FONTS.condensed}
+                fontWeight={700}
+                fill={theme.inkHeadline}
+                textAnchor="middle"
+              />
+            </g>
+            <line
+              x1="120"
+              y1="108"
+              x2={120 + 324 * strike}
+              y2="108"
+              stroke={PAGE_PALETTE.brickRed}
+              strokeWidth="10"
+            />
+            <g opacity={strike} transform="translate(282, 224) rotate(-2)">
+              <rect x="-180" y="-44" width="360" height="84" rx="8" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="3.5" />
+              <FittedSvgText
+                text={newTerm}
+                x={0}
+                y={16}
+                maxWidth={332}
+                fontSize={54}
+                fontFamily={FONTS.condensed}
+                fontWeight={700}
+                fill={theme.accentAlert}
+                textAnchor="middle"
+              />
+            </g>
+            <WrappedSvgText
+              text="Paycheck = owed because they need you. Allowance = granted until budget tightens."
+              x={282}
+              y={308}
+              maxWidth={510}
+              fontSize={15}
+              maxLines={2}
+              fontFamily={FONTS.sans}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+              textAnchor="middle"
+              verticalCenter
+            />
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
-          <rect x="96" y="44" width="1368" height="532" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="3" />
-          <text x="780" y="114" textAnchor="middle" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={PAGE_PALETTE.muted}>
-            1825–2025 INDUSTRIAL COMPACT · BACKED BY 48-HOUR WALKOUT THREAT
-          </text>
+          <rect x="96" y="44" width="1368" height="532" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="3" />
+          <FittedSvgText
+            text="1825–2025 INDUSTRIAL COMPACT · BACKED BY 48-HOUR WALKOUT THREAT"
+            x={780}
+            y={114}
+            maxWidth={1260}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkMuted}
+            textAnchor="middle"
+          />
 
           {/* Strikethrough PAYCHECK */}
-          <text
-            x="780"
-            y="256"
-            textAnchor="middle"
-            fontFamily={FONTS.condensed}
-            fontSize="118"
-            fontWeight="700"
-            fill={PAGE_PALETTE.navy}
-            opacity={1 - strike * 0.45}
-          >
-            {oldTerm}
-          </text>
+          <g opacity={1 - strike * 0.45}>
+            <FittedSvgText
+              text={oldTerm}
+              x={780}
+              y={256}
+              maxWidth={960}
+              fontSize={118}
+              minFontSize={52}
+              fontFamily={FONTS.condensed}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+              textAnchor="middle"
+            />
+          </g>
           <line
             x1="470"
             y1="216"
@@ -887,24 +2146,33 @@ export const UnwrittenTruceToAllowance: React.FC<UnwrittenTruceToAllowanceProps>
           />
 
           {/* Stamped ALLOWANCE */}
-          <g opacity={strike} transform={`translate(780, 418) rotate(-2)`}>
-            <rect x="-350" y="-88" width="700" height="128" rx="10" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="5" />
-            <text
-              x="0"
-              y="6"
-              textAnchor="middle"
+          <g opacity={strike} transform="translate(780, 418) rotate(-2)">
+            <rect x="-350" y="-88" width="700" height="128" rx="10" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="5" />
+            <FittedSvgText
+              text={newTerm}
+              x={0}
+              y={6}
+              maxWidth={636}
+              fontSize={104}
+              minFontSize={46}
               fontFamily={FONTS.condensed}
-              fontSize="104"
-              fontWeight="700"
-              fill={PAGE_PALETTE.brickRed}
-            >
-              {newTerm}
-            </text>
+              fontWeight={700}
+              fill={theme.accentAlert}
+              textAnchor="middle"
+            />
           </g>
 
-          <text x="780" y="534" textAnchor="middle" fontFamily={FONTS.sans} fontSize="20" fontWeight="700" fill={PAGE_PALETTE.navy}>
-            Paycheck = Owed Because They Need You · Allowance = Granted Until the Budget Tightens
-          </text>
+          <FittedSvgText
+            text="Paycheck = Owed Because They Need You · Allowance = Granted Until the Budget Tightens"
+            x={780}
+            y={534}
+            maxWidth={1260}
+            fontSize={20}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            textAnchor="middle"
+          />
         </svg>
       );
     }}
@@ -957,6 +2225,7 @@ function createParametricUiSatire(config: {
     items = config.defaultItems,
     mode,
     paletteMode,
+    register,
     atFrame = 0,
   }) => (
     <UiSatireShell
@@ -967,6 +2236,7 @@ function createParametricUiSatire(config: {
       badgeText={badgeText}
       mode={mode}
       paletteMode={paletteMode}
+      register={register}
       atFrame={atFrame}
       renderStage={(theme, elapsed, fps) => {
         const snap = interpolate(
@@ -976,6 +2246,99 @@ function createParametricUiSatire(config: {
           { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
         );
         const jawY = Math.abs(Math.sin(elapsed * 0.22)) * 16;
+        const pulseBar = interpolate(
+          Math.sin(elapsed * 0.12),
+          [-1, 1],
+          [0.35, 1],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        );
+
+        if (theme.isCompact) {
+          const compactRows = items.slice(0, 3);
+          return (
+            <svg width="100%" height="100%" viewBox="0 0 564 348">
+              <rect
+                x="8"
+                y="8"
+                width="548"
+                height="112"
+                rx="10"
+                fill={config.archetype === "wallet-console" ? theme.solidPanelBg : theme.riskBg}
+                stroke={config.archetype === "wallet-console" ? theme.accentTeal : theme.riskBorder}
+                strokeWidth="2"
+              />
+              <FittedSvgText
+                text={heroCallout}
+                x={26}
+                y={48}
+                maxWidth={512}
+                fontSize={28}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={config.archetype === "wallet-console" ? theme.solidPanelInk : theme.accentAlert}
+                style={TABULAR_NUM_STYLE}
+              />
+              <WrappedSvgText
+                text={subCallout}
+                x={26}
+                y={78}
+                maxWidth={512}
+                fontSize={15}
+                maxLines={2}
+                fontFamily={FONTS.sans}
+                fontWeight={600}
+                fill={config.archetype === "wallet-console" ? theme.solidPanelMuted : theme.inkHeadline}
+              />
+              {compactRows.map((it, idx) => {
+                const ry = 132 + idx * 70;
+                return (
+                  <g key={`c-sat-${idx}`} transform={`translate(8, ${ry})`} opacity={snap}>
+                    <rect
+                      width="548"
+                      height="60"
+                      rx="8"
+                      fill={it.isAlert ? theme.riskBg : theme.wellBg}
+                      stroke={it.isAlert ? theme.riskBorder : theme.cardBorder}
+                      strokeWidth="1.6"
+                    />
+                    <FittedSvgText
+                      text={it.label}
+                      x={16}
+                      y={26}
+                      maxWidth={330}
+                      fontSize={15.5}
+                      fontFamily={FONTS.sans}
+                      fontWeight={700}
+                      fill={theme.inkHeadline}
+                    />
+                    <FittedSvgText
+                      text={it.value}
+                      x={532}
+                      y={28}
+                      maxWidth={184}
+                      fontSize={16}
+                      fontFamily={FONTS.mono}
+                      fontWeight={700}
+                      fill={it.isAlert ? theme.accentAlert : theme.accentTeal}
+                      textAnchor="end"
+                      style={TABULAR_NUM_STYLE}
+                    />
+                    <FittedSvgText
+                      text={it.note}
+                      x={16}
+                      y={48}
+                      maxWidth={516}
+                      fontSize={13.5}
+                      fontFamily={FONTS.mono}
+                      fontWeight={600}
+                      fill={theme.inkMuted}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+          );
+        }
 
         return (
           <svg width="100%" height="100%" viewBox="0 0 1560 620">
@@ -991,109 +2354,354 @@ function createParametricUiSatire(config: {
                   ? PAGE_PALETTE.navyDeep
                   : theme.wellBg
               }
-              stroke={PAGE_PALETTE.navy}
+              stroke={theme.navyInk}
               strokeWidth="2.5"
             />
 
             {config.archetype === "thermal-receipt" && (
-              <g transform={`translate(154, ${(74 - (1 - snap) * 32).toFixed(1)})`}>
-                <rect width="440" height="464" fill={PAGE_PALETTE.paperLight} stroke={PAGE_PALETTE.navy} strokeWidth="2" strokeDasharray="8 4" />
-                <text x="220" y="54" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={PAGE_PALETTE.navy}>
-                  THERMAL AUDIT TAPE
-                </text>
-                <line x1="36" y1="78" x2="404" y2="78" stroke={PAGE_PALETTE.navy} strokeWidth="1.5" strokeDasharray="4 4" />
-                <text x="220" y="216" textAnchor="middle" fontFamily={FONTS.mono} fontSize="42" fontWeight="700" fill={PAGE_PALETTE.brickRed} style={TABULAR_NUM_STYLE}>
-                  {heroCallout}
-                </text>
-                <text x="220" y="268" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.muted}>
-                  {subCallout}
-                </text>
-                <line x1="36" y1="360" x2="404" y2="360" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
-                <text x="220" y="410" textAnchor="middle" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={PAGE_PALETTE.navy}>
-                  THANK YOU FOR YOUR COMPLIANCE
-                </text>
+              <g transform={`translate(154, ${(64 - (1 - snap) * 28).toFixed(1)})`}>
+                {/* Sawtooth Thermal Paper Strip */}
+                <polygon
+                  points="0,12 18,0 36,12 54,0 72,12 90,0 108,12 126,0 144,12 162,0 180,12 198,0 216,12 234,0 252,12 270,0 288,12 306,0 324,12 342,0 360,12 378,0 396,12 414,0 440,12 440,468 414,480 396,468 378,480 360,468 342,480 324,468 306,480 288,468 270,480 252,468 234,480 216,468 198,480 180,468 162,480 144,468 126,480 108,468 90,480 72,468 54,480 36,468 18,480 0,468"
+                  fill={PAGE_PALETTE.paperLight}
+                  stroke={PAGE_PALETTE.navy}
+                  strokeWidth="2"
+                />
+                <FittedSvgText
+                  text="THERMAL AUDIT TAPE · REG #04"
+                  x={220}
+                  y={52}
+                  maxWidth={372}
+                  fontSize={16}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.navy}
+                  textAnchor="middle"
+                />
+                <line x1="36" y1="74" x2="404" y2="74" stroke={PAGE_PALETTE.navy} strokeWidth="1.5" strokeDasharray="4 4" />
+                <FittedSvgText
+                  text="TXN TIMESTAMP · DAY 01 00:01"
+                  x={220}
+                  y={104}
+                  maxWidth={372}
+                  fontSize={12}
+                  fontFamily={FONTS.mono}
+                  fontWeight={600}
+                  fill={PAGE_PALETTE.muted}
+                  textAnchor="middle"
+                />
+                <rect x="34" y="132" width="372" height="92" rx="6" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="1.5" />
+                <FittedSvgText
+                  text={heroCallout}
+                  x={220}
+                  y={192}
+                  maxWidth={348}
+                  fontSize={40}
+                  minFontSize={22}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.brickRed}
+                  textAnchor="middle"
+                  style={TABULAR_NUM_STYLE}
+                />
+                <WrappedSvgText
+                  text={subCallout}
+                  x={220}
+                  y={268}
+                  maxWidth={372}
+                  fontSize={15}
+                  maxLines={2}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.muted}
+                  textAnchor="middle"
+                  verticalCenter
+                />
+                <line x1="36" y1="322" x2="404" y2="322" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
+                {/* Deterministic Barcode Strip */}
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map((b) => (
+                  <rect
+                    key={`bc-${b}`}
+                    x={92 + b * 14}
+                    y="342"
+                    width={b % 3 === 0 ? 7 : 3}
+                    height="44"
+                    fill={PAGE_PALETTE.navy}
+                  />
+                ))}
+                <FittedSvgText
+                  text="THANK YOU FOR YOUR COMPLIANCE"
+                  x={220}
+                  y={422}
+                  maxWidth={372}
+                  fontSize={14}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.navy}
+                  textAnchor="middle"
+                />
               </g>
             )}
 
             {config.archetype === "bank-modal" && (
-              <g transform="translate(88, 96)">
-                <rect width="572" height="420" rx="12" fill={PAGE_PALETTE.paperLight} stroke={PAGE_PALETTE.brickRed} strokeWidth="3" />
+              <g transform="translate(88, 92)">
+                <rect width="572" height="436" rx="12" fill={PAGE_PALETTE.paperLight} stroke={PAGE_PALETTE.brickRed} strokeWidth="3" />
                 <rect width="572" height="54" rx="10" fill={PAGE_PALETTE.navy} />
-                <text x="24" y="34" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-                  AUTOMATED UNDERWRITING ENGINE v9.4
+                {/* Window Chrome Dots */}
+                <circle cx="28" cy="27" r="6" fill="#E27358" />
+                <circle cx="48" cy="27" r="6" fill="#F7C35C" />
+                <circle cx="68" cy="27" r="6" fill="#4FB3AE" />
+                <FittedSvgText
+                  text="AUTOMATED UNDERWRITING ENGINE v9.4"
+                  x={92}
+                  y={32}
+                  maxWidth={456}
+                  fontSize={13.5}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                />
+                {/* Warning Shield */}
+                <path d="M 286 78 L 316 90 L 312 122 L 286 138 L 260 122 L 256 90 Z" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
+                <text x="286" y="116" textAnchor="middle" fontFamily={FONTS.mono} fontSize="22" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
+                  !
                 </text>
-                <text x="286" y="196" textAnchor="middle" fontFamily={FONTS.mono} fontSize="40" fontWeight="700" fill={PAGE_PALETTE.brickRed} style={TABULAR_NUM_STYLE}>
-                  {heroCallout}
-                </text>
-                <text x="286" y="246" textAnchor="middle" fontFamily={FONTS.sans} fontSize="18" fontWeight="700" fill={PAGE_PALETTE.navy}>
-                  {subCallout}
-                </text>
-                <rect x="156" y="318" width="260" height="54" rx="8" fill={PAGE_PALETTE.paperBorder} />
-                <text x="286" y="352" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.muted}>
-                  APPEAL DISABLED
-                </text>
+                <FittedSvgText
+                  text={heroCallout}
+                  x={286}
+                  y={192}
+                  maxWidth={516}
+                  fontSize={38}
+                  minFontSize={22}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.brickRed}
+                  textAnchor="middle"
+                  style={TABULAR_NUM_STYLE}
+                />
+                <WrappedSvgText
+                  text={subCallout}
+                  x={286}
+                  y={248}
+                  maxWidth={512}
+                  fontSize={17}
+                  maxLines={2}
+                  fontFamily={FONTS.sans}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.navy}
+                  textAnchor="middle"
+                  verticalCenter
+                />
+                {/* Animated Underwriting Gate Progress */}
+                <rect x="76" y="294" width="420" height="10" rx="5" fill={PAGE_PALETTE.paperBorder} />
+                <rect x="76" y="294" width={420 * snap} height="10" rx="5" fill={PAGE_PALETTE.brickRed} />
+                <rect x="156" y="330" width="260" height="54" rx="8" fill={PAGE_PALETTE.paperBorder} stroke={PAGE_PALETTE.muted} strokeWidth="1.5" />
+                <FittedSvgText
+                  text="APPEAL DISABLED"
+                  x={286}
+                  y={363}
+                  maxWidth={228}
+                  fontSize={15}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.muted}
+                  textAnchor="middle"
+                />
               </g>
             )}
 
             {config.archetype === "hinged-cutout" && (
-              <g transform="translate(374, 270)">
-                {/* Archival Collage Bust + Brass Rivet Jaw */}
-                <circle cx="0" cy="-54" r="88" fill={PAGE_PALETTE.paper} stroke={PAGE_PALETTE.navy} strokeWidth="4" />
-                <rect x="-58" y="-22" width="116" height="44" rx="6" fill={PAGE_PALETTE.paperLight} stroke={PAGE_PALETTE.navy} strokeWidth="3" transform={`translate(0, ${jawY.toFixed(1)})`} />
-                <circle cx="-54" cy="-14" r="7" fill="#C5A367" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
-                <circle cx="54" cy="-14" r="7" fill="#C5A367" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
-                <path d="M -130 180 L -90 52 L 90 52 L 130 180 Z" fill={PAGE_PALETTE.navy} />
-                <text x="0" y="226" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-                  &ldquo;{heroCallout}&rdquo;
-                </text>
-                <text x="0" y="256" textAnchor="middle" fontFamily={FONTS.sans} fontSize="15" fontWeight="600" fill={PAGE_PALETTE.muted}>
-                  Translation: {subCallout}
-                </text>
+              <g transform="translate(374, 248)">
+                {/* Archival Collage Bust + Articulated Brass Rivet Jaw */}
+                <circle cx="0" cy="-64" r="88" fill={PAGE_PALETTE.paper} stroke={PAGE_PALETTE.navy} strokeWidth="4" />
+                <circle cx="-26" cy="-84" r="7" fill={PAGE_PALETTE.navy} />
+                <circle cx="26" cy="-84" r="7" fill={PAGE_PALETTE.navy} />
+                <rect x="-58" y="-32" width="116" height="44" rx="6" fill={PAGE_PALETTE.paperLight} stroke={PAGE_PALETTE.navy} strokeWidth="3" transform={`translate(0, ${jawY.toFixed(1)})`} />
+                <circle cx="-54" cy="-24" r="7" fill="#C5A367" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
+                <circle cx="54" cy="-24" r="7" fill="#C5A367" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
+                <path d="M -130 148 L -90 32 L 90 32 L 130 148 Z" fill={PAGE_PALETTE.navy} />
+                <polygon points="-24,32 24,32 0,88" fill={PAGE_PALETTE.brickRed} />
+                <rect x="-290" y="168" width="580" height="122" rx="10" fill={theme.cardBg} stroke={theme.cardBorder} strokeWidth="1.8" />
+                <FittedSvgText
+                  text={`"${heroCallout}"`}
+                  x={0}
+                  y={208}
+                  maxWidth={540}
+                  fontSize={18}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.accentAlert}
+                  textAnchor="middle"
+                />
+                <WrappedSvgText
+                  text={`Translation: ${subCallout}`}
+                  x={0}
+                  y={252}
+                  maxWidth={540}
+                  fontSize={15}
+                  maxLines={2}
+                  fontFamily={FONTS.sans}
+                  fontWeight={600}
+                  fill={theme.inkHeadline}
+                  textAnchor="middle"
+                  verticalCenter
+                />
               </g>
             )}
 
             {config.archetype === "viewer-quiz" && (
-              <g transform="translate(88, 88)">
-                <text x="0" y="28" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-                  AUDIENCE PREDICTION LOCK · PICK ONE
-                </text>
-                <circle cx="286" cy="204" r="108" fill={PAGE_PALETTE.navy} />
-                <text x="286" y="216" textAnchor="middle" fontFamily={FONTS.mono} fontSize="36" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-                  {heroCallout}
-                </text>
-                <text x="286" y="378" textAnchor="middle" fontFamily={FONTS.sans} fontSize="19" fontWeight="700" fill={PAGE_PALETTE.navy}>
-                  {subCallout}
-                </text>
+              <g transform="translate(88, 84)">
+                <FittedSvgText
+                  text="AUDIENCE PREDICTION LOCK · PICK ONE"
+                  x={0}
+                  y={26}
+                  maxWidth={572}
+                  fontSize={16}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.accentAlert}
+                />
+                <circle cx="286" cy="196" r="126" fill="none" stroke={theme.accentTeal} strokeWidth="5" strokeDasharray="16 10" />
+                <circle cx="286" cy="196" r="112" fill={PAGE_PALETTE.navy} />
+                <WrappedSvgText
+                  text={heroCallout}
+                  x={286}
+                  y={196}
+                  maxWidth={184}
+                  fontSize={32}
+                  minFontSize={18}
+                  maxLines={2}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                  textAnchor="middle"
+                  verticalCenter
+                  style={TABULAR_NUM_STYLE}
+                />
+                <WrappedSvgText
+                  text={subCallout}
+                  x={286}
+                  y={374}
+                  maxWidth={548}
+                  fontSize={18}
+                  maxLines={2}
+                  fontFamily={FONTS.sans}
+                  fontWeight={700}
+                  fill={theme.inkHeadline}
+                  textAnchor="middle"
+                  verticalCenter
+                />
+                <rect x="64" y="422" width="444" height="32" rx="16" fill={theme.cardBg} stroke={theme.cardBorder} strokeWidth="1.5" />
+                <FittedSvgText
+                  text="A / B / C POLL LOCKED · PRIMARY SOURCE REVEAL"
+                  x={286}
+                  y={443}
+                  maxWidth={410}
+                  fontSize={12.5}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.inkMuted}
+                  textAnchor="middle"
+                />
               </g>
             )}
 
             {config.archetype === "pinboard-stamps" && (
-              <g transform="translate(84, 88)">
-                <rect width="580" height="436" rx="10" fill={PAGE_PALETTE.paper} stroke={PAGE_PALETTE.navy} strokeWidth="2" />
-                <g transform="translate(290, 218) rotate(-6)">
-                  <rect x="-220" y="-68" width="440" height="136" rx="8" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="5" />
-                  <text x="0" y="10" textAnchor="middle" fontFamily={FONTS.condensed} fontSize="58" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-                    {heroCallout}
-                  </text>
+              <g transform="translate(84, 84)">
+                <rect width="580" height="452" rx="10" fill={PAGE_PALETTE.paper} stroke={PAGE_PALETTE.navy} strokeWidth="2" />
+                {/* Corkboard Corner Pushpins & Investigation Thread */}
+                <circle cx="32" cy="32" r="9" fill={PAGE_PALETTE.brickRed} stroke={PAGE_PALETTE.navy} strokeWidth="2" />
+                <circle cx="548" cy="32" r="9" fill={PAGE_PALETTE.brickRed} stroke={PAGE_PALETTE.navy} strokeWidth="2" />
+                <line x1="32" y1="32" x2="290" y2="148" stroke={PAGE_PALETTE.brickRed} strokeWidth="2" strokeDasharray="5 5" opacity={0.65} />
+                <line x1="548" y1="32" x2="290" y2="148" stroke={PAGE_PALETTE.brickRed} strokeWidth="2" strokeDasharray="5 5" opacity={0.65} />
+                <g transform="translate(290, 214) rotate(-6)">
+                  <rect x="-224" y="-72" width="448" height="144" rx="8" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="5" />
+                  <rect x="-214" y="-62" width="428" height="124" rx="5" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="1.5" strokeDasharray="6 4" />
+                  <FittedSvgText
+                    text={heroCallout}
+                    x={0}
+                    y={12}
+                    maxWidth={396}
+                    fontSize={52}
+                    minFontSize={24}
+                    fontFamily={FONTS.condensed}
+                    fontWeight={700}
+                    fill={PAGE_PALETTE.brickRed}
+                    textAnchor="middle"
+                  />
                 </g>
-                <text x="290" y="392" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.navy}>
-                  {subCallout}
-                </text>
+                <WrappedSvgText
+                  text={subCallout}
+                  x={290}
+                  y={392}
+                  maxWidth={516}
+                  fontSize={16}
+                  maxLines={2}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={PAGE_PALETTE.navy}
+                  textAnchor="middle"
+                  verticalCenter
+                />
               </g>
             )}
 
             {config.archetype === "wallet-console" && (
-              <g transform="translate(84, 88)">
-                <text x="0" y="32" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-                  PROGRAMMABLE MONETARY RULE ENGINE
-                </text>
-                <text x="0" y="148" fontFamily={FONTS.mono} fontSize="44" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-                  {heroCallout}
-                </text>
-                <rect x="0" y="204" width="580" height="168" rx="12" fill="rgba(163, 64, 46, 0.32)" stroke={OVER_FOOTAGE_PALETTE.brickRedText} strokeWidth="2" />
-                <text x="28" y="294" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textBody}>
-                  {subCallout}
-                </text>
+              <g transform="translate(84, 84)">
+                <circle cx="10" cy="24" r="6" fill={OVER_FOOTAGE_PALETTE.chartSecondary} opacity={pulseBar} />
+                <FittedSvgText
+                  text="PROGRAMMABLE MONETARY RULE ENGINE"
+                  x={26}
+                  y={30}
+                  maxWidth={536}
+                  fontSize={14}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+                />
+                <FittedSvgText
+                  text={heroCallout}
+                  x={0}
+                  y={132}
+                  maxWidth={572}
+                  fontSize={44}
+                  minFontSize={24}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                  style={TABULAR_NUM_STYLE}
+                />
+                <rect x="0" y="182" width="580" height="176" rx="12" fill="rgba(163, 64, 46, 0.32)" stroke={OVER_FOOTAGE_PALETTE.brickRedText} strokeWidth="2" />
+                <WrappedSvgText
+                  text={subCallout}
+                  x={28}
+                  y={270}
+                  maxWidth={524}
+                  fontSize={18}
+                  minFontSize={13}
+                  maxLines={3}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textBody}
+                  verticalCenter
+                />
+                {/* Policy Toggle Pills */}
+                {["RULE LOCK: ON", "EXIT PORTABILITY: $0", "API PUSH < 200ms"].map((pill, pIdx) => (
+                  <g key={`wp-${pIdx}`} transform={`translate(${pIdx * 196}, 388)`}>
+                    <rect width="184" height="42" rx="6" fill="#162E47" stroke={OVER_FOOTAGE_PALETTE.accentPrimary} strokeWidth="1.2" />
+                    <FittedSvgText
+                      text={pill}
+                      x={92}
+                      y={26}
+                      maxWidth={164}
+                      fontSize={12}
+                      fontFamily={FONTS.mono}
+                      fontWeight={700}
+                      fill={OVER_FOOTAGE_PALETTE.accentPrimary}
+                      textAnchor="middle"
+                    />
+                  </g>
+                ))}
               </g>
             )}
 
@@ -1106,19 +2714,45 @@ function createParametricUiSatire(config: {
                     width="768"
                     height="120"
                     rx="12"
-                    fill={it.isAlert ? PAGE_PALETTE.riskFill : theme.wellBg}
-                    stroke={it.isAlert ? PAGE_PALETTE.brickRed : PAGE_PALETTE.navy}
+                    fill={it.isAlert ? theme.riskBg : theme.wellBg}
+                    stroke={it.isAlert ? theme.riskBorder : theme.navyInk}
                     strokeWidth="2"
                   />
-                  <text x="28" y="44" fontFamily={FONTS.sans} fontSize="20" fontWeight="700" fill={PAGE_PALETTE.navy}>
-                    {it.label}
-                  </text>
-                  <text x="740" y="48" textAnchor="end" fontFamily={FONTS.mono} fontSize="26" fontWeight="700" fill={it.isAlert ? PAGE_PALETTE.brickRed : PAGE_PALETTE.chartSecondary} style={TABULAR_NUM_STYLE}>
-                    {it.value}
-                  </text>
-                  <text x="28" y="88" fontFamily={FONTS.mono} fontSize="14" fontWeight="600" fill={PAGE_PALETTE.muted}>
-                    {it.note}
-                  </text>
+                  <FittedSvgText
+                    text={it.label}
+                    x={28}
+                    y={46}
+                    maxWidth={460}
+                    fontSize={20}
+                    minFontSize={14}
+                    fontFamily={FONTS.sans}
+                    fontWeight={700}
+                    fill={theme.inkHeadline}
+                  />
+                  <FittedSvgText
+                    text={it.value}
+                    x={740}
+                    y={48}
+                    maxWidth={224}
+                    fontSize={25}
+                    minFontSize={16}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={it.isAlert ? theme.accentAlert : theme.accentTeal}
+                    textAnchor="end"
+                    style={TABULAR_NUM_STYLE}
+                  />
+                  <FittedSvgText
+                    text={it.note}
+                    x={28}
+                    y={88}
+                    maxWidth={712}
+                    fontSize={14.5}
+                    minFontSize={11}
+                    fontFamily={FONTS.mono}
+                    fontWeight={600}
+                    fill={theme.inkMuted}
+                  />
                 </g>
               );
             })}

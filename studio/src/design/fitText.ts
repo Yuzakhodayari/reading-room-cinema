@@ -541,3 +541,325 @@ export function formatTabularFigure(
     },
   };
 }
+
+// ============================================================================
+// Deterministic SVG Text Fitting & Line-Wrapping Helpers
+// ============================================================================
+
+export interface FitSvgTextOptions {
+  fontWeight?: number | string;
+  letterSpacingEm?: number;
+  uppercase?: boolean;
+  italic?: boolean;
+  safetyFactor?: number;
+  ellipsis?: boolean;
+}
+
+export interface FitSvgTextResult {
+  text: string;
+  fontSize: number;
+  estimatedWidth: number;
+  wasTruncated: boolean;
+  wasShrunk: boolean;
+}
+
+function quantizeSvgSize(size: number): number {
+  return Math.floor(size * 4) / 4;
+}
+
+function truncateToSvgWidth(
+  source: string,
+  maxWidth: number,
+  fontSize: number,
+  measureOptions: TextMeasureOptions
+): { text: string; width: number; wasTruncated: boolean } {
+  const fullW = estimateTextWidth(source, fontSize, measureOptions);
+  if (fullW <= maxWidth) {
+    return { text: source, width: fullW, wasTruncated: false };
+  }
+
+  const ellipsisChar = "\u2026";
+  if (estimateTextWidth(ellipsisChar, fontSize, measureOptions) > maxWidth) {
+    return { text: ellipsisChar, width: maxWidth, wasTruncated: true };
+  }
+
+  let lo = 0;
+  let hi = source.length;
+  let best = ellipsisChar;
+  let bestW = estimateTextWidth(ellipsisChar, fontSize, measureOptions);
+
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const rawSlice = source.slice(0, mid).replace(/[\s.,;:!?/-]+$/g, "");
+    const candidate = `${rawSlice}${ellipsisChar}`;
+    const w = estimateTextWidth(candidate, fontSize, measureOptions);
+    if (w <= maxWidth) {
+      best = candidate;
+      bestW = w;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return { text: best, width: bestW, wasTruncated: true };
+}
+
+/**
+ * Deterministically scales an SVG `<text>` string down from `baseFontSize` to `minFontSize`
+ * to fit within `maxWidth`, applying crisp ellipsis truncation only if `minFontSize` still overflows.
+ */
+export function fitSvgTextToWidth(
+  text: string,
+  maxWidth: number,
+  baseFontSize: number,
+  minFontSize: number = Math.max(6, baseFontSize * 0.72),
+  fontKind: FontMetricFamily | string = "sans",
+  options: FitSvgTextOptions = {}
+): FitSvgTextResult {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const base = Math.max(4, baseFontSize);
+  if (!normalized) {
+    return {
+      text: "",
+      fontSize: base,
+      estimatedWidth: 0,
+      wasTruncated: false,
+      wasShrunk: false,
+    };
+  }
+
+  const safety = options.safetyFactor ?? 0.94;
+  const safeMaxW = Math.max(6, maxWidth * safety);
+  const loBound = Math.max(4, Math.min(minFontSize, base));
+  const hiBound = Math.max(loBound, base);
+
+  const measureOpts: TextMeasureOptions = {
+    fontFamily: fontKind,
+    fontWeight: options.fontWeight ?? 600,
+    italic: options.italic,
+    letterSpacingEm: options.letterSpacingEm ?? 0,
+    uppercase: options.uppercase,
+  };
+
+  const fullAtBase = estimateTextWidth(normalized, hiBound, measureOpts);
+  if (fullAtBase <= safeMaxW) {
+    return {
+      text: normalized,
+      fontSize: hiBound,
+      estimatedWidth: Number(fullAtBase.toFixed(2)),
+      wasTruncated: false,
+      wasShrunk: false,
+    };
+  }
+
+  const fullAtMin = estimateTextWidth(normalized, loBound, measureOpts);
+  if (fullAtMin <= safeMaxW) {
+    let lo = loBound;
+    let hi = hiBound;
+    let best = loBound;
+    for (let iter = 0; iter < 14; iter++) {
+      const mid = (lo + hi) * 0.5;
+      if (estimateTextWidth(normalized, mid, measureOpts) <= safeMaxW) {
+        best = mid;
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    const qSize = Math.max(loBound, quantizeSvgSize(best));
+    const qWidth = estimateTextWidth(normalized, qSize, measureOpts);
+    return {
+      text: normalized,
+      fontSize: qSize,
+      estimatedWidth: Number(qWidth.toFixed(2)),
+      wasTruncated: false,
+      wasShrunk: qSize < hiBound,
+    };
+  }
+
+  if (options.ellipsis === false) {
+    return {
+      text: normalized,
+      fontSize: loBound,
+      estimatedWidth: Number(fullAtMin.toFixed(2)),
+      wasTruncated: false,
+      wasShrunk: loBound < hiBound,
+    };
+  }
+
+  const truncated = truncateToSvgWidth(normalized, safeMaxW, loBound, measureOpts);
+  return {
+    text: truncated.text,
+    fontSize: loBound,
+    estimatedWidth: Number(truncated.width.toFixed(2)),
+    wasTruncated: truncated.wasTruncated,
+    wasShrunk: loBound < hiBound,
+  };
+}
+
+export interface WrapSvgTextOptions {
+  minFontSize?: number;
+  lineHeight?: number;
+  fontWeight?: number | string;
+  letterSpacingEm?: number;
+  uppercase?: boolean;
+  italic?: boolean;
+  safetyFactor?: number;
+}
+
+export interface WrapSvgTextResult {
+  lines: string[];
+  fontSize: number;
+  lineHeightPx: number;
+  widestLinePx: number;
+  wasTruncated: boolean;
+  wasShrunk: boolean;
+}
+
+/**
+ * Deterministically wraps an SVG label across up to `maxLines` balanced lines within `maxWidth`,
+ * gracefully scaling down toward `minFontSize` or truncating the final line with an ellipsis if needed.
+ */
+export function wrapSvgTextLines(
+  text: string,
+  maxWidth: number,
+  fontSize: number,
+  fontKind: FontMetricFamily | string = "sans",
+  maxLines: number = 3,
+  options: WrapSvgTextOptions = {}
+): WrapSvgTextResult {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const baseSize = Math.max(4, fontSize);
+  const lineHeight = options.lineHeight ?? 1.2;
+  const limitLines = Math.max(1, Math.floor(maxLines));
+
+  if (!normalized) {
+    return {
+      lines: [],
+      fontSize: baseSize,
+      lineHeightPx: Number((baseSize * lineHeight).toFixed(2)),
+      widestLinePx: 0,
+      wasTruncated: false,
+      wasShrunk: false,
+    };
+  }
+
+  const safety = options.safetyFactor ?? 0.94;
+  const safeMaxW = Math.max(8, maxWidth * safety);
+  const minSize = Math.max(4, Math.min(baseSize, options.minFontSize ?? baseSize * 0.72));
+
+  const measureOpts: TextMeasureOptions = {
+    fontFamily: fontKind,
+    fontWeight: options.fontWeight ?? 600,
+    italic: options.italic,
+    letterSpacingEm: options.letterSpacingEm ?? 0,
+    uppercase: options.uppercase,
+  };
+
+  const words = normalized.split(/ +/);
+  const tryWrapAt = (sz: number): { ok: boolean; lines: string[]; widest: number } => {
+    const measure = (line: string): number => estimateTextWidth(line, sz, measureOpts);
+    const dpRes = balanceLinesDP(words, measure, safeMaxW);
+    if (!dpRes.fitsAllWords || dpRes.lines.length > limitLines) {
+      return { ok: false, lines: dpRes.lines, widest: safeMaxW + 1 };
+    }
+    let widest = 0;
+    for (let i = 0; i < dpRes.lines.length; i++) {
+      const w = measure(dpRes.lines[i]);
+      if (w > widest) widest = w;
+    }
+    return { ok: widest <= safeMaxW, lines: dpRes.lines, widest };
+  };
+
+  const atBase = tryWrapAt(baseSize);
+  if (atBase.ok) {
+    return {
+      lines: atBase.lines,
+      fontSize: baseSize,
+      lineHeightPx: Number((baseSize * lineHeight).toFixed(2)),
+      widestLinePx: Number(atBase.widest.toFixed(2)),
+      wasTruncated: false,
+      wasShrunk: false,
+    };
+  }
+
+  let resolvedSize = minSize;
+  const atMin = tryWrapAt(minSize);
+  if (atMin.ok) {
+    let lo = minSize;
+    let hi = baseSize;
+    let best = minSize;
+    for (let iter = 0; iter < 12; iter++) {
+      const mid = (lo + hi) * 0.5;
+      if (tryWrapAt(mid).ok) {
+        best = mid;
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    resolvedSize = Math.max(minSize, quantizeSvgSize(best));
+    const finalWrap = tryWrapAt(resolvedSize);
+    if (finalWrap.ok) {
+      return {
+        lines: finalWrap.lines,
+        fontSize: resolvedSize,
+        lineHeightPx: Number((resolvedSize * lineHeight).toFixed(2)),
+        widestLinePx: Number(finalWrap.widest.toFixed(2)),
+        wasTruncated: false,
+        wasShrunk: resolvedSize < baseSize,
+      };
+    }
+  }
+
+  // Fallback: pack greedily up to limitLines at minSize, truncating final overflow with ellipsis
+  const lines: string[] = [];
+  let current = "";
+  let truncated = false;
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const candidate = current ? `${current} ${word}` : word;
+    if (estimateTextWidth(candidate, resolvedSize, measureOpts) <= safeMaxW) {
+      current = candidate;
+    } else if (lines.length + 1 < limitLines) {
+      if (current) {
+        lines.push(current);
+        current = word;
+      } else {
+        const sliced = truncateToSvgWidth(word, safeMaxW, resolvedSize, measureOpts);
+        lines.push(sliced.text);
+        truncated = true;
+        current = "";
+      }
+    } else {
+      const remainder = current ? `${current} ${words.slice(i).join(" ")}` : words.slice(i).join(" ");
+      const sliced = truncateToSvgWidth(remainder, safeMaxW, resolvedSize, measureOpts);
+      lines.push(sliced.text);
+      truncated = true;
+      current = "";
+      break;
+    }
+  }
+  if (current) {
+    const sliced = truncateToSvgWidth(current, safeMaxW, resolvedSize, measureOpts);
+    lines.push(sliced.text);
+    if (sliced.wasTruncated) truncated = true;
+  }
+
+  let widest = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const w = estimateTextWidth(lines[i], resolvedSize, measureOpts);
+    if (w > widest) widest = w;
+  }
+
+  return {
+    lines,
+    fontSize: resolvedSize,
+    lineHeightPx: Number((resolvedSize * lineHeight).toFixed(2)),
+    widestLinePx: Number(widest.toFixed(2)),
+    wasTruncated: truncated,
+    wasShrunk: resolvedSize < baseSize,
+  };
+}
+

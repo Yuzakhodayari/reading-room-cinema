@@ -41,6 +41,8 @@ const BUNDLE_DIR = path.join(EXAM_DIR, "bundle");
 const PLANS_DIR = path.join(EXAM_DIR, "plans");
 
 const DOCS_CONTACT_SHEET = path.join(REPO_ROOT, "docs", "cinema-16-pillar-contact-sheet.png");
+const BRAIN_CONTACT_SHEET =
+  "C:\\Users\\youza\\.gemini\\antigravity\\brain\\da096bbe-d8c7-47ae-96be-6f418ff8511b\\cinema-16-pillar-contact-sheet.png";
 const MASTER_PROOF_MP4 = path.join(OUT_DIR, "master-proof.mp4");
 const EP01_SCRIPT_PATH = path.join(REPO_ROOT, "scripts", "video_01_the_allowance.md");
 const VAULT_PATH = path.join(STUDIO_DIR, "episodes-vault.json");
@@ -51,6 +53,18 @@ const REMOTION_CLI = path.join(STUDIO_DIR, "node_modules", "@remotion", "cli", "
 
 const require = createRequire(import.meta.url);
 const esbuild = require(path.join(STUDIO_DIR, "node_modules", "esbuild"));
+const {
+  openBrowser,
+  selectComposition,
+  renderStill,
+  RenderInternals,
+} = require(path.join(STUDIO_DIR, "node_modules", "@remotion", "renderer"));
+const { setPropsAndEnv } = require(
+  path.join(STUDIO_DIR, "node_modules", "@remotion", "renderer", "dist", "set-props-and-env")
+);
+const { seekToFrame } = require(
+  path.join(STUDIO_DIR, "node_modules", "@remotion", "renderer", "dist", "seek-to-frame")
+);
 
 const SHOWCASE_9_CHAPTERS = [
   { index: 1, frame: 30, slug: "depth_sandwich", label: "Depth Sandwich" },
@@ -557,6 +571,67 @@ function validateFcpxmlDocument(xmlText) {
   };
 }
 
+function auditPlanDataWiring(plan) {
+  const beats = Array.isArray(plan?.beats) ? plan.beats : [];
+  const total = beats.length;
+  let dataCount = 0;
+  let tableRowsCount = 0;
+  let propIdsCount = 0;
+  let timedWordsCount = 0;
+  const nonGeoMapBeats = [];
+
+  for (const b of beats) {
+    if (b.data && typeof b.data === "object" && Object.keys(b.data).length > 0) {
+      dataCount += 1;
+    }
+    if (
+      (Array.isArray(b.tableRows) && b.tableRows.length > 0) ||
+      (Array.isArray(b.data?.tableRows) && b.data.tableRows.length > 0)
+    ) {
+      tableRowsCount += 1;
+    }
+    if (Array.isArray(b.propIds) && b.propIds.length > 0) {
+      propIdsCount += 1;
+    }
+    if (Array.isArray(b.timedWords) && b.timedWords.length > 0) {
+      timedWordsCount += 1;
+    }
+    if (b.componentHint === "MapExplainer" || b.recipeId === "data-corridor-arc-matrix") {
+      const isGeo =
+        Boolean(b.geoCorridor) || Boolean(b.geoQuery) || b.category === "map-geopolitics";
+      if (!isGeo) {
+        nonGeoMapBeats.push(b.id || "unknown-beat");
+      }
+    }
+  }
+
+  const pct = (n) => (total > 0 ? Number(((n / total) * 100).toFixed(1)) : 0);
+  const dataPct = pct(dataCount);
+  const tableRowsPct = pct(tableRowsCount);
+  const propIdsPct = pct(propIdsCount);
+  const timedWordsPct = pct(timedWordsCount);
+
+  return {
+    total,
+    dataCount,
+    dataPct,
+    tableRowsCount,
+    tableRowsPct,
+    propIdsCount,
+    propIdsPct,
+    timedWordsCount,
+    timedWordsPct,
+    nonGeoMapBeats,
+    passed:
+      total > 0 &&
+      dataPct >= 90 &&
+      tableRowsPct >= 80 &&
+      propIdsPct >= 40 &&
+      timedWordsCount === total &&
+      nonGeoMapBeats.length === 0,
+  };
+}
+
 function runSuite2EpisodeCompilationAndFcpxml(catalogMod) {
   console.log("\n=== SUITE 2: Episode 01 Compilation, Equalizer Gates, Cooldown & 4-Lane FCPXML ===");
   const rec = createCheckRecorder(
@@ -663,6 +738,17 @@ function runSuite2EpisodeCompilationAndFcpxml(catalogMod) {
     `plan-edit=${plannerWorlds.size}/10 worlds, ai_director=${eqWorlds.size}/10 worlds (${eq1?.qualityGate?.uniqueRecipesUsed ?? 0} unique recipes, ${eq1?.qualityGate?.uniqueTypographyModesUsed ?? 0}/32 kinetic modes)`
   );
 
+  // 4b. Data-Wiring Parity Check (ai_director.mjs & plan-edit.mjs)
+  const eqWiring = eq1 ? auditPlanDataWiring(eq1) : null;
+  const plWiring = pl1 ? auditPlanDataWiring(pl1) : null;
+  rec.check(
+    "Episode 01 Data-Wiring Parity (ai_director.mjs & plan-edit.mjs)",
+    Boolean(eqWiring?.passed && plWiring?.passed),
+    eqWiring && plWiring
+      ? `eq[data=${eqWiring.dataPct}%, rows=${eqWiring.tableRowsPct}%, props=${eqWiring.propIdsPct}%, timed=${eqWiring.timedWordsPct}%, nonGeoMap=${eqWiring.nonGeoMapBeats.length}] | plan[data=${plWiring.dataPct}%, rows=${plWiring.tableRowsPct}%, props=${plWiring.propIdsPct}%, timed=${plWiring.timedWordsPct}%, nonGeoMap=${plWiring.nonGeoMapBeats.length}]`
+      : "Missing compiled plans for data-wiring parity audit"
+  );
+
   // 5. Episode 02 Novelty Cooldown Shift
   const eq2Res = runCmd("node", [
     aiDirectorScript,
@@ -765,6 +851,10 @@ function runSuite2EpisodeCompilationAndFcpxml(catalogMod) {
       plannerDiversityScore: pl1?.audit?.styleDiversityScore ?? 0,
       plannerStyleWorlds: plannerWorlds.size,
       equalizerStyleWorlds: eqWorlds.size,
+      dataWiringParity: {
+        equalizer: eqWiring,
+        planner: plWiring,
+      },
       ep02ShiftedEqualizerBeats: eqShiftedBeats,
       fcpxml: xmlAudit,
     },
@@ -791,7 +881,8 @@ function inspectPngDimensionsAndVariance(pngPath, ffmpegBin) {
   const height = buf.readUInt32BE(20);
   const fileBytes = buf.length;
 
-  // Decode 320x180 RGB24 sample grid via FFmpeg to compute pixel luminance variance & bucket diversity
+  // Decode 320x180 RGB24 sample grid via FFmpeg to compute pixel luminance variance,
+  // bucket diversity, and active non-background pixel coverage.
   const rawRes = spawnSync(
     ffmpegBin,
     ["-v", "error", "-i", pngPath, "-vf", "scale=320:180:flags=area", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
@@ -807,10 +898,50 @@ function inspectPngDimensionsAndVariance(pngPath, ffmpegBin) {
     };
   }
 
+  const gridW = 320;
+  const gridH = 180;
   const rgb = rawRes.stdout;
-  const pixelCount = Math.floor(rgb.length / 3);
+  const pixelCount = gridW * gridH;
+
+  // Determine dominant corner background color from 4x4 patches in all 4 corners
+  const cornerBuckets = new Map();
+  const cornerPatches = [
+    [0, 0],
+    [gridW - 4, 0],
+    [0, gridH - 4],
+    [gridW - 4, gridH - 4],
+  ];
+  for (const [px, py] of cornerPatches) {
+    for (let dy = 0; dy < 4; dy++) {
+      for (let dx = 0; dx < 4; dx++) {
+        const idx = ((py + dy) * gridW + (px + dx)) * 3;
+        const r = rgb[idx];
+        const g = rgb[idx + 1];
+        const b = rgb[idx + 2];
+        const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+        let entry = cornerBuckets.get(key);
+        if (!entry) {
+          entry = { count: 0, sr: 0, sg: 0, sb: 0 };
+          cornerBuckets.set(key, entry);
+        }
+        entry.count += 1;
+        entry.sr += r;
+        entry.sg += g;
+        entry.sb += b;
+      }
+    }
+  }
+  let domBg = { count: 1, sr: rgb[0], sg: rgb[1], sb: rgb[2] };
+  for (const entry of cornerBuckets.values()) {
+    if (entry.count > domBg.count) domBg = entry;
+  }
+  const bgR = domBg.sr / domBg.count;
+  const bgG = domBg.sg / domBg.count;
+  const bgB = domBg.sb / domBg.count;
+
   let sumY = 0;
   let sumY2 = 0;
+  let activePixels = 0;
   const buckets = new Set();
 
   for (let i = 0; i < pixelCount * 3; i += 3) {
@@ -821,11 +952,18 @@ function inspectPngDimensionsAndVariance(pngPath, ffmpegBin) {
     sumY += y;
     sumY2 += y * y;
     buckets.add(((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4));
+    const dr = r - bgR;
+    const dg = g - bgG;
+    const db = b - bgB;
+    if (Math.sqrt(dr * dr + dg * dg + db * db) > 16) {
+      activePixels += 1;
+    }
   }
 
   const meanLuma = sumY / pixelCount;
   const variance = Math.max(0, sumY2 / pixelCount - meanLuma * meanLuma);
   const lumaStdDev = Math.sqrt(variance);
+  const activeCoveragePct = Number(((activePixels / pixelCount) * 100).toFixed(2));
 
   return {
     valid: true,
@@ -836,6 +974,8 @@ function inspectPngDimensionsAndVariance(pngPath, ffmpegBin) {
     meanLuma: Number(meanLuma.toFixed(2)),
     lumaStdDev: Number(lumaStdDev.toFixed(2)),
     uniqueColorBuckets: buckets.size,
+    dominantBgRgb: [Math.round(bgR), Math.round(bgG), Math.round(bgB)],
+    activeCoveragePct,
   };
 }
 
@@ -916,7 +1056,411 @@ function probeMasterMp4(mp4Path, ffprobeBin, ffmpegBin) {
   };
 }
 
-function runSuite3ChromiumVisualAndMasterProof(ffmpegBin, ffprobeBin) {
+function selectEpisode01DiverseBeats(ep1Plan) {
+  const beats = Array.isArray(ep1Plan?.beats) ? ep1Plan.beats : [];
+  const usedIds = new Set();
+
+  function pickFirst(label, slug, predicate) {
+    const found = beats.find((b) => !usedIds.has(b.id) && predicate(b));
+    if (!found) return null;
+    usedIds.add(found.id);
+    const midFrame = Math.max(
+      0,
+      Math.round((Number(found.startFrame || 0) + Number(found.endFrame || 0)) / 2)
+    );
+    return {
+      label,
+      slug,
+      beat: found,
+      frame: midFrame,
+      fileName: `ep01_beat_${slug}_${found.id}_f${midFrame}.png`,
+    };
+  }
+
+  return [
+    pickFirst(
+      "Forensic/Macro Cutaway",
+      "01_forensic_cutaway",
+      (b) =>
+        b.framing === "fullscreen-cutaway" &&
+        (String(b.recipeId || "").startsWith("forensic-") ||
+          String(b.recipeId || "").startsWith("macro-") ||
+          b.styleFamily === "macro-telemetry" ||
+          b.styleFamily === "forensic-exhibits")
+    ),
+    pickFirst(
+      "Set-Piece Contraption",
+      "02_setpiece",
+      (b) => Boolean(b.setPieceId) || b.styleFamily === "generative-setpiece"
+    ),
+    pickFirst(
+      "Corridor/Atlas Map",
+      "03_map",
+      (b) =>
+        b.componentHint === "MapExplainer" &&
+        (b.recipeId === "data-map-explainer" || String(b.recipeId || "").startsWith("atlas-"))
+    ),
+    pickFirst(
+      "Depth-Sandwich Presenter",
+      "04_depth_sandwich",
+      (b) => Boolean(b.depthSandwich?.enabled) || b.layering === "behind-presenter"
+    ),
+  ].filter(Boolean);
+}
+
+function evaluateDomSvgGeometryInPage() {
+  function isVisible(el) {
+    let cur = el;
+    while (cur && cur.nodeType === 1) {
+      const cs = getComputedStyle(cur);
+      if (
+        cs.display === "none" ||
+        cs.visibility === "hidden" ||
+        parseFloat(cs.opacity) <= 0.05
+      ) {
+        return false;
+      }
+      cur = cur.parentElement;
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 0.5 && r.height > 0.5;
+  }
+
+  function describe(el) {
+    const id = el.id ? `#${el.id}` : "";
+    const cls =
+      typeof el.className === "string" && el.className.trim()
+        ? `.${el.className.trim().split(/\s+/).slice(0, 3).join(".")}`
+        : "";
+    return `${el.tagName.toLowerCase()}${id}${cls}`;
+  }
+
+  const htmlIssues = [];
+  const htmlEls = Array.from(
+    document.querySelectorAll(
+      "div,span,p,h1,h2,h3,h4,h5,h6,td,th,li,label,button,a,code,pre"
+    )
+  );
+  for (const el of htmlEls) {
+    if (el.closest("svg")) continue;
+    if (!isVisible(el)) continue;
+    const txt = (el.textContent || "").trim();
+    if (!txt) continue;
+
+    const cs = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    if (rect.width >= window.innerWidth - 20 && rect.height >= window.innerHeight - 20) {
+      continue;
+    }
+
+    const hasDirectText = Array.from(el.childNodes).some(
+      (n) => n.nodeType === 3 && n.textContent.trim().length > 0
+    );
+
+    if (
+      (cs.overflowX === "hidden" ||
+        cs.overflowX === "clip" ||
+        cs.whiteSpace === "nowrap") &&
+      el.clientWidth > 0 &&
+      el.scrollWidth > el.clientWidth + 4
+    ) {
+      // Confirm an actual visible text-bearing element overflows (ignore decorative pointer-events:none layers)
+      const textDescendants = hasDirectText
+        ? [el]
+        : Array.from(el.querySelectorAll("*")).filter((ch) => {
+            if (ch.closest("svg") || !isVisible(ch)) return false;
+            return Array.from(ch.childNodes).some(
+              (n) => n.nodeType === 3 && n.textContent.trim().length > 0
+            );
+          });
+      const textOverflows = textDescendants.some((td) => {
+        const tr = td.getBoundingClientRect();
+        return (
+          tr.right > rect.right + 4 ||
+          tr.left < rect.left - 4 ||
+          td.scrollWidth > td.clientWidth + 4
+        );
+      });
+      if (textOverflows) {
+        htmlIssues.push({
+          type: "HTML_SCROLL_OVERFLOW",
+          selector: describe(el),
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+          text: txt.slice(0, 80),
+        });
+      }
+    }
+
+    if (hasDirectText) {
+      let anc = el.parentElement;
+      while (anc && anc !== document.body) {
+        const acs = getComputedStyle(anc);
+        const arect = anc.getBoundingClientRect();
+        const isCardOrBox =
+          arect.width < window.innerWidth - 40 &&
+          (parseFloat(acs.borderTopWidth) > 0 ||
+            parseFloat(acs.borderLeftWidth) > 0 ||
+            (acs.backgroundColor &&
+              acs.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+              acs.backgroundColor !== "transparent"));
+        if (isCardOrBox) {
+          if (rect.right > arect.right + 4 || rect.left < arect.left - 4) {
+            htmlIssues.push({
+              type: "HTML_CARD_BORDER_OVERFLOW",
+              selector: describe(el),
+              parentSelector: describe(anc),
+              rect: [Math.round(rect.left), Math.round(rect.right)],
+              parentRect: [Math.round(arect.left), Math.round(arect.right)],
+              text: txt.slice(0, 80),
+            });
+          }
+          break;
+        }
+        anc = anc.parentElement;
+      }
+    }
+  }
+
+  const svgOverflow = [];
+  const svgCollisions = [];
+  const calloutCollisions = [];
+
+  for (const svg of document.querySelectorAll("svg")) {
+    if (!isVisible(svg)) continue;
+    const sr = svg.getBoundingClientRect();
+    if (sr.width < 10 || sr.height < 10) continue;
+
+    const texts = [];
+    for (const t of svg.querySelectorAll("text")) {
+      if (t.closest("defs,clipPath,mask,pattern")) continue;
+      if (!isVisible(t)) continue;
+      const txt = (t.textContent || "").trim();
+      if (!txt) continue;
+      const cs = getComputedStyle(t);
+      const fontSize = parseFloat(cs.fontSize);
+      if (!(fontSize >= 8)) continue;
+      const r = t.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+
+      if (
+        r.left < sr.left - 2 ||
+        r.right > sr.right + 2 ||
+        r.top < sr.top - 2 ||
+        r.bottom > sr.bottom + 2
+      ) {
+        svgOverflow.push({
+          type: "SVG_TEXT_OVERFLOW",
+          selector: describe(t),
+          text: txt.slice(0, 80),
+          rect: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)],
+          svgRect: [Math.round(sr.left), Math.round(sr.top), Math.round(sr.right), Math.round(sr.bottom)],
+        });
+      }
+      texts.push({ selector: describe(t), text: txt, r });
+    }
+
+    for (let i = 0; i < texts.length; i++) {
+      for (let j = i + 1; j < texts.length; j++) {
+        const a = texts[i].r;
+        const b = texts[j].r;
+        const ix = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+        const iy = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+        const area = ix * iy;
+        if (area > 12) {
+          svgCollisions.push({
+            type: "SVG_TEXT_COLLISION",
+            areaPx2: Math.round(area),
+            a: texts[i].text.slice(0, 60),
+            b: texts[j].text.slice(0, 60),
+          });
+        }
+      }
+    }
+
+    // Callout card <g> collision check (distinct card groups with rect + text)
+    const cards = [];
+    for (const g of svg.querySelectorAll("g")) {
+      if (g.closest("defs,clipPath,mask,pattern") || !isVisible(g)) continue;
+      const directRect = Array.from(g.children).find(
+        (ch) => ch.tagName.toLowerCase() === "rect"
+      );
+      if (!directRect) continue;
+      const rr = directRect.getBoundingClientRect();
+      if (
+        rr.width < 60 ||
+        rr.height < 28 ||
+        rr.width > sr.width * 0.55 ||
+        rr.height > sr.height * 0.55
+      ) {
+        continue;
+      }
+      const gTexts = Array.from(g.querySelectorAll("text"))
+        .map((x) => (x.textContent || "").trim())
+        .filter(Boolean);
+      if (gTexts.length === 0) continue;
+      cards.push({
+        g,
+        rr,
+        label: gTexts.slice(0, 2).join(" | ").slice(0, 70),
+      });
+    }
+
+    for (let i = 0; i < cards.length; i++) {
+      for (let j = i + 1; j < cards.length; j++) {
+        if (cards[i].g.contains(cards[j].g) || cards[j].g.contains(cards[i].g)) continue;
+        const a = cards[i].rr;
+        const b = cards[j].rr;
+        const ix = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+        const iy = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+        const area = ix * iy;
+        if (area > 12) {
+          calloutCollisions.push({
+            type: "SVG_CALLOUT_CARD_COLLISION",
+            areaPx2: Math.round(area),
+            a: cards[i].label,
+            b: cards[j].label,
+          });
+        }
+      }
+    }
+  }
+
+  return { htmlIssues, svgOverflow, svgCollisions, calloutCollisions };
+}
+
+async function auditCompositionFramesDomSvg({
+  browser,
+  server,
+  composition,
+  inputProps = {},
+  frameSpecs,
+}) {
+  const page = await browser.newPage({
+    context: server.sourceMap,
+    logLevel: "error",
+    indent: false,
+    pageIndex: 0,
+    onBrowserLog: null,
+    onLog: () => {},
+  });
+
+  const findings = [];
+  try {
+    await page.setViewport({
+      width: composition.width,
+      height: composition.height,
+      deviceScaleFactor: 1,
+    });
+    const initialFrame = frameSpecs[0]?.frame ?? 0;
+    await setPropsAndEnv({
+      serializedInputPropsWithCustomSchema: JSON.stringify(inputProps),
+      envVariables: {},
+      page,
+      serveUrl: server.serveUrl,
+      initialFrame,
+      attempt: 1,
+      timeoutInMilliseconds: 60_000,
+      proxyPort: null,
+      retriesRemaining: 2,
+      audioEnabled: false,
+      videoEnabled: true,
+      indent: false,
+      logLevel: "error",
+      onServeUrlVisited: () => {},
+      isMainTab: true,
+      mediaCacheSizeInBytes: null,
+      preferredEffectBackend: "auto",
+      initialMemoryAvailable: 1024 * 1024 * 1024,
+      darkMode: false,
+      sampleRate: 48000,
+    });
+    await page.evaluate((c) => {
+      window.remotion_setBundleMode({
+        type: "composition",
+        compositionName: c.id,
+        serializedResolvedPropsWithSchema: JSON.stringify(c.props || {}),
+        compositionDurationInFrames: c.durationInFrames,
+        compositionFps: c.fps,
+        compositionHeight: c.height,
+        compositionWidth: c.width,
+        compositionDefaultCodec: c.defaultCodec,
+        compositionDefaultOutName: c.defaultOutName,
+        compositionDefaultVideoImageFormat: c.defaultVideoImageFormat,
+        compositionDefaultPixelFormat: c.defaultPixelFormat,
+        compositionDefaultProResProfile: c.defaultProResProfile,
+        compositionDefaultSampleRate: c.defaultSampleRate,
+      });
+    }, composition);
+
+    for (const spec of frameSpecs) {
+      await seekToFrame({
+        frame: spec.frame,
+        videoEnabled: true,
+        audioEnabled: false,
+        page,
+        composition: composition.id,
+        timeoutInMilliseconds: 60_000,
+        indent: false,
+        logLevel: "error",
+        attempt: 0,
+      });
+      await page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            document.fonts.ready.then(() => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve));
+            });
+          })
+      );
+      const res = await page.evaluate(evaluateDomSvgGeometryInPage);
+      const issues = [
+        ...res.htmlIssues,
+        ...res.svgOverflow,
+        ...res.svgCollisions,
+        ...res.calloutCollisions,
+      ];
+      if (issues.length > 0) {
+        findings.push({
+          tag: spec.tag,
+          frame: spec.frame,
+          issues,
+        });
+      }
+    }
+  } finally {
+    await page.close();
+  }
+  return findings;
+}
+
+function formatDomSvgFindings(findings) {
+  const parts = [];
+  for (const f of findings) {
+    for (const iss of f.issues) {
+      if (iss.type === "HTML_SCROLL_OVERFLOW") {
+        parts.push(
+          `[${f.tag} @ f${f.frame}] ${iss.type} ${iss.selector} (${iss.scrollWidth}>${iss.clientWidth}px): "${iss.text}"`
+        );
+      } else if (iss.type === "HTML_CARD_BORDER_OVERFLOW") {
+        parts.push(
+          `[${f.tag} @ f${f.frame}] ${iss.type} ${iss.selector} past ${iss.parentSelector} (${iss.rect.join("..")} vs ${iss.parentRect.join("..")}): "${iss.text}"`
+        );
+      } else if (iss.type === "SVG_TEXT_OVERFLOW") {
+        parts.push(
+          `[${f.tag} @ f${f.frame}] ${iss.type} ${iss.selector} ([${iss.rect.join(",")}] vs svg [${iss.svgRect.join(",")}]): "${iss.text}"`
+        );
+      } else {
+        parts.push(
+          `[${f.tag} @ f${f.frame}] ${iss.type} (${iss.areaPx2}px^2): "${iss.a}" <-> "${iss.b}"`
+        );
+      }
+    }
+  }
+  return parts;
+}
+
+async function runSuite3ChromiumVisualAndMasterProof(ffmpegBin, ffprobeBin) {
   console.log("\n=== SUITE 3: Live Chromium Visual Contact Sheet & Standalone Master .mp4 Render ===");
   const rec = createCheckRecorder(
     "Suite 3 — Live Chromium Visual Contact Sheet & Standalone Master .mp4 Render"
@@ -950,75 +1494,261 @@ function runSuite3ChromiumVisualAndMasterProof(ffmpegBin, ffprobeBin) {
     return rec.finalize();
   }
 
-  // 2. Render all 9 Cinema16PillarShowcase chapters
-  const chapterResults = [];
-  for (const ch of SHOWCASE_9_CHAPTERS) {
-    const seqFile = path.join(STILLS_DIR, `ch_${String(ch.index).padStart(2, "0")}.png`);
-    const namedFile = path.join(
-      STILLS_DIR,
-      `${String(ch.index).padStart(2, "0")}_${ch.slug}_f${String(ch.frame).padStart(3, "0")}.png`
+  const ep1EqPath = path.join(PLANS_DIR, "ep01-equalizer-plan.json");
+  const ep1Eq = fs.existsSync(ep1EqPath)
+    ? JSON.parse(fs.readFileSync(ep1EqPath, "utf8"))
+    : null;
+  const ep1Props4kPath = path.join(PLANS_DIR, "ep01-equalizer-4k.props.json");
+  if (ep1Eq) {
+    fs.writeFileSync(
+      ep1Props4kPath,
+      JSON.stringify({ plan: ep1Eq, renderAudio: false, resolution: "4k" }, null, 2),
+      "utf8"
     );
-    console.log(`  Rendering Showcase Ch ${ch.index}/9 (frame ${ch.frame}: ${ch.label}) ...`);
-    const res = runCmd("npx", [
-      "remotion",
-      "still",
-      BUNDLE_DIR,
-      "Cinema16PillarShowcase",
-      seqFile,
-      `--frame=${ch.frame}`,
-      "--image-format=png",
-    ]);
-    if (res.status === 0 && fs.existsSync(seqFile)) {
-      fs.copyFileSync(seqFile, namedFile);
-    }
-    const stats = inspectPngDimensionsAndVariance(seqFile, ffmpegBin);
-    const ok =
-      res.status === 0 &&
-      stats.valid &&
-      stats.width === 1920 &&
-      stats.height === 1080 &&
-      stats.lumaStdDev >= 8.0 &&
-      stats.meanLuma > 4.0 &&
-      stats.meanLuma < 251.0 &&
-      stats.uniqueColorBuckets >= 24;
-
-    rec.check(
-      `Showcase Ch 0${ch.index} @ f${ch.frame} (${ch.label})`,
-      ok,
-      stats.valid
-        ? `${stats.width}x${stats.height}, stdDev=${stats.lumaStdDev}, meanY=${stats.meanLuma}, buckets=${stats.uniqueColorBuckets}, ${stats.fileKB}KB (${res.wallSec}s)`
-        : `Render/PNG failed: ${stats.reason || res.stderr.slice(-240)}`
-    );
-    chapterResults.push({ ...ch, pngPath: namedFile, wallSec: res.wallSec, stats });
   }
 
-  // 3. Render 1 ReadingRoomEpisodeMaster4K (3840x2160 UHD) still
-  const master4kPng = path.join(STILLS_DIR, "master_4k_3840x2160_f045.png");
-  console.log("  Rendering ReadingRoomEpisodeMaster4K UHD still (frame 45, 3840x2160) ...");
-  const res4k = runCmd("npx", [
-    "remotion",
-    "still",
-    BUNDLE_DIR,
-    "ReadingRoomEpisodeMaster4K",
-    master4kPng,
-    "--frame=45",
-    "--image-format=png",
-  ]);
-  const stats4k = inspectPngDimensionsAndVariance(master4kPng, ffmpegBin);
-  rec.check(
-    "ReadingRoomEpisodeMaster4K Native UHD Still (3840x2160)",
-    res4k.status === 0 &&
-      stats4k.valid &&
-      stats4k.width === 3840 &&
-      stats4k.height === 2160 &&
-      stats4k.lumaStdDev >= 10.0 &&
-      stats4k.uniqueColorBuckets >= 32,
-    stats4k.valid
-      ? `${stats4k.width}x${stats4k.height}, stdDev=${stats4k.lumaStdDev}, meanY=${stats4k.meanLuma}, buckets=${stats4k.uniqueColorBuckets}, ${stats4k.fileKB}KB (${res4k.wallSec}s)`
-      : `4K still failed: ${stats4k.reason || res4k.stderr.slice(-240)}`
-  );
+  const chapterResults = [];
+  const ep1BeatResults = [];
+  let stats4k = { valid: false, reason: "Not run" };
+  let wall4kSec = 0;
+  let showcaseDomFindings = [];
+  let ep1DomFindings = [];
 
-  // 4. Stitch 3x3 Contact Sheet -> docs/cinema-16-pillar-contact-sheet.png (2880x1620, <2.5MB)
+  const server = await RenderInternals.prepareServer({
+    webpackConfigOrServeUrl: BUNDLE_DIR,
+    port: null,
+    remotionRoot: STUDIO_DIR,
+    offthreadVideoThreads: 1,
+    logLevel: "error",
+    indent: false,
+    offthreadVideoCacheSizeInBytes: null,
+    binariesDirectory: null,
+    forceIPv4: true,
+    sampleRate: 48000,
+  });
+  const browser = await openBrowser("chrome", { logLevel: "error" });
+
+  try {
+    // 2. Render all 9 Cinema16PillarShowcase chapters
+    const showcaseComp = await selectComposition({
+      serveUrl: server.serveUrl,
+      id: "Cinema16PillarShowcase",
+      puppeteerInstance: browser,
+    });
+
+    for (const ch of SHOWCASE_9_CHAPTERS) {
+      const seqFile = path.join(STILLS_DIR, `ch_${String(ch.index).padStart(2, "0")}.png`);
+      const namedFile = path.join(
+        STILLS_DIR,
+        `${String(ch.index).padStart(2, "0")}_${ch.slug}_f${String(ch.frame).padStart(3, "0")}.png`
+      );
+      console.log(`  Rendering Showcase Ch ${ch.index}/9 (frame ${ch.frame}: ${ch.label}) ...`);
+      const t0 = performance.now();
+      let renderErr = null;
+      try {
+        await renderStill({
+          composition: showcaseComp,
+          serveUrl: server.serveUrl,
+          output: seqFile,
+          frame: ch.frame,
+          imageFormat: "png",
+          overwrite: true,
+          puppeteerInstance: browser,
+          logLevel: "error",
+        });
+        if (fs.existsSync(seqFile)) {
+          fs.copyFileSync(seqFile, namedFile);
+        }
+      } catch (err) {
+        renderErr = String(err);
+      }
+      const wallSec = Number(((performance.now() - t0) / 1000).toFixed(3));
+      const stats = inspectPngDimensionsAndVariance(seqFile, ffmpegBin);
+      const ok =
+        !renderErr &&
+        stats.valid &&
+        stats.width === 1920 &&
+        stats.height === 1080 &&
+        stats.lumaStdDev >= 8.0 &&
+        stats.meanLuma > 4.0 &&
+        stats.meanLuma < 251.0 &&
+        stats.uniqueColorBuckets >= 24 &&
+        stats.activeCoveragePct >= 14.0;
+
+      rec.check(
+        `Showcase Ch 0${ch.index} @ f${ch.frame} (${ch.label})`,
+        ok,
+        stats.valid
+          ? `${stats.width}x${stats.height}, stdDev=${stats.lumaStdDev}, meanY=${stats.meanLuma}, active=${stats.activeCoveragePct}%, buckets=${stats.uniqueColorBuckets}, ${stats.fileKB}KB (${wallSec}s)`
+          : `Render/PNG failed: ${stats.reason || renderErr}`
+      );
+      chapterResults.push({ ...ch, pngPath: namedFile, wallSec, stats });
+    }
+
+    // 3. Render 1 ReadingRoomEpisodeMaster4K (3840x2160 UHD) still using compiled ep01-equalizer-plan.json
+    const master4kPng = path.join(STILLS_DIR, "master_4k_3840x2160_f045.png");
+    const ep1InputProps4k = ep1Eq
+      ? { plan: ep1Eq, renderAudio: false, resolution: "4k" }
+      : { renderAudio: false, resolution: "4k" };
+    console.log(
+      "  Rendering ReadingRoomEpisodeMaster4K UHD still (frame 45, 3840x2160, ep01-equalizer-plan.json) ..."
+    );
+    const t4k = performance.now();
+    let err4k = null;
+    try {
+      const comp4k = await selectComposition({
+        serveUrl: server.serveUrl,
+        id: "ReadingRoomEpisodeMaster4K",
+        inputProps: ep1InputProps4k,
+        puppeteerInstance: browser,
+      });
+      await renderStill({
+        composition: comp4k,
+        serveUrl: server.serveUrl,
+        inputProps: ep1InputProps4k,
+        output: master4kPng,
+        frame: 45,
+        imageFormat: "png",
+        overwrite: true,
+        puppeteerInstance: browser,
+        logLevel: "error",
+      });
+    } catch (err) {
+      err4k = String(err);
+    }
+    wall4kSec = Number(((performance.now() - t4k) / 1000).toFixed(3));
+    stats4k = inspectPngDimensionsAndVariance(master4kPng, ffmpegBin);
+    rec.check(
+      "ReadingRoomEpisodeMaster4K Native UHD Still (3840x2160, Ep01 Compiled Plan)",
+      !err4k &&
+        stats4k.valid &&
+        stats4k.width === 3840 &&
+        stats4k.height === 2160 &&
+        stats4k.lumaStdDev >= 10.0 &&
+        stats4k.uniqueColorBuckets >= 32 &&
+        stats4k.activeCoveragePct >= 14.0,
+      stats4k.valid
+        ? `${stats4k.width}x${stats4k.height}, stdDev=${stats4k.lumaStdDev}, meanY=${stats4k.meanLuma}, active=${stats4k.activeCoveragePct}%, buckets=${stats4k.uniqueColorBuckets}, ${stats4k.fileKB}KB (${wall4kSec}s)`
+        : `4K still failed: ${stats4k.reason || err4k}`
+    );
+
+    // 4. Render 4 diverse real Episode 01 beats from ep01-equalizer-plan.json via ReadingRoomEpisodeMaster
+    const selectedEp1Beats = selectEpisode01DiverseBeats(ep1Eq);
+    const ep1InputProps1080 = ep1Eq
+      ? { plan: ep1Eq, renderAudio: false, resolution: "1080p" }
+      : { renderAudio: false, resolution: "1080p" };
+    const ep1MasterComp = await selectComposition({
+      serveUrl: server.serveUrl,
+      id: "ReadingRoomEpisodeMaster",
+      inputProps: ep1InputProps1080,
+      puppeteerInstance: browser,
+    });
+
+    for (const item of selectedEp1Beats) {
+      const outPng = path.join(STILLS_DIR, item.fileName);
+      console.log(
+        `  Rendering Ep01 ${item.label} (${item.beat.id} @ f${item.frame}: ${item.beat.recipeId}) ...`
+      );
+      const tb = performance.now();
+      let beatErr = null;
+      try {
+        await renderStill({
+          composition: ep1MasterComp,
+          serveUrl: server.serveUrl,
+          inputProps: ep1InputProps1080,
+          output: outPng,
+          frame: item.frame,
+          imageFormat: "png",
+          overwrite: true,
+          puppeteerInstance: browser,
+          logLevel: "error",
+        });
+      } catch (err) {
+        beatErr = String(err);
+      }
+      const wallSec = Number(((performance.now() - tb) / 1000).toFixed(3));
+      const bStats = inspectPngDimensionsAndVariance(outPng, ffmpegBin);
+      const bOk =
+        !beatErr &&
+        bStats.valid &&
+        bStats.width === 1920 &&
+        bStats.height === 1080 &&
+        bStats.lumaStdDev >= 8.0 &&
+        bStats.uniqueColorBuckets >= 24 &&
+        bStats.activeCoveragePct >= 14.0;
+      rec.check(
+        `Ep01 Compiled Still (${item.label}: ${item.beat.id} @ f${item.frame})`,
+        bOk,
+        bStats.valid
+          ? `${bStats.width}x${bStats.height}, recipe=${item.beat.recipeId}, stdDev=${bStats.lumaStdDev}, active=${bStats.activeCoveragePct}%, buckets=${bStats.uniqueColorBuckets}, ${bStats.fileKB}KB (${wallSec}s)`
+          : `Ep01 beat still failed: ${bStats.reason || beatErr}`
+      );
+      ep1BeatResults.push({
+        label: item.label,
+        beatId: item.beat.id,
+        recipeId: item.beat.recipeId,
+        frame: item.frame,
+        pngPath: path.relative(REPO_ROOT, outPng),
+        wallSec,
+        ...bStats,
+      });
+    }
+
+    // 5. Real Headless Chromium DOM & SVG Geometry Audit
+    console.log("  Running Chromium DOM & SVG Geometry Audit across Showcase (9 chapters) ...");
+    showcaseDomFindings = await auditCompositionFramesDomSvg({
+      browser,
+      server,
+      composition: showcaseComp,
+      inputProps: {},
+      frameSpecs: SHOWCASE_9_CHAPTERS.map((ch) => ({
+        tag: `Showcase Ch0${ch.index} (${ch.label})`,
+        frame: ch.frame,
+      })),
+    });
+    const showcaseDomMessages = formatDomSvgFindings(showcaseDomFindings);
+    for (const msg of showcaseDomMessages) {
+      console.log(`    [DOM/SVG AUDIT] ${msg}`);
+    }
+    rec.check(
+      "Chromium DOM/SVG Overflow & Collision Audit (Cinema16PillarShowcase 9 Chapters)",
+      showcaseDomMessages.length === 0,
+      showcaseDomMessages.length === 0
+        ? "0 HTML/SVG overflows, 0 SVG text/callout collisions across all 9 chapter frames"
+        : `${showcaseDomMessages.length} issue(s): ${showcaseDomMessages.join(" | ")}`
+    );
+
+    console.log("  Running Chromium DOM & SVG Geometry Audit across Episode 01 Compiled Beats ...");
+    ep1DomFindings =
+      selectedEp1Beats.length > 0
+        ? await auditCompositionFramesDomSvg({
+            browser,
+            server,
+            composition: ep1MasterComp,
+            inputProps: ep1InputProps1080,
+            frameSpecs: selectedEp1Beats.map((item) => ({
+              tag: `Ep01 ${item.beat.id} (${item.beat.recipeId})`,
+              frame: item.frame,
+            })),
+          })
+        : [];
+    const ep1DomMessages = formatDomSvgFindings(ep1DomFindings);
+    for (const msg of ep1DomMessages) {
+      console.log(`    [DOM/SVG AUDIT] ${msg}`);
+    }
+    rec.check(
+      "Chromium DOM/SVG Overflow & Collision Audit (Episode 01 Compiled Beats)",
+      selectedEp1Beats.length === 4 && ep1DomMessages.length === 0,
+      ep1DomMessages.length === 0
+        ? `0 HTML/SVG overflows, 0 SVG text/callout collisions across ${selectedEp1Beats.length} Episode 01 beats`
+        : `${ep1DomMessages.length} issue(s): ${ep1DomMessages.join(" | ")}`
+    );
+  } finally {
+    await browser.close({ silent: true });
+    await server.closeServer(true);
+  }
+
+  // 6. Stitch 3x3 Contact Sheet -> docs/cinema-16-pillar-contact-sheet.png (2880x1620, <2.5MB)
   console.log(`  Stitching 3x3 Contact Sheet -> ${path.relative(REPO_ROOT, DOCS_CONTACT_SHEET)} ...`);
   const rawSheetPath = path.join(STILLS_DIR, "_contact_sheet_raw_24bit.png");
   const seqPattern = path.join(STILLS_DIR, "ch_%02d.png");
@@ -1068,6 +1798,11 @@ function runSuite3ChromiumVisualAndMasterProof(ffmpegBin, ffprobeBin) {
     }
   }
 
+  if (fs.existsSync(DOCS_CONTACT_SHEET)) {
+    fs.mkdirSync(path.dirname(BRAIN_CONTACT_SHEET), { recursive: true });
+    fs.copyFileSync(DOCS_CONTACT_SHEET, BRAIN_CONTACT_SHEET);
+  }
+
   const sheetStats = inspectPngDimensionsAndVariance(DOCS_CONTACT_SHEET, ffmpegBin);
   const sheetMaxLimitBytes = Math.floor(2.5 * 1024 * 1024);
   rec.check(
@@ -1077,13 +1812,14 @@ function runSuite3ChromiumVisualAndMasterProof(ffmpegBin, ffprobeBin) {
       sheetStats.height === 1620 &&
       sheetStats.fileBytes > 100 * 1024 &&
       sheetStats.fileBytes < sheetMaxLimitBytes &&
-      sheetStats.lumaStdDev >= 20.0,
+      sheetStats.lumaStdDev >= 20.0 &&
+      fs.existsSync(BRAIN_CONTACT_SHEET),
     sheetStats.valid
-      ? `${sheetStats.width}x${sheetStats.height}, ${(sheetStats.fileBytes / (1024 * 1024)).toFixed(2)}MB (<2.50MB), stdDev=${sheetStats.lumaStdDev}, buckets=${sheetStats.uniqueColorBuckets}`
+      ? `${sheetStats.width}x${sheetStats.height}, ${(sheetStats.fileBytes / (1024 * 1024)).toFixed(2)}MB (<2.50MB), stdDev=${sheetStats.lumaStdDev}, active=${sheetStats.activeCoveragePct}%, buckets=${sheetStats.uniqueColorBuckets}`
       : `Contact sheet failed: ${sheetStats.reason || stitchRes.stderr}`
   );
 
-  // 5. Render 90-frame (3.0s) standalone ReadingRoomEpisodeMaster MP4 -> studio/out/master-proof.mp4
+  // 7. Render 90-frame (3.0s) standalone ReadingRoomEpisodeMaster MP4 -> studio/out/master-proof.mp4
   const masterPropsPath = path.join(EXAM_DIR, "master-proof-90f.props.json");
   const masterProofProps = {
     renderAudio: true,
@@ -1193,7 +1929,12 @@ function runSuite3ChromiumVisualAndMasterProof(ffmpegBin, ffprobeBin) {
         wallSec: c.wallSec,
         ...c.stats,
       })),
-      master4kStill: { wallSec: res4k.wallSec, ...stats4k },
+      master4kStill: { wallSec: wall4kSec, ...stats4k },
+      episode01BeatStills: ep1BeatResults,
+      domSvgAudit: {
+        showcaseFindings: showcaseDomFindings,
+        episode01Findings: ep1DomFindings,
+      },
       contactSheet: {
         path: path.relative(REPO_ROOT, DOCS_CONTACT_SHEET),
         ...sheetStats,
@@ -1240,7 +1981,7 @@ async function main() {
         checks: [],
         failures: [],
       }
-    : runSuite3ChromiumVisualAndMasterProof(
+    : await runSuite3ChromiumVisualAndMasterProof(
         findMediaBinary("ffmpeg"),
         findMediaBinary("ffprobe")
       );

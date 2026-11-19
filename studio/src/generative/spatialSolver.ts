@@ -63,6 +63,7 @@ export interface SolvedConnectorLayout {
   svgPath: string;
   approxLengthPx: number;
   badgeRect?: Rect2D;
+  badgeLines?: string[];
 }
 
 export interface SolvedPolishPlan {
@@ -279,6 +280,7 @@ function resolveStageEnvelope(
 function resolveOccupiedZoneRects(
   stage: Rect2D,
   actors: BlueprintActor[],
+  connectors: BlueprintConnector[],
   compactMode: boolean,
   placement: OverFootagePlacement,
   surfaceMode: BlueprintSurfaceMode
@@ -296,7 +298,22 @@ function resolveOccupiedZoneRects(
     counts[actors[i].zone] += 1;
   }
 
-  const gutter = compactMode ? 16 : 36;
+  const hasConnectors = connectors.length > 0;
+  const hasBadgedConnectors = connectors.some(
+    (c) =>
+      Boolean(c.metricBadge ?? c.label) && c.fromActorId !== c.toActorId
+  );
+
+  const gutter = compactMode
+    ? hasBadgedConnectors
+      ? 42
+      : hasConnectors
+        ? 28
+        : 16
+    : hasConnectors
+      ? 128
+      : 42;
+  const vGutter = compactMode ? 18 : hasBadgedConnectors ? 44 : 36;
 
   // Special vertical stack reflow when constrained inside narrow right-third over-footage glass
   if (surfaceMode === "over-footage" && placement === "right-third") {
@@ -336,6 +353,45 @@ function resolveOccupiedZoneRects(
     return map;
   }
 
+  // Special horizontal ribbon reflow when constrained inside shallow top-bar over-footage glass
+  if (surfaceMode === "over-footage" && placement === "top-bar") {
+    const activeZones: SemanticZone[] = [];
+    const order: SemanticZone[] = [
+      "top-header",
+      "left-stage",
+      "split-left",
+      "center-hero",
+      "split-right",
+      "right-stage",
+      "bottom-ledger",
+    ];
+    for (let i = 0; i < order.length; i++) {
+      if (counts[order[i]] > 0) activeZones.push(order[i]);
+    }
+    const n = Math.max(1, activeZones.length);
+    const colGap = hasBadgedConnectors ? 88 : 20;
+    const bandW = Math.max(120, (stage.width - colGap * (n - 1)) / n);
+    const fallback: Rect2D = { ...stage };
+    const map: Record<SemanticZone, Rect2D> = {
+      "top-header": fallback,
+      "bottom-ledger": fallback,
+      "left-stage": fallback,
+      "center-hero": fallback,
+      "right-stage": fallback,
+      "split-left": fallback,
+      "split-right": fallback,
+    };
+    for (let idx = 0; idx < activeZones.length; idx++) {
+      map[activeZones[idx]] = {
+        x: stage.x + idx * (bandW + colGap),
+        y: stage.y,
+        width: bandW,
+        height: stage.height,
+      };
+    }
+    return map;
+  }
+
   // Standard 16:9 / wide stage golden-ratio vertical bands (top-header, mainBody, bottom-ledger)
   const hasTop = counts["top-header"] > 0;
   const hasBottom = counts["bottom-ledger"] > 0;
@@ -354,7 +410,7 @@ function resolveOccupiedZoneRects(
   if (hasTop) {
     const h = hasMiddle || hasBottom ? Math.round(stage.height * 0.22) : stage.height;
     topRect = { x: stage.x, y: curY, width: stage.width, height: h };
-    curY += h + (hasMiddle || hasBottom ? gutter : 0);
+    curY += h + (hasMiddle || hasBottom ? vGutter : 0);
     remH = stage.y + stage.height - curY;
   }
 
@@ -365,7 +421,7 @@ function resolveOccupiedZoneRects(
     height: 165,
   };
   if (hasBottom) {
-    const h = hasMiddle ? Math.round(stage.height * 0.25) : remH;
+    const h = hasMiddle ? Math.round(stage.height * 0.24) : remH;
     bottomRect = {
       x: stage.x,
       y: stage.y + stage.height - h,
@@ -373,7 +429,7 @@ function resolveOccupiedZoneRects(
       height: h,
     };
     if (hasMiddle) {
-      remH -= h + gutter;
+      remH -= h + vGutter;
     }
   }
 
@@ -384,8 +440,15 @@ function resolveOccupiedZoneRects(
     height: Math.max(140, remH),
   };
 
-  // Split zones (50/50 with central connector channel)
-  const splitAlley = compactMode ? 24 : 72;
+  // Split zones (50/50 with generous central connector channel)
+  const splitAlley = compactMode
+    ? hasBadgedConnectors
+      ? 92
+      : 24
+    : hasConnectors
+      ? 128
+      : 84;
+  const hGutter = compactMode ? (hasBadgedConnectors ? 92 : 20) : gutter;
   const splitW = (bodyRect.width - splitAlley) * 0.5;
   const splitLeftRect: Rect2D = {
     x: bodyRect.x,
@@ -410,44 +473,44 @@ function resolveOccupiedZoneRects(
   let rightRect: Rect2D = { ...splitRightRect };
 
   if (hasL && hasC && hasR) {
-    // Classic triptych: 1 : 1.42 : 1 golden-weighted hero center
+    // Classic triptych: 1 : 1.42 : 1 golden-weighted hero center with generous connector channels
     const totalWeight = 1 + 1.42 + 1;
-    const availW = bodyRect.width - gutter * 2;
+    const availW = bodyRect.width - hGutter * 2;
     const wSide = (availW * 1) / totalWeight;
     const wCenter = (availW * 1.42) / totalWeight;
     leftRect = { x: bodyRect.x, y: bodyRect.y, width: wSide, height: bodyRect.height };
     centerRect = {
-      x: bodyRect.x + wSide + gutter,
+      x: bodyRect.x + wSide + hGutter,
       y: bodyRect.y,
       width: wCenter,
       height: bodyRect.height,
     };
     rightRect = {
-      x: bodyRect.x + wSide + gutter + wCenter + gutter,
+      x: bodyRect.x + wSide + hGutter + wCenter + hGutter,
       y: bodyRect.y,
       width: wSide,
       height: bodyRect.height,
     };
   } else if (hasL && hasC && !hasR) {
     // Golden diptych: Left (1) + Center Hero (1.38)
-    const availW = bodyRect.width - gutter;
+    const availW = bodyRect.width - hGutter;
     const wL = availW / (1 + 1.38);
     const wC = availW - wL;
     leftRect = { x: bodyRect.x, y: bodyRect.y, width: wL, height: bodyRect.height };
     centerRect = {
-      x: bodyRect.x + wL + gutter,
+      x: bodyRect.x + wL + hGutter,
       y: bodyRect.y,
       width: wC,
       height: bodyRect.height,
     };
   } else if (!hasL && hasC && hasR) {
     // Golden diptych: Center Hero (1.38) + Right (1)
-    const availW = bodyRect.width - gutter;
+    const availW = bodyRect.width - hGutter;
     const wR = availW / (1 + 1.38);
     const wC = availW - wR;
     centerRect = { x: bodyRect.x, y: bodyRect.y, width: wC, height: bodyRect.height };
     rightRect = {
-      x: bodyRect.x + wC + gutter,
+      x: bodyRect.x + wC + hGutter,
       y: bodyRect.y,
       width: wR,
       height: bodyRect.height,
@@ -457,7 +520,7 @@ function resolveOccupiedZoneRects(
     leftRect = { ...splitLeftRect };
     rightRect = { ...splitRightRect };
   } else if (hasC && !hasL && !hasR) {
-    // Commanding centered stage (82% width of 1728px = ~1416px wide, zero tiny widget!)
+    // Commanding centered stage (84% width of 1728px, zero tiny widget!)
     const soloW = compactMode ? bodyRect.width : Math.round(bodyRect.width * 0.84);
     centerRect = {
       x: bodyRect.x + Math.round((bodyRect.width - soloW) * 0.5),
@@ -469,13 +532,13 @@ function resolveOccupiedZoneRects(
 
   // If both split zones AND stage zones are mixed in an LLM draft, keep them separated cleanly
   if ((counts["split-left"] > 0 || counts["split-right"] > 0) && (hasL || hasC || hasR)) {
-    const halfH = (bodyRect.height - gutter) * 0.5;
+    const halfH = (bodyRect.height - vGutter) * 0.5;
     leftRect = { ...leftRect, height: halfH };
     centerRect = { ...centerRect, height: halfH };
     rightRect = { ...rightRect, height: halfH };
-    splitLeftRect.y = bodyRect.y + halfH + gutter;
+    splitLeftRect.y = bodyRect.y + halfH + vGutter;
     splitLeftRect.height = halfH;
-    splitRightRect.y = bodyRect.y + halfH + gutter;
+    splitRightRect.y = bodyRect.y + halfH + vGutter;
     splitRightRect.height = halfH;
   }
 
@@ -837,14 +900,107 @@ export function samplePointAlongWaypoints(
   return { point: endPt, normal: { x: 0, y: -1 }, tangentDeg: 0 };
 }
 
+function isRectInsideBounds(rect: Rect2D, bounds: Rect2D): boolean {
+  return (
+    rect.x >= bounds.x - 0.5 &&
+    rect.y >= bounds.y - 0.5 &&
+    rect.x + rect.width <= bounds.x + bounds.width + 0.5 &&
+    rect.y + rect.height <= bounds.y + bounds.height + 0.5
+  );
+}
+
+function measureWrappedBadge(
+  text: string,
+  maxAllowedW: number
+): { width: number; height: number; lines: string[] } {
+  const clean = text.trim();
+  const maxChars = Math.max(9, Math.floor((maxAllowedW - 14) / 6.0));
+  if (clean.length <= maxChars) {
+    const w = Math.min(maxAllowedW, Math.max(76, Math.ceil(clean.length * 6.1 + 16)));
+    return { width: w, height: 26, lines: [clean] };
+  }
+
+  // Break into balanced tokens along spaces (and hyphens/slashes if single long token)
+  const rawWords = clean.split(/\s+/);
+  const tokens: string[] = [];
+  for (let i = 0; i < rawWords.length; i++) {
+    const w = rawWords[i];
+    if (w.length <= maxChars) {
+      tokens.push(w);
+    } else if (w.includes("-") || w.includes("/")) {
+      const subParts = w.split(/(?<=[-/])/);
+      for (let s = 0; s < subParts.length; s++) {
+        if (subParts[s]) tokens.push(subParts[s]);
+      }
+    } else {
+      tokens.push(w);
+    }
+  }
+
+  const lines: string[] = [];
+  let current = "";
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (!current) {
+      current = tok;
+    } else {
+      const sep = current.endsWith("-") || current.endsWith("/") ? "" : " ";
+      if ((current + sep + tok).length <= maxChars) {
+        current = current + sep + tok;
+      } else {
+        lines.push(current);
+        current = tok;
+      }
+    }
+  }
+  if (current) lines.push(current);
+
+  const clampedLines =
+    lines.length <= 3
+      ? lines
+      : [lines[0], lines[1], lines.slice(2).join(" ")];
+  const longest = clampedLines.reduce((m, l) => Math.max(m, l.length), 0);
+  const width = Math.min(maxAllowedW, Math.max(82, Math.ceil(longest * 6.0 + 16)));
+  const height =
+    clampedLines.length === 1 ? 26 : clampedLines.length === 2 ? 36 : 46;
+
+  return { width, height, lines: clampedLines };
+}
+
+function hasBadgeCollision(
+  candidate: Rect2D,
+  allActorRects: Rect2D[],
+  badgeBoxes: Rect2D[],
+  extraObstacles: Rect2D[]
+): boolean {
+  for (let a = 0; a < allActorRects.length; a++) {
+    if (rectsOverlapWithGap(candidate, allActorRects[a], 5)) {
+      return true;
+    }
+  }
+  for (let b = 0; b < badgeBoxes.length; b++) {
+    if (rectsOverlapWithGap(candidate, badgeBoxes[b], 6)) {
+      return true;
+    }
+  }
+  for (let e = 0; e < extraObstacles.length; e++) {
+    if (rectsOverlapWithGap(candidate, extraObstacles[e], 6)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
- * Routes all connectors cleanly between solved actor ports and prevents connector badge collisions.
+ * Routes all connectors cleanly between solved actor ports and guarantees zero badge collisions
+ * against full actor AABBs, guillotine gates, and sibling connector pills.
  */
 function routeBlueprintConnectors(
   connectors: BlueprintConnector[],
   actorMap: Record<string, SolvedActorLayout>,
   allActorRects: Rect2D[],
-  stageBounds: Rect2D
+  stageBounds: Rect2D,
+  outerBounds: Rect2D
 ): SolvedConnectorLayout[] {
   // Count port usage so multiple connectors sharing a port fan out cleanly
   const portUsageTotal: Record<string, number> = {};
@@ -1022,53 +1178,164 @@ function routeBlueprintConnectors(
 
     // Solve non-colliding connector badge rect if label or metricBadge is present
     let badgeRect: Rect2D | undefined;
+    let badgeLines: string[] | undefined;
     const textLabel = conn.metricBadge ?? conn.label;
     if (textLabel) {
-      const estW = Math.min(240, Math.max(96, textLabel.length * 7.8 + 26));
-      const estH = 28;
-      let candidate: Rect2D = clampRectInsideStage(
-        {
-          x: sampledMid.point.x - estW * 0.5,
-          y: sampledMid.point.y - estH - 10,
-          width: estW,
-          height: estH,
-        },
-        stageBounds
+      const horizGap = Math.max(
+        0,
+        Math.max(
+          toActor.rect.x - (fromActor.rect.x + fromActor.rect.width),
+          fromActor.rect.x - (toActor.rect.x + toActor.rect.width)
+        )
+      );
+      const vertGap = Math.max(
+        0,
+        Math.max(
+          toActor.rect.y - (fromActor.rect.y + fromActor.rect.height),
+          fromActor.rect.y - (toActor.rect.y + toActor.rect.height)
+        )
       );
 
-      // Push candidate clear of existing connector badges and tight actor centers
-      for (let step = 0; step < 8; step++) {
-        let hit = false;
-        for (let b = 0; b < badgeBoxes.length; b++) {
-          if (rectsOverlapWithGap(candidate, badgeBoxes[b], 6)) {
-            candidate = clampRectInsideStage(
-              { ...candidate, y: badgeBoxes[b].y - estH - 8 },
-              stageBounds
-            );
-            hit = true;
-          }
-        }
-        // Keep badge off actor top title bars
-        for (let a = 0; a < allActorRects.length; a++) {
-          const titleBar: Rect2D = {
-            x: allActorRects[a].x,
-            y: allActorRects[a].y,
-            width: allActorRects[a].width,
-            height: 44,
-          };
-          if (rectsOverlapWithGap(candidate, titleBar, 4)) {
-            candidate = clampRectInsideStage(
-              { ...candidate, y: titleBar.y + titleBar.height + 6 },
-              stageBounds
-            );
-            hit = true;
-          }
-        }
-        if (!hit) break;
+      const inHorizChannel = horizGap >= 64;
+      const channelLeft = inHorizChannel
+        ? Math.min(
+            fromActor.rect.x + fromActor.rect.width,
+            toActor.rect.x + toActor.rect.width
+          )
+        : stageBounds.x;
+      const channelRight = inHorizChannel
+        ? Math.max(fromActor.rect.x, toActor.rect.x)
+        : stageBounds.x + stageBounds.width;
+
+      const maxAllowedW = inHorizChannel
+        ? Math.min(200, Math.max(82, horizGap - 14))
+        : vertGap >= 28
+          ? 210
+          : 170;
+
+      const measured = measureWrappedBadge(textLabel, maxAllowedW);
+      const estW = measured.width;
+      const estH = measured.height;
+      badgeLines = measured.lines;
+
+      const extraObstacles: Rect2D[] = [];
+      if (conn.kind === "guillotine-cut") {
+        extraObstacles.push({
+          x: sampledMid.point.x - 16,
+          y: sampledMid.point.y - 24,
+          width: 32,
+          height: 48,
+        });
       }
 
-      badgeBoxes.push(candidate);
-      badgeRect = candidate;
+      const uCandidates = [0.5, 0.42, 0.58, 0.34, 0.66, 0.24, 0.76];
+      const dyCandidates = inHorizChannel
+        ? [
+            -(estH + 14),
+            14,
+            -(estH + 40),
+            40,
+            -(estH + 74),
+            74,
+            -(estH + 116),
+            116,
+            -(estH + 168),
+            168,
+            -(estH + 225),
+            225,
+          ]
+        : [
+            -estH * 0.5,
+            -(estH + 10),
+            10,
+            -(estH + 36),
+            36,
+            -(estH + 72),
+            72,
+          ];
+      const dxCandidates = inHorizChannel ? [0] : [0, -56, 56, -112, 112];
+
+      let chosen: Rect2D | undefined;
+
+      // Pass 1: Strict placement inside activeStageRect & inter-card channel
+      outerSearch: for (let uIdx = 0; uIdx < uCandidates.length; uIdx++) {
+        const pt = samplePointAlongWaypoints(waypoints, uCandidates[uIdx]).point;
+        for (let dyIdx = 0; dyIdx < dyCandidates.length; dyIdx++) {
+          for (let dxIdx = 0; dxIdx < dxCandidates.length; dxIdx++) {
+            const rawX = pt.x - estW * 0.5 + dxCandidates[dxIdx];
+            const clampedX = inHorizChannel
+              ? Math.max(
+                  channelLeft + 6,
+                  Math.min(channelRight - estW - 6, rawX)
+                )
+              : rawX;
+            const cand: Rect2D = {
+              x: clampedX,
+              y: pt.y + dyCandidates[dyIdx],
+              width: estW,
+              height: estH,
+            };
+            if (
+              isRectInsideBounds(cand, stageBounds) &&
+              !hasBadgeCollision(cand, allActorRects, badgeBoxes, extraObstacles)
+            ) {
+              chosen = cand;
+              break outerSearch;
+            }
+          }
+        }
+      }
+
+      // Pass 2: Allow outerSafeRect margins (e.g. just above/below crowded actors) if Pass 1 exhausted
+      if (!chosen) {
+        const marginOffsetsY = [
+          stageBounds.y - estH - 8,
+          stageBounds.y + stageBounds.height + 8,
+        ];
+        for (let m = 0; m < marginOffsetsY.length; m++) {
+          const cand = clampRectInsideStage(
+            {
+              x: sampledMid.point.x - estW * 0.5,
+              y: marginOffsetsY[m],
+              width: estW,
+              height: estH,
+            },
+            outerBounds
+          );
+          if (!hasBadgeCollision(cand, allActorRects, badgeBoxes, extraObstacles)) {
+            chosen = cand;
+            break;
+          }
+        }
+      }
+
+      // Pass 3: Compact wrapped fallback along channel if unusually tight custom stage
+      if (!chosen) {
+        const compactMeasured = measureWrappedBadge(
+          textLabel,
+          Math.max(76, Math.min(120, maxAllowedW))
+        );
+        badgeLines = compactMeasured.lines;
+        const cand = clampRectInsideStage(
+          {
+            x: inHorizChannel
+              ? (channelLeft + channelRight - compactMeasured.width) * 0.5
+              : sampledMid.point.x - compactMeasured.width * 0.5,
+            y: sampledMid.point.y - compactMeasured.height - 14,
+            width: compactMeasured.width,
+            height: compactMeasured.height,
+          },
+          outerBounds
+        );
+        if (!hasBadgeCollision(cand, allActorRects, badgeBoxes, extraObstacles)) {
+          chosen = cand;
+        }
+      }
+
+      if (chosen) {
+        badgeBoxes.push(chosen);
+        badgeRect = chosen;
+      }
     }
 
     results.push({
@@ -1084,6 +1351,7 @@ function routeBlueprintConnectors(
       svgPath,
       approxLengthPx: Math.max(1, approxLengthPx),
       badgeRect,
+      badgeLines,
     });
   }
 
@@ -1117,6 +1385,7 @@ export function solveSceneBlueprintLayout(
   const zoneRects = resolveOccupiedZoneRects(
     envelope.activeStageRect,
     blueprint.actors,
+    blueprint.connectors ?? [],
     envelope.compactMode,
     overFootagePlacement,
     surfaceMode
@@ -1246,7 +1515,8 @@ export function solveSceneBlueprintLayout(
     blueprint.connectors ?? [],
     actorMap,
     collisionSolved.rects,
-    envelope.activeStageRect
+    envelope.activeStageRect,
+    envelope.outerSafeRect
   );
 
   const epTag = blueprint.episode

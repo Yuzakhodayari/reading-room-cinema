@@ -1,12 +1,19 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { Layers, Scissors, Wrench } from "lucide-react";
-import { FONTS } from "../design/fonts";
-import { COLORS, OVER_FOOTAGE_PALETTE, PAGE_PALETTE, SPRINGS } from "../design/tokens";
+import { FONTS, TABULAR_NUM_STYLE } from "../design/fonts";
+import { fitSvgTextToWidth, wrapSvgTextLines } from "../design/fitText";
+import {
+  COLORS,
+  OVER_FOOTAGE_PALETTE,
+  PAGE_PALETTE,
+  REGISTERS,
+  RegisterId,
+  RegisterPalette,
+  SPRINGS,
+} from "../design/tokens";
 
-const TABULAR_NUMS: React.CSSProperties = {
-  fontVariantNumeric: "tabular-nums lining-nums",
-};
+const TABULAR_NUMS: React.CSSProperties = TABULAR_NUM_STYLE;
 
 const ELASTIC_POP = {
   damping: 16,
@@ -16,6 +23,133 @@ const ELASTIC_POP = {
 } as const;
 
 export type DiagramDisplayMode = "card" | "page" | "over-footage";
+
+function resolveDiagramRegister(register?: RegisterId): RegisterPalette {
+  return REGISTERS[register ?? "page_editorial"];
+}
+
+function getEditorialShadow(isDark: boolean): string {
+  return isDark
+    ? "0 24px 52px -14px rgba(3, 9, 18, 0.54), 0 4px 16px rgba(3, 9, 18, 0.30)"
+    : "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)";
+}
+
+interface FittedSvgTextProps {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  fontSize: number;
+  minFontSize?: number;
+  fontFamily: string;
+  fontWeight?: number | string;
+  fill: string;
+  textAnchor?: "start" | "middle" | "end";
+  dominantBaseline?: "auto" | "central" | "hanging";
+  style?: React.CSSProperties;
+}
+
+const FittedSvgText: React.FC<FittedSvgTextProps> = ({
+  text,
+  x,
+  y,
+  maxWidth,
+  fontSize,
+  minFontSize,
+  fontFamily,
+  fontWeight = 700,
+  fill,
+  textAnchor = "start",
+  dominantBaseline,
+  style,
+}) => {
+  const fitted = fitSvgTextToWidth(
+    text,
+    maxWidth,
+    fontSize,
+    minFontSize ?? Math.max(9.5, fontSize * 0.68),
+    fontFamily,
+    { fontWeight }
+  );
+  return (
+    <text
+      x={x}
+      y={y}
+      fontFamily={fontFamily}
+      fontSize={fitted.fontSize}
+      fontWeight={fontWeight}
+      fill={fill}
+      textAnchor={textAnchor}
+      dominantBaseline={dominantBaseline}
+      style={style}
+    >
+      {fitted.text}
+    </text>
+  );
+};
+
+interface WrappedSvgTextProps {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  fontSize: number;
+  minFontSize?: number;
+  maxLines?: number;
+  lineHeight?: number;
+  fontFamily: string;
+  fontWeight?: number | string;
+  fill: string;
+  textAnchor?: "start" | "middle" | "end";
+  verticalCenter?: boolean;
+  style?: React.CSSProperties;
+}
+
+const WrappedSvgText: React.FC<WrappedSvgTextProps> = ({
+  text,
+  x,
+  y,
+  maxWidth,
+  fontSize,
+  minFontSize,
+  maxLines = 2,
+  lineHeight = 1.18,
+  fontFamily,
+  fontWeight = 700,
+  fill,
+  textAnchor = "middle",
+  verticalCenter = false,
+  style,
+}) => {
+  const wrapped = wrapSvgTextLines(text, maxWidth, fontSize, fontFamily, maxLines, {
+    minFontSize: minFontSize ?? Math.max(9.5, fontSize * 0.68),
+    lineHeight,
+    fontWeight,
+  });
+  if (wrapped.lines.length === 0) return null;
+  const totalHeight = (wrapped.lines.length - 1) * wrapped.lineHeightPx;
+  const startY = verticalCenter ? y - totalHeight * 0.5 : y;
+
+  return (
+    <text
+      x={x}
+      y={startY}
+      fontFamily={fontFamily}
+      fontSize={wrapped.fontSize}
+      fontWeight={fontWeight}
+      fill={fill}
+      textAnchor={textAnchor}
+      dominantBaseline={verticalCenter ? "central" : undefined}
+      style={style}
+    >
+      {wrapped.lines.map((line, idx) => (
+        <tspan key={`wsl-${idx}`} x={x} dy={idx === 0 ? 0 : wrapped.lineHeightPx}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+};
 
 // ============================================================================
 // 1. StickerCutout (10px warm-milk outline + soft shadow + deterministic pop)
@@ -28,6 +162,7 @@ export interface StickerCutoutProps {
   className?: string;
   style?: React.CSSProperties;
   mode?: DiagramDisplayMode;
+  register?: RegisterId;
   eyebrow?: string;
   title?: string;
   caption?: string;
@@ -42,6 +177,7 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
   className,
   style,
   mode = "card",
+  register,
   eyebrow = "EDITORIAL CUTOUT",
   title,
   caption,
@@ -61,6 +197,8 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
 
   const driftY = Math.sin(frame * 0.04) * 3.5;
   const isOverFootage = mode === "over-footage";
+  const reg = resolveDiagramRegister(register);
+  const accentColor = isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : reg.accent.liability;
 
   const stickerNode = (
     <div
@@ -69,32 +207,45 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
         display: "inline-block",
         transform: `translate3d(0, ${driftY.toFixed(2)}px, 0) scale(${popSpring.toFixed(4)}) rotate(${rotation}deg)`,
         padding: `${outlineWidth}px`,
-        backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : PAGE_PALETTE.paperLight,
-        color: PAGE_PALETTE.navy,
+        backgroundColor: isOverFootage ? "rgba(15, 25, 35, 0.72)" : reg.bg.elevated,
+        backdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
+        WebkitBackdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
+        color: isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : reg.ink.primary,
         borderRadius: "18px",
-        border: `1.5px solid ${PAGE_PALETTE.paperBorder}`,
-        boxShadow: "0 20px 42px -10px rgba(28, 43, 58, 0.20)",
+        border: `1px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : reg.rule.hairline}`,
+        boxShadow: getEditorialShadow(isOverFootage || reg.isDark),
         userSelect: "none",
         ...style,
       }}
     >
       <div
         style={{
+          position: "relative",
           borderRadius: "10px",
           overflow: "hidden",
-          backgroundColor: PAGE_PALETTE.paper,
-          border: `1px solid ${PAGE_PALETTE.paperBorder}`,
+          backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.glassDarkWell : reg.bg.recessed,
+          border: `1px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.chartSecondary : reg.isDark ? reg.accent.statutory : reg.rule.oxford,
+          }}
+        />
         {children ?? (
-          <div style={{ padding: "28px 34px", maxWidth: "460px" }}>
+          <div style={{ padding: "30px 34px 28px 34px", maxWidth: "460px" }}>
             <div
               style={{
                 fontFamily: FONTS.mono,
                 fontSize: "12px",
                 fontWeight: 700,
                 letterSpacing: "0.08em",
-                color: PAGE_PALETTE.brickRed,
+                color: accentColor,
                 textTransform: "uppercase",
               }}
             >
@@ -105,7 +256,7 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
                 fontFamily: FONTS.serif,
                 fontSize: "30px",
                 fontWeight: 700,
-                color: PAGE_PALETTE.navy,
+                color: isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : reg.ink.primary,
                 marginTop: "8px",
                 lineHeight: 1.2,
               }}
@@ -128,7 +279,7 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
         position: "relative",
         width: "1920px",
         height: "1080px",
-        backgroundColor: PAGE_PALETTE.paperLight,
+        backgroundColor: reg.bg.canvas,
         display: "grid",
         gridTemplateColumns: "1fr 1.1fr",
         alignItems: "center",
@@ -139,7 +290,19 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
         userSelect: "none",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `
+            linear-gradient(to right, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(to bottom, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: "64px 64px",
+          pointerEvents: "none",
+        }}
+      />
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "20px" }}>
         <div
           style={{
             display: "inline-flex",
@@ -150,10 +313,10 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
             fontWeight: 700,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            color: PAGE_PALETTE.brickRed,
+            color: reg.accent.liability,
           }}
         >
-          <Scissors size={16} color={PAGE_PALETTE.brickRed} />
+          <Scissors size={16} color={reg.accent.liability} />
           <span>{eyebrow}</span>
         </div>
         <h1
@@ -163,7 +326,7 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
             fontSize: "60px",
             lineHeight: 1.08,
             fontWeight: 700,
-            color: PAGE_PALETTE.navy,
+            color: reg.ink.primary,
           }}
         >
           {title ?? "Tactile Cutout Exhibit"}
@@ -175,7 +338,7 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
               fontFamily: FONTS.sans,
               fontSize: "24px",
               lineHeight: 1.48,
-              color: PAGE_PALETTE.muted,
+              color: reg.ink.muted,
               maxWidth: "680px",
             }}
           >
@@ -187,10 +350,10 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
             style={{
               marginTop: "16px",
               paddingTop: "16px",
-              borderTop: `1px solid ${PAGE_PALETTE.paperBorder}`,
+              borderTop: `1px solid ${reg.rule.hairline}`,
               fontFamily: FONTS.mono,
               fontSize: "14px",
-              color: PAGE_PALETTE.muted,
+              color: reg.ink.muted,
               ...TABULAR_NUMS,
             }}
           >
@@ -199,7 +362,7 @@ export const StickerCutout: React.FC<StickerCutoutProps> = ({
         )}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
         {stickerNode}
       </div>
     </div>
@@ -233,6 +396,7 @@ export interface StickFigureStageProps {
   width?: number;
   height?: number;
   mode?: DiagramDisplayMode;
+  register?: RegisterId;
   atFrame?: number;
 }
 
@@ -245,10 +409,11 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
   subtitle,
   metricValue,
   metricLabel,
-  accentColor = COLORS.brickRed,
+  accentColor,
   width = 380,
   height = 480,
   mode = "card",
+  register,
   atFrame = 0,
 }) => {
   const frame = useCurrentFrame();
@@ -259,10 +424,16 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
     fps,
     config: SPRINGS.documentSnap,
   });
+  const sweepPct = interpolate(elapsed, [10, 42], [0, 100], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
+  const reg = resolveDiagramRegister(register);
   const isOverFootage = mode === "over-footage";
-  const strokeInk = isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : PAGE_PALETTE.navy;
-  const headFill = isOverFootage ? OVER_FOOTAGE_PALETTE.glassDarkWell : PAGE_PALETTE.paper;
+  const resolvedAccent = accentColor ?? (isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : reg.accent.liability);
+  const strokeInk = isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : reg.ink.primary;
+  const headFill = isOverFootage ? OVER_FOOTAGE_PALETTE.glassDarkWell : reg.bg.recessed;
 
   let headY = 82;
   let spinePath = "M 190 115 L 190 260";
@@ -338,21 +509,24 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
               height="82"
               rx="8"
               fill={PAGE_PALETTE.navy}
-              stroke={accentColor}
+              stroke={resolvedAccent}
               strokeWidth="3"
             />
-            <text
-              x="115"
-              y="47"
-              fill={PAGE_PALETTE.paperLight}
+            <WrappedSvgText
+              text={resolvedSlabLabel}
+              x={115}
+              y={41}
+              maxWidth={204}
+              fontSize={16}
+              minFontSize={11}
+              maxLines={2}
               fontFamily={FONTS.mono}
-              fontSize="16"
-              fontWeight="700"
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.textHeadline}
               textAnchor="middle"
+              verticalCenter
               style={TABULAR_NUMS}
-            >
-              {resolvedSlabLabel}
-            </text>
+            />
           </g>
         )}
 
@@ -361,7 +535,7 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
             <path
               d="M 110 72 Q 195 14 285 72 Z"
               fill={PAGE_PALETTE.navy}
-              stroke={accentColor}
+              stroke={resolvedAccent}
               strokeWidth="3"
             />
             <line x1="232" y1="52" x2="232" y2="148" stroke={strokeInk} strokeWidth="5" />
@@ -370,9 +544,9 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
 
         {pose === "pulling-lever" && (
           <g>
-            <rect x="275" y="190" width="54" height="210" rx="6" fill={PAGE_PALETTE.paper} stroke={strokeInk} strokeWidth="4" />
-            <line x1="302" y1="190" x2="268" y2="146" stroke={accentColor} strokeWidth="6" strokeLinecap="round" />
-            <circle cx="268" cy="146" r="10" fill={accentColor} />
+            <rect x="275" y="190" width="54" height="210" rx="6" fill={reg.bg.recessed} stroke={strokeInk} strokeWidth="4" />
+            <line x1="302" y1="190" x2="268" y2="146" stroke={resolvedAccent} strokeWidth="6" strokeLinecap="round" />
+            <circle cx="268" cy="146" r="10" fill={resolvedAccent} />
           </g>
         )}
 
@@ -392,12 +566,12 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
 
         {pose === "carrying-briefcase" && (
           <g transform="translate(220, 238)">
-            <rect width="58" height="42" rx="5" fill={PAGE_PALETTE.navy} stroke={accentColor} strokeWidth="2.5" />
+            <rect width="58" height="42" rx="5" fill={PAGE_PALETTE.navy} stroke={resolvedAccent} strokeWidth="2.5" />
             <path d="M 18 0 L 18 -9 L 40 -9 L 40 0" fill="none" stroke={strokeInk} strokeWidth="3" />
           </g>
         )}
 
-        <line x1="40" y1="400" x2="340" y2="400" stroke={PAGE_PALETTE.muted} strokeWidth="3" strokeLinecap="round" />
+        <line x1="40" y1="400" x2="340" y2="400" stroke={reg.ink.muted} strokeWidth="3" strokeLinecap="round" />
       </svg>
 
       {caption && (
@@ -406,7 +580,7 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
             fontFamily: FONTS.sans,
             fontSize: "15px",
             fontWeight: 700,
-            color: isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : PAGE_PALETTE.navy,
+            color: isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : reg.ink.primary,
             marginTop: "8px",
             textAlign: "center",
             maxWidth: `${width}px`,
@@ -419,6 +593,28 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
   );
 
   if (mode !== "page") {
+    if (isOverFootage) {
+      return (
+        <div
+          style={{
+            position: "relative",
+            width: "440px",
+            background: OVER_FOOTAGE_PALETTE.glassPrimary,
+            backdropFilter: "blur(14px) saturate(160%)",
+            WebkitBackdropFilter: "blur(14px) saturate(160%)",
+            border: `1px solid ${OVER_FOOTAGE_PALETTE.glassBorder}`,
+            borderRadius: "16px",
+            padding: "20px 24px",
+            boxShadow: "0 22px 48px rgba(15, 25, 35, 0.48)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          {figureSvg}
+        </div>
+      );
+    }
     return figureSvg;
   }
 
@@ -428,7 +624,7 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
         position: "relative",
         width: "1920px",
         height: "1080px",
-        backgroundColor: PAGE_PALETTE.paperLight,
+        backgroundColor: reg.bg.canvas,
         display: "grid",
         gridTemplateColumns: "1.08fr 0.92fr",
         alignItems: "center",
@@ -443,8 +639,8 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
           position: "absolute",
           inset: 0,
           backgroundImage: `
-            linear-gradient(to right, ${COLORS.gridLine} 1px, transparent 1px),
-            linear-gradient(to bottom, ${COLORS.gridLine} 1px, transparent 1px)
+            linear-gradient(to right, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(to bottom, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px)
           `,
           backgroundSize: "64px 64px",
           pointerEvents: "none",
@@ -459,7 +655,7 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
             fontWeight: 700,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            color: accentColor,
+            color: resolvedAccent,
           }}
         >
           {eyebrow}
@@ -471,7 +667,7 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
             fontSize: "62px",
             lineHeight: 1.08,
             fontWeight: 700,
-            color: PAGE_PALETTE.navy,
+            color: reg.ink.primary,
           }}
         >
           {title ?? caption ?? "Household Balance-Sheet Pressure"}
@@ -483,7 +679,7 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
               fontFamily: FONTS.sans,
               fontSize: "24px",
               lineHeight: 1.48,
-              color: PAGE_PALETTE.muted,
+              color: reg.ink.muted,
               maxWidth: "740px",
             }}
           >
@@ -499,24 +695,41 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
               flexDirection: "column",
               gap: "6px",
               padding: "22px 28px",
-              backgroundColor: PAGE_PALETTE.paper,
-              border: `1.5px solid ${PAGE_PALETTE.paperBorder}`,
-              borderLeft: `5px solid ${accentColor}`,
+              backgroundColor: reg.bg.elevated,
+              border: `1px solid ${reg.rule.hairline}`,
+              borderLeft: `4px solid ${resolvedAccent}`,
               borderRadius: "10px",
               alignSelf: "flex-start",
+              boxShadow: getEditorialShadow(reg.isDark),
             }}
           >
-            <span
-              style={{
-                fontFamily: FONTS.mono,
-                fontSize: "44px",
-                fontWeight: 700,
-                color: PAGE_PALETTE.navy,
-                ...TABULAR_NUMS,
-              }}
-            >
-              {metricValue}
-            </span>
+            <div style={{ position: "relative", display: "inline-flex", alignItems: "center", width: "fit-content" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  bottom: "4px",
+                  height: "24px",
+                  width: `${sweepPct}%`,
+                  backgroundColor: reg.accent.highlighterWash,
+                  borderRadius: "3px",
+                  zIndex: 1,
+                }}
+              />
+              <span
+                style={{
+                  position: "relative",
+                  zIndex: 2,
+                  fontFamily: FONTS.mono,
+                  fontSize: "44px",
+                  fontWeight: 700,
+                  color: reg.ink.primary,
+                  ...TABULAR_NUMS,
+                }}
+              >
+                {metricValue}
+              </span>
+            </div>
             {metricLabel && (
               <span
                 style={{
@@ -525,7 +738,7 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
                   fontWeight: 600,
                   letterSpacing: "0.06em",
                   textTransform: "uppercase",
-                  color: PAGE_PALETTE.muted,
+                  color: reg.ink.muted,
                 }}
               >
                 {metricLabel}
@@ -539,16 +752,28 @@ export const StickFigureStage: React.FC<StickFigureStageProps> = ({
         style={{
           position: "relative",
           zIndex: 1,
-          backgroundColor: PAGE_PALETTE.paper,
-          border: `2px solid ${PAGE_PALETTE.navy}`,
-          borderRadius: "18px",
+          backgroundColor: reg.bg.elevated,
+          border: `1px solid ${reg.rule.hairline}`,
+          borderRadius: "12px",
           padding: "44px",
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          boxShadow: "0 24px 48px rgba(28, 43, 58, 0.12)",
+          boxShadow: getEditorialShadow(reg.isDark),
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: reg.isDark ? reg.accent.statutory : reg.rule.oxford,
+            borderTopLeftRadius: "12px",
+            borderTopRightRadius: "12px",
+          }}
+        />
         {figureSvg}
       </div>
     </div>
@@ -578,6 +803,7 @@ export interface InstructionManualCardProps {
   subtitle?: string;
   footnote?: string;
   mode?: DiagramDisplayMode;
+  register?: RegisterId;
   atFrame?: number;
 }
 
@@ -593,6 +819,7 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
   subtitle,
   footnote,
   mode = "card",
+  register,
   atFrame = 0,
 }) => {
   const frame = useCurrentFrame();
@@ -606,6 +833,8 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
     config: SPRINGS.documentSnap,
   });
 
+  const reg = resolveDiagramRegister(register);
+  const isOverFootage = mode === "over-footage";
   const resolvedSteps: ManualStepItem[] =
     steps && steps.length > 0
       ? steps
@@ -623,39 +852,62 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
     partsCount ?? `SPEC · ${String(resolvedSteps.length).padStart(2, "0")} ${resolvedSteps.length === 1 ? "STAGE" : "STAGES"}`;
 
   if (mode !== "page") {
+    const cardInk = isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : reg.ink.primary;
+    const cardMuted = isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : reg.ink.muted;
+    const cardStroke = isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : reg.isDark ? reg.accent.statutory : reg.rule.oxford;
+    const boxLeftBg = isOverFootage ? OVER_FOOTAGE_PALETTE.glassDarkWell : reg.bg.recessed;
+    const boxRightBg = isOverFootage ? "rgba(79, 179, 174, 0.22)" : reg.accent.highlighterWash;
+
     return (
       <div
         style={{
+          position: "relative",
           display: "inline-block",
           width: "580px",
-          backgroundColor: PAGE_PALETTE.paperLight,
-          border: `2px solid ${PAGE_PALETTE.navy}`,
-          borderRadius: "10px",
+          background: isOverFootage ? OVER_FOOTAGE_PALETTE.glassPrimary : reg.bg.elevated,
+          backdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
+          WebkitBackdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
+          border: `1px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : reg.rule.hairline}`,
+          borderRadius: "12px",
           padding: "28px 34px",
-          boxShadow: "0 18px 38px rgba(28, 43, 58, 0.14)",
+          boxSizing: "border-box",
+          boxShadow: getEditorialShadow(isOverFootage || reg.isDark),
           transform: `scale(${(0.92 + 0.08 * enter).toFixed(4)})`,
           opacity: enter,
           userSelect: "none",
+          overflow: "hidden",
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.chartSecondary : cardStroke,
+          }}
+        />
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            borderBottom: `2px solid ${PAGE_PALETTE.navy}`,
+            borderBottom: `1.5px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
             paddingBottom: "14px",
-            marginBottom: "18px",
+            marginBottom: "16px",
+            gap: "12px",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
             <div
               style={{
                 width: "36px",
                 height: "36px",
+                flexShrink: 0,
                 borderRadius: "50%",
-                backgroundColor: PAGE_PALETTE.navy,
-                color: PAGE_PALETTE.paperLight,
+                backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.chartSecondary : cardStroke,
+                color: isOverFootage ? PAGE_PALETTE.navyDeep : reg.bg.elevated,
                 fontFamily: FONTS.mono,
                 fontWeight: 700,
                 fontSize: "18px",
@@ -670,9 +922,10 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
             <span
               style={{
                 fontFamily: FONTS.sans,
-                fontSize: "20px",
+                fontSize: "19px",
                 fontWeight: 800,
-                color: PAGE_PALETTE.navy,
+                color: cardInk,
+                lineHeight: 1.2,
               }}
             >
               {title}
@@ -683,8 +936,9 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
             style={{
               fontFamily: FONTS.mono,
               fontSize: "12px",
-              color: PAGE_PALETTE.muted,
+              color: cardMuted,
               fontWeight: 700,
+              flexShrink: 0,
               ...TABULAR_NUMS,
             }}
           >
@@ -692,87 +946,96 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
           </span>
         </div>
 
-        <svg width="512" height="142" viewBox="0 0 512 142">
+        <svg width="512" height="150" viewBox="0 0 512 150">
           <rect
-            x="16"
-            y="30"
-            width="174"
-            height="74"
-            rx="5"
-            fill={PAGE_PALETTE.paper}
-            stroke={PAGE_PALETTE.navy}
-            strokeWidth="2.5"
-          />
-          <text
-            x="103"
-            y="67"
-            fontFamily={FONTS.mono}
-            fontSize="13.5"
-            fontWeight="700"
-            fill={PAGE_PALETTE.navy}
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={TABULAR_NUMS}
-          >
-            {leftLabel}
-          </text>
-          <rect
-            x="322"
-            y="30"
-            width="174"
-            height="74"
-            rx="5"
-            fill={PAGE_PALETTE.highlightSweep}
-            stroke={PAGE_PALETTE.navy}
-            strokeWidth="2.5"
-          />
-          <text
-            x="409"
-            y="67"
-            fontFamily={FONTS.mono}
-            fontSize="13.5"
-            fontWeight="700"
-            fill={PAGE_PALETTE.navy}
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={TABULAR_NUMS}
-          >
-            {rightLabel}
-          </text>
-          <line
-            x1="190"
-            y1="67"
-            x2="322"
-            y2="67"
-            stroke={PAGE_PALETTE.navy}
+            x="14"
+            y="26"
+            width="178"
+            height="86"
+            rx="6"
+            fill={boxLeftBg}
+            stroke={cardStroke}
             strokeWidth="2.2"
+          />
+          <WrappedSvgText
+            text={leftLabel}
+            x={103}
+            y={69}
+            maxWidth={152}
+            fontSize={15}
+            minFontSize={12}
+            maxLines={2}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={cardInk}
+            textAnchor="middle"
+            verticalCenter
+            style={TABULAR_NUMS}
+          />
+          <rect
+            x="320"
+            y="26"
+            width="178"
+            height="86"
+            rx="6"
+            fill={boxRightBg}
+            stroke={isOverFootage ? OVER_FOOTAGE_PALETTE.chartSecondary : cardStroke}
+            strokeWidth="2.2"
+          />
+          <WrappedSvgText
+            text={rightLabel}
+            x={409}
+            y={69}
+            maxWidth={152}
+            fontSize={15}
+            minFontSize={12}
+            maxLines={2}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={cardInk}
+            textAnchor="middle"
+            verticalCenter
+            style={TABULAR_NUMS}
+          />
+          <line
+            x1="192"
+            y1="69"
+            x2="314"
+            y2="69"
+            stroke={isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : reg.accent.liability}
+            strokeWidth="2.5"
             strokeDasharray="6 6"
           />
-          <polygon points="314,61 326,67 314,73" fill={PAGE_PALETTE.navy} />
-          <text
-            x="256"
-            y="54"
+          <polygon
+            points="310,62 322,69 310,76"
+            fill={isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : reg.accent.liability}
+          />
+          <FittedSvgText
+            text={linkLabel}
+            x={256}
+            y={52}
+            maxWidth={118}
+            fontSize={13}
+            minFontSize={10.5}
             fontFamily={FONTS.mono}
-            fontSize="11"
-            fontWeight="700"
-            fill={PAGE_PALETTE.muted}
+            fontWeight={700}
+            fill={cardMuted}
             textAnchor="middle"
-          >
-            {linkLabel}
-          </text>
+          />
         </svg>
       </div>
     );
   }
 
   // Full 1920x1080 Technical Manual Sheet
+  const topBarColor = reg.isDark ? reg.accent.statutory : reg.rule.oxford;
   return (
     <div
       style={{
         position: "relative",
         width: "1920px",
         height: "1080px",
-        backgroundColor: PAGE_PALETTE.paperLight,
+        backgroundColor: reg.bg.canvas,
         padding: "68px 92px",
         boxSizing: "border-box",
         display: "flex",
@@ -784,10 +1047,25 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
     >
       <div
         style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `
+            linear-gradient(to right, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(to bottom, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: "64px 64px",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
-          borderBottom: `3px solid ${PAGE_PALETTE.navy}`,
+          borderBottom: `2.5px solid ${topBarColor}`,
           paddingBottom: "24px",
         }}
       >
@@ -801,11 +1079,11 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
               fontSize: "14px",
               fontWeight: 700,
               letterSpacing: "0.1em",
-              color: PAGE_PALETTE.brickRed,
+              color: reg.accent.liability,
               textTransform: "uppercase",
             }}
           >
-            <Wrench size={16} color={PAGE_PALETTE.brickRed} />
+            <Wrench size={16} color={reg.accent.liability} />
             <span>{eyebrow}</span>
           </div>
           <h1
@@ -814,7 +1092,7 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
               fontFamily: FONTS.serif,
               fontSize: "54px",
               fontWeight: 700,
-              color: PAGE_PALETTE.navy,
+              color: reg.ink.primary,
               lineHeight: 1.08,
             }}
           >
@@ -826,7 +1104,7 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
                 margin: "10px 0 0 0",
                 fontFamily: FONTS.sans,
                 fontSize: "21px",
-                color: PAGE_PALETTE.muted,
+                color: reg.ink.muted,
                 maxWidth: "1080px",
               }}
             >
@@ -838,13 +1116,15 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
         <div
           style={{
             padding: "12px 20px",
-            border: `2px solid ${PAGE_PALETTE.navy}`,
+            border: `1px solid ${reg.rule.hairline}`,
+            borderLeft: `4px solid ${topBarColor}`,
             borderRadius: "8px",
-            backgroundColor: PAGE_PALETTE.paper,
+            backgroundColor: reg.bg.elevated,
             fontFamily: FONTS.mono,
             fontSize: "15px",
             fontWeight: 700,
-            color: PAGE_PALETTE.navy,
+            color: reg.ink.primary,
+            boxShadow: getEditorialShadow(reg.isDark),
             ...TABULAR_NUMS,
           }}
         >
@@ -854,6 +1134,8 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
 
       <div
         style={{
+          position: "relative",
+          zIndex: 1,
           display: "grid",
           gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, resolvedSteps.length))}, 1fr)`,
           gap: "32px",
@@ -872,25 +1154,39 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
             <div
               key={`manual-step-${st.stepNumber}-${idx}`}
               style={{
-                backgroundColor: PAGE_PALETTE.paper,
-                border: `2px solid ${PAGE_PALETTE.navy}`,
-                borderRadius: "12px",
-                padding: "32px",
+                position: "relative",
+                backgroundColor: reg.bg.elevated,
+                border: `1px solid ${reg.rule.hairline}`,
+                borderRadius: "10px",
+                padding: "36px 32px 28px 32px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
+                boxShadow: getEditorialShadow(reg.isDark),
                 opacity: cardProgress,
                 transform: `translate3d(0, ${(1 - cardProgress) * 24}px, 0)`,
+                overflow: "hidden",
               }}
             >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "4px",
+                  backgroundColor: topBarColor,
+                }}
+              />
               <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                 <div
                   style={{
                     width: "48px",
                     height: "48px",
+                    flexShrink: 0,
                     borderRadius: "50%",
-                    backgroundColor: PAGE_PALETTE.navy,
-                    color: PAGE_PALETTE.paperLight,
+                    backgroundColor: topBarColor,
+                    color: reg.bg.elevated,
                     fontFamily: FONTS.mono,
                     fontSize: "22px",
                     fontWeight: 700,
@@ -907,7 +1203,8 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
                     fontFamily: FONTS.sans,
                     fontSize: "24px",
                     fontWeight: 800,
-                    color: PAGE_PALETTE.navy,
+                    color: reg.ink.primary,
+                    lineHeight: 1.2,
                   }}
                 >
                   {st.label}
@@ -916,84 +1213,89 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
 
               <svg width="100%" height="220" viewBox="0 0 460 220" style={{ margin: "20px 0" }}>
                 <rect
-                  x="16"
-                  y="52"
-                  width="164"
-                  height="112"
+                  x="14"
+                  y="48"
+                  width="168"
+                  height="120"
                   rx="8"
-                  fill={PAGE_PALETTE.paperLight}
-                  stroke={PAGE_PALETTE.navy}
-                  strokeWidth="2.5"
+                  fill={reg.bg.recessed}
+                  stroke={topBarColor}
+                  strokeWidth="2.2"
                 />
-                <text
-                  x="98"
-                  y="108"
+                <WrappedSvgText
+                  text={st.fromLabel}
+                  x={98}
+                  y={108}
+                  maxWidth={144}
+                  fontSize={15}
+                  minFontSize={11}
+                  maxLines={3}
                   fontFamily={FONTS.mono}
-                  fontSize="15"
-                  fontWeight="700"
-                  fill={PAGE_PALETTE.navy}
+                  fontWeight={700}
+                  fill={reg.ink.primary}
                   textAnchor="middle"
-                  dominantBaseline="central"
+                  verticalCenter
                   style={TABULAR_NUMS}
-                >
-                  {st.fromLabel}
-                </text>
+                />
 
                 <line
-                  x1="184"
+                  x1="186"
                   y1="108"
-                  x2="274"
+                  x2="270"
                   y2="108"
-                  stroke={PAGE_PALETTE.brickRed}
+                  stroke={reg.accent.liability}
                   strokeWidth="3"
                   strokeDasharray="7 5"
                 />
-                <polygon points="266,100 280,108 266,116" fill={PAGE_PALETTE.brickRed} />
+                <polygon points="264,100 278,108 264,116" fill={reg.accent.liability} />
                 {st.note && (
-                  <text
-                    x="230"
-                    y="90"
+                  <FittedSvgText
+                    text={st.note}
+                    x={230}
+                    y={88}
+                    maxWidth={84}
+                    fontSize={12.5}
+                    minFontSize={9.5}
                     fontFamily={FONTS.mono}
-                    fontSize="12"
-                    fontWeight="700"
-                    fill={PAGE_PALETTE.brickRed}
+                    fontWeight={700}
+                    fill={reg.accent.liability}
                     textAnchor="middle"
-                  >
-                    {st.note}
-                  </text>
+                  />
                 )}
 
                 <rect
-                  x="280"
-                  y="52"
-                  width="164"
-                  height="112"
+                  x="278"
+                  y="48"
+                  width="168"
+                  height="120"
                   rx="8"
-                  fill={PAGE_PALETTE.highlightSweep}
-                  stroke={PAGE_PALETTE.navy}
-                  strokeWidth="2.5"
+                  fill={reg.accent.highlighterWash}
+                  stroke={topBarColor}
+                  strokeWidth="2.2"
                 />
-                <text
-                  x="362"
-                  y="108"
+                <WrappedSvgText
+                  text={st.toLabel}
+                  x={362}
+                  y={108}
+                  maxWidth={144}
+                  fontSize={15}
+                  minFontSize={11}
+                  maxLines={3}
                   fontFamily={FONTS.mono}
-                  fontSize="15"
-                  fontWeight="700"
-                  fill={PAGE_PALETTE.navy}
+                  fontWeight={700}
+                  fill={reg.ink.primary}
                   textAnchor="middle"
-                  dominantBaseline="central"
+                  verticalCenter
                   style={TABULAR_NUMS}
-                >
-                  {st.toLabel}
-                </text>
+                />
               </svg>
 
               <div
                 style={{
                   fontFamily: FONTS.mono,
                   fontSize: "13px",
-                  color: PAGE_PALETTE.muted,
-                  borderTop: `1px solid ${PAGE_PALETTE.paperBorder}`,
+                  color: reg.ink.muted,
+                  borderTop: `1px solid ${reg.rule.hairline}`,
                   paddingTop: "12px",
                   ...TABULAR_NUMS,
                 }}
@@ -1007,14 +1309,16 @@ export const InstructionManualCard: React.FC<InstructionManualCardProps> = ({
 
       <div
         style={{
+          position: "relative",
+          zIndex: 1,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          borderTop: `1.5px solid ${PAGE_PALETTE.paperBorder}`,
+          borderTop: `1px solid ${reg.rule.hairline}`,
           paddingTop: "16px",
           fontFamily: FONTS.mono,
           fontSize: "14px",
-          color: PAGE_PALETTE.muted,
+          color: reg.ink.muted,
           ...TABULAR_NUMS,
         }}
       >
@@ -1039,6 +1343,7 @@ export interface CollageCutoutProps {
   subtitle?: string;
   stampText?: string;
   mode?: DiagramDisplayMode;
+  register?: RegisterId;
 }
 
 export const CollageCutout: React.FC<CollageCutoutProps> = ({
@@ -1052,6 +1357,7 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
   subtitle,
   stampText = "EXHIBIT A",
   mode = "card",
+  register,
 }) => {
   const rawFrame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -1069,6 +1375,14 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
     config: SPRINGS.documentSnap,
   });
 
+  const reg = resolveDiagramRegister(register);
+  const isOverFootage = mode === "over-footage";
+  const topBarColor = isOverFootage
+    ? OVER_FOOTAGE_PALETTE.chartSecondary
+    : reg.isDark
+    ? reg.accent.statutory
+    : reg.rule.oxford;
+
   const cutoutCard = (
     <div
       style={{
@@ -1078,11 +1392,13 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
         height,
         transform: `translate3d(${jitterX}px, ${jitterY}px, 0) rotate(${rotation}deg) scale(${enter.toFixed(4)})`,
         opacity: enter > 0.01 ? 1 : 0,
-        backgroundColor: PAGE_PALETTE.paperLight,
+        background: isOverFootage ? OVER_FOOTAGE_PALETTE.glassPrimary : reg.bg.elevated,
+        backdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
+        WebkitBackdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
         padding: "14px",
-        borderRadius: "4px",
-        border: `1.5px solid ${PAGE_PALETTE.paperBorder}`,
-        boxShadow: "0 18px 40px rgba(28, 43, 58, 0.18)",
+        borderRadius: "8px",
+        border: `1px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : reg.rule.hairline}`,
+        boxShadow: getEditorialShadow(isOverFootage || reg.isDark),
         userSelect: "none",
       }}
     >
@@ -1095,27 +1411,38 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
           width: "110px",
           height: "24px",
           transform: "translateX(-50%) rotate(-2deg)",
-          backgroundColor: "rgba(242, 240, 234, 0.86)",
-          border: `1px solid ${PAGE_PALETTE.paperBorder}`,
+          backgroundColor: isOverFootage ? "rgba(191, 214, 234, 0.35)" : "rgba(242, 240, 234, 0.86)",
+          border: `1px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : reg.rule.hairline}`,
         }}
       />
       <div
         style={{
+          position: "relative",
           width: "100%",
           height: "100%",
           overflow: "hidden",
-          backgroundColor: PAGE_PALETTE.paper,
-          border: `1px dashed ${PAGE_PALETTE.navy}`,
+          backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.glassDarkWell : reg.bg.recessed,
+          border: `1px dashed ${isOverFootage ? OVER_FOOTAGE_PALETTE.accentPrimary : reg.rule.oxford}`,
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: topBarColor,
+          }}
+        />
         {children ?? (
-          <div style={{ padding: "26px 32px", maxWidth: "520px" }}>
+          <div style={{ padding: "28px 32px 26px 32px", maxWidth: "520px" }}>
             <div
               style={{
                 fontFamily: FONTS.mono,
                 fontSize: "12px",
                 fontWeight: 700,
-                color: PAGE_PALETTE.brickRed,
+                color: isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : reg.accent.liability,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
               }}
@@ -1127,7 +1454,7 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
                 fontFamily: FONTS.serif,
                 fontSize: "30px",
                 fontWeight: 700,
-                color: PAGE_PALETTE.navy,
+                color: isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : reg.ink.primary,
                 marginTop: "8px",
                 lineHeight: 1.2,
               }}
@@ -1139,7 +1466,7 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
                 style={{
                   fontFamily: FONTS.sans,
                   fontSize: "17px",
-                  color: PAGE_PALETTE.muted,
+                  color: isOverFootage ? OVER_FOOTAGE_PALETTE.textBody : reg.ink.muted,
                   marginTop: "10px",
                   lineHeight: 1.45,
                 }}
@@ -1163,7 +1490,7 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
         position: "relative",
         width: "1920px",
         height: "1080px",
-        backgroundColor: PAGE_PALETTE.paper,
+        backgroundColor: reg.bg.canvas,
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
         alignItems: "center",
@@ -1173,14 +1500,26 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
         overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `
+            linear-gradient(to right, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(to bottom, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: "64px 64px",
+          pointerEvents: "none",
+        }}
+      />
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "20px" }}>
         <div
           style={{
             display: "inline-block",
             alignSelf: "flex-start",
             padding: "6px 14px",
-            border: `2px solid ${PAGE_PALETTE.brickRed}`,
-            color: PAGE_PALETTE.brickRed,
+            border: `2px solid ${reg.accent.liability}`,
+            color: reg.accent.liability,
             fontFamily: FONTS.mono,
             fontSize: "13px",
             fontWeight: 700,
@@ -1197,7 +1536,7 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
             fontSize: "60px",
             lineHeight: 1.08,
             fontWeight: 700,
-            color: PAGE_PALETTE.navy,
+            color: reg.ink.primary,
           }}
         >
           {title ?? "Archival Press & Ledger Evidence"}
@@ -1209,14 +1548,14 @@ export const CollageCutout: React.FC<CollageCutoutProps> = ({
               fontFamily: FONTS.sans,
               fontSize: "23px",
               lineHeight: 1.48,
-              color: PAGE_PALETTE.muted,
+              color: reg.ink.muted,
             }}
           >
             {subtitle}
           </p>
         )}
       </div>
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
         {cutoutCard}
       </div>
     </div>
@@ -1234,6 +1573,7 @@ export interface IsometricSceneProps {
   gridSpacing?: number;
   showAxes?: boolean;
   footnote?: string;
+  register?: RegisterId;
 }
 
 export const IsometricScene: React.FC<IsometricSceneProps> = ({
@@ -1244,7 +1584,9 @@ export const IsometricScene: React.FC<IsometricSceneProps> = ({
   gridSpacing = 72,
   showAxes = true,
   footnote,
+  register,
 }) => {
+  const reg = resolveDiagramRegister(register);
   const lines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
   for (let i = -16; i <= 28; i++) {
     const offset = i * gridSpacing;
@@ -1258,7 +1600,7 @@ export const IsometricScene: React.FC<IsometricSceneProps> = ({
         position: "relative",
         width: "100%",
         height: "100%",
-        backgroundColor: PAGE_PALETTE.paperLight,
+        backgroundColor: reg.bg.canvas,
         overflow: "hidden",
       }}
     >
@@ -1275,18 +1617,25 @@ export const IsometricScene: React.FC<IsometricSceneProps> = ({
             y1={ln.y1}
             x2={ln.x2}
             y2={ln.y2}
-            stroke={COLORS.gridLine}
+            stroke={reg.isDark ? "rgba(191, 211, 230, 0.08)" : COLORS.gridLine}
             strokeWidth="1.15"
           />
         ))}
         {showAxes && (
-          <g opacity={0.45}>
-            <line x1="96" y1="984" x2="240" y2="900" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
-            <line x1="96" y1="984" x2="240" y2="1068" stroke={PAGE_PALETTE.navy} strokeWidth="2" />
-            <line x1="96" y1="984" x2="96" y2="830" stroke={PAGE_PALETTE.brickRed} strokeWidth="2" />
-            <text x="106" y="844" fontFamily={FONTS.mono} fontSize="12" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-              Z-ELEV
-            </text>
+          <g opacity={0.55}>
+            <line x1="96" y1="984" x2="240" y2="900" stroke={reg.ink.primary} strokeWidth="2" />
+            <line x1="96" y1="984" x2="240" y2="1068" stroke={reg.ink.primary} strokeWidth="2" />
+            <line x1="96" y1="984" x2="96" y2="830" stroke={reg.accent.liability} strokeWidth="2" />
+            <FittedSvgText
+              text="Z-ELEV"
+              x={106}
+              y={844}
+              maxWidth={88}
+              fontSize={12}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={reg.accent.liability}
+            />
           </g>
         )}
       </svg>
@@ -1312,10 +1661,10 @@ export const IsometricScene: React.FC<IsometricSceneProps> = ({
                 fontWeight: 700,
                 letterSpacing: "0.1em",
                 textTransform: "uppercase",
-                color: PAGE_PALETTE.brickRed,
+                color: reg.accent.liability,
               }}
             >
-              <Layers size={15} color={PAGE_PALETTE.brickRed} />
+              <Layers size={15} color={reg.accent.liability} />
               <span>{eyebrow}</span>
             </div>
           )}
@@ -1325,7 +1674,7 @@ export const IsometricScene: React.FC<IsometricSceneProps> = ({
                 fontFamily: FONTS.serif,
                 fontSize: "44px",
                 fontWeight: 700,
-                color: PAGE_PALETTE.navy,
+                color: reg.ink.primary,
                 marginTop: "6px",
               }}
             >
@@ -1337,7 +1686,7 @@ export const IsometricScene: React.FC<IsometricSceneProps> = ({
               style={{
                 fontFamily: FONTS.sans,
                 fontSize: "19px",
-                color: PAGE_PALETTE.muted,
+                color: reg.ink.muted,
                 marginTop: "6px",
               }}
             >
@@ -1360,7 +1709,7 @@ export const IsometricScene: React.FC<IsometricSceneProps> = ({
             zIndex: 2,
             fontFamily: FONTS.mono,
             fontSize: "13px",
-            color: PAGE_PALETTE.muted,
+            color: reg.ink.muted,
             ...TABULAR_NUMS,
           }}
         >
@@ -1385,6 +1734,8 @@ export interface PatentExplodedDiagramProps {
   title?: string;
   subtitle?: string;
   parts?: PatentCalloutPart[];
+  mode?: DiagramDisplayMode;
+  register?: RegisterId;
   atFrame?: number;
 }
 
@@ -1397,6 +1748,8 @@ export const PatentExplodedDiagram: React.FC<PatentExplodedDiagramProps> = ({
     { refNumber: 102, partName: "Logic & Routing Core", specValue: "Silicon / Switching" },
     { refNumber: 103, partName: "Baseload Plinth", specValue: "24/7 Firm Megawatts" },
   ],
+  mode = "page",
+  register,
   atFrame = 0,
 }) => {
   const frame = useCurrentFrame();
@@ -1407,33 +1760,145 @@ export const PatentExplodedDiagram: React.FC<PatentExplodedDiagramProps> = ({
     fps,
     config: SPRINGS.smoothFocus,
   });
+  const sweepPct = interpolate(elapsed, [8, 38], [0, 100], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
-  const gapY = 74 + spread * 48;
+  const reg = resolveDiagramRegister(register);
+  const topBarColor = reg.isDark ? reg.accent.statutory : reg.rule.oxford;
+  const visibleParts = parts.slice(0, 3);
+
+  // Guaranteed non-overlapping vertical step: slab total height = 142px (top diamond 112 + side wall 30).
+  // Even at spread = 0, step is 172px (>= 142px + 30px clear air), expanding smoothly to 210px!
+  const stepY = 172 + spread * 38;
+
+  if (mode !== "page") {
+    const isOverFootage = mode === "over-footage";
+    const cardInk = isOverFootage ? OVER_FOOTAGE_PALETTE.textHeadline : reg.ink.primary;
+    const cardMuted = isOverFootage ? OVER_FOOTAGE_PALETTE.textMuted : reg.ink.muted;
+    const cardAccent = isOverFootage ? OVER_FOOTAGE_PALETTE.brickRedText : reg.accent.liability;
+    return (
+      <div
+        style={{
+          position: "relative",
+          width: "600px",
+          background: isOverFootage ? OVER_FOOTAGE_PALETTE.glassPrimary : reg.bg.elevated,
+          backdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
+          WebkitBackdropFilter: isOverFootage ? "blur(14px) saturate(160%)" : undefined,
+          border: `1px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassBorder : reg.rule.hairline}`,
+          borderRadius: "14px",
+          padding: "24px 26px",
+          boxSizing: "border-box",
+          boxShadow: getEditorialShadow(isOverFootage || reg.isDark),
+          userSelect: "none",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.chartSecondary : topBarColor,
+          }}
+        />
+        <div
+          style={{
+            fontFamily: FONTS.mono,
+            fontSize: "12px",
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            color: cardAccent,
+            ...TABULAR_NUMS,
+          }}
+        >
+          {patentNumber} · FIG. 1A
+        </div>
+        <div
+          style={{
+            fontFamily: FONTS.serif,
+            fontSize: "24px",
+            fontWeight: 700,
+            color: cardInk,
+            marginTop: "6px",
+            marginBottom: "14px",
+            lineHeight: 1.2,
+          }}
+        >
+          {title}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {visibleParts.map((pt) => (
+            <div
+              key={`pat-c-${pt.refNumber}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "62px 1fr auto",
+                gap: "10px",
+                alignItems: "center",
+                padding: "10px 14px",
+                backgroundColor: isOverFootage ? OVER_FOOTAGE_PALETTE.glassDarkWell : reg.bg.recessed,
+                border: `1px solid ${isOverFootage ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
+                borderRadius: "8px",
+              }}
+            >
+              <span style={{ fontFamily: FONTS.mono, fontSize: "15px", fontWeight: 700, color: cardAccent, ...TABULAR_NUMS }}>
+                [{pt.refNumber}]
+              </span>
+              <span style={{ fontFamily: FONTS.sans, fontSize: "15px", fontWeight: 700, color: cardInk }}>
+                {pt.partName}
+              </span>
+              <span style={{ fontFamily: FONTS.mono, fontSize: "14px", fontWeight: 700, color: cardMuted, ...TABULAR_NUMS }}>
+                {pt.specValue}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
+        position: "relative",
         width: "1920px",
         height: "1080px",
-        backgroundColor: PAGE_PALETTE.paperLight,
+        backgroundColor: reg.bg.canvas,
         padding: "72px 96px",
         boxSizing: "border-box",
         display: "grid",
         gridTemplateColumns: "0.95fr 1.05fr",
         gap: "64px",
         alignItems: "center",
-        border: `16px solid ${PAGE_PALETTE.paper}`,
+        overflow: "hidden",
         userSelect: "none",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `
+            linear-gradient(to right, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(to bottom, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px)
+          `,
+          backgroundSize: "64px 64px",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "22px" }}>
         <div
           style={{
             fontFamily: FONTS.mono,
             fontSize: "14px",
             fontWeight: 700,
             letterSpacing: "0.1em",
-            color: PAGE_PALETTE.brickRed,
+            color: reg.accent.liability,
             ...TABULAR_NUMS,
           }}
         >
@@ -1445,7 +1910,7 @@ export const PatentExplodedDiagram: React.FC<PatentExplodedDiagramProps> = ({
             fontFamily: FONTS.serif,
             fontSize: "56px",
             lineHeight: 1.08,
-            color: PAGE_PALETTE.navy,
+            color: reg.ink.primary,
             fontWeight: 700,
           }}
         >
@@ -1457,24 +1922,28 @@ export const PatentExplodedDiagram: React.FC<PatentExplodedDiagramProps> = ({
             fontFamily: FONTS.sans,
             fontSize: "22px",
             lineHeight: 1.48,
-            color: PAGE_PALETTE.muted,
+            color: reg.ink.muted,
           }}
         >
           {subtitle}
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginTop: "12px" }}>
-          {parts.map((pt) => (
+          {parts.map((pt, idx) => (
             <div
               key={pt.refNumber}
               style={{
+                position: "relative",
                 display: "grid",
-                gridTemplateColumns: "72px 1fr auto",
+                gridTemplateColumns: "76px 1fr auto",
+                gap: "12px",
                 alignItems: "center",
                 padding: "16px 20px",
-                backgroundColor: PAGE_PALETTE.paper,
-                border: `1.5px solid ${PAGE_PALETTE.navy}`,
+                backgroundColor: reg.bg.elevated,
+                border: `1px solid ${reg.rule.hairline}`,
+                borderLeft: `4px solid ${idx === 0 ? reg.accent.liability : topBarColor}`,
                 borderRadius: "8px",
+                boxShadow: getEditorialShadow(reg.isDark),
               }}
             >
               <span
@@ -1482,7 +1951,7 @@ export const PatentExplodedDiagram: React.FC<PatentExplodedDiagramProps> = ({
                   fontFamily: FONTS.mono,
                   fontSize: "18px",
                   fontWeight: 700,
-                  color: PAGE_PALETTE.brickRed,
+                  color: reg.accent.liability,
                   ...TABULAR_NUMS,
                 }}
               >
@@ -1493,21 +1962,37 @@ export const PatentExplodedDiagram: React.FC<PatentExplodedDiagramProps> = ({
                   fontFamily: FONTS.sans,
                   fontSize: "19px",
                   fontWeight: 700,
-                  color: PAGE_PALETTE.navy,
+                  color: reg.ink.primary,
                 }}
               >
                 {pt.partName}
               </span>
               <span
                 style={{
+                  position: "relative",
+                  padding: "2px 8px",
                   fontFamily: FONTS.mono,
                   fontSize: "16px",
                   fontWeight: 700,
-                  color: PAGE_PALETTE.chartSecondary,
+                  color: reg.accent.solvent,
                   ...TABULAR_NUMS,
                 }}
               >
-                {pt.specValue}
+                {idx === 0 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      bottom: "2px",
+                      height: "18px",
+                      width: `${sweepPct}%`,
+                      backgroundColor: reg.accent.highlighterWash,
+                      borderRadius: "3px",
+                      zIndex: 0,
+                    }}
+                  />
+                )}
+                <span style={{ position: "relative", zIndex: 1 }}>{pt.specValue}</span>
               </span>
             </div>
           ))}
@@ -1516,78 +2001,143 @@ export const PatentExplodedDiagram: React.FC<PatentExplodedDiagramProps> = ({
 
       <div
         style={{
+          position: "relative",
+          zIndex: 1,
           height: "840px",
-          backgroundColor: PAGE_PALETTE.paper,
-          border: `2px solid ${PAGE_PALETTE.navy}`,
-          borderRadius: "14px",
+          backgroundColor: reg.bg.elevated,
+          border: `1px solid ${reg.rule.hairline}`,
+          borderRadius: "12px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          boxShadow: getEditorialShadow(reg.isDark),
+          overflow: "hidden",
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: topBarColor,
+          }}
+        />
         <svg width="820" height="760" viewBox="0 0 820 760">
           <line
             x1="380"
-            y1="90"
+            y1="44"
             x2="380"
-            y2="670"
-            stroke={PAGE_PALETTE.muted}
+            y2="716"
+            stroke={reg.ink.muted}
             strokeWidth="2"
             strokeDasharray="8 8"
           />
-          {parts.slice(0, 3).map((pt, idx) => {
-            const cy = 220 + idx * gapY * 1.35;
+          <FittedSvgText
+            text="EXPLODED ASSEMBLY AXIS"
+            x={380}
+            y={30}
+            maxWidth={280}
+            fontSize={12}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={reg.ink.muted}
+            textAnchor="middle"
+          />
+          {visibleParts.map((pt, idx) => {
+            const cy = 62 + idx * stepY;
             const fillTop =
               idx === 0
-                ? PAGE_PALETTE.riskFill
+                ? reg.isDark
+                  ? "#3D2222"
+                  : PAGE_PALETTE.riskFill
                 : idx === 1
-                ? PAGE_PALETTE.paperLight
+                ? reg.bg.recessed
                 : PAGE_PALETTE.navy;
-            const textColor = idx === 2 ? PAGE_PALETTE.paperLight : PAGE_PALETTE.navy;
+            const fillLeft =
+              idx === 2
+                ? PAGE_PALETTE.navyDeep
+                : reg.isDark
+                ? "#1E344D"
+                : PAGE_PALETTE.paperBorder;
+            const fillRight =
+              idx === 0
+                ? reg.accent.liability
+                : idx === 1
+                ? reg.accent.statutory
+                : reg.accent.solvent;
+            const textColor =
+              idx === 2 ? OVER_FOOTAGE_PALETTE.textHeadline : reg.ink.primary;
+            const strokeColor = reg.isDark ? reg.accent.statutory : PAGE_PALETTE.navy;
+
             return (
               <g key={`layer-${pt.refNumber}`} transform={`translate(0, ${cy.toFixed(1)})`}>
                 <polygon
-                  points="380,0 560,68 380,136 200,68"
+                  points="380,0 572,56 380,112 188,56"
                   fill={fillTop}
-                  stroke={PAGE_PALETTE.navy}
-                  strokeWidth="3"
+                  stroke={strokeColor}
+                  strokeWidth="2.8"
                 />
                 <polygon
-                  points="200,68 380,136 380,174 200,106"
-                  fill={PAGE_PALETTE.paperBorder}
-                  stroke={PAGE_PALETTE.navy}
-                  strokeWidth="3"
+                  points="188,56 380,112 380,142 188,86"
+                  fill={fillLeft}
+                  stroke={strokeColor}
+                  strokeWidth="2.8"
                 />
                 <polygon
-                  points="560,68 380,136 380,174 560,106"
-                  fill={PAGE_PALETTE.gold}
-                  stroke={PAGE_PALETTE.navy}
-                  strokeWidth="3"
+                  points="572,56 380,112 380,142 572,86"
+                  fill={fillRight}
+                  stroke={strokeColor}
+                  strokeWidth="2.8"
                 />
-                <text
-                  x="380"
-                  y="74"
-                  textAnchor="middle"
+                <WrappedSvgText
+                  text={pt.partName.toUpperCase()}
+                  x={380}
+                  y={56}
+                  maxWidth={228}
+                  fontSize={15}
+                  minFontSize={11}
+                  maxLines={2}
+                  lineHeight={1.14}
                   fontFamily={FONTS.mono}
-                  fontSize="16"
-                  fontWeight="700"
+                  fontWeight={700}
                   fill={textColor}
-                >
-                  {pt.partName.toUpperCase()}
-                </text>
-                <line x1="560" y1="68" x2="650" y2="42" stroke={PAGE_PALETTE.brickRed} strokeWidth="2.2" />
-                <circle cx="560" cy="68" r="5" fill={PAGE_PALETTE.brickRed} />
-                <text
-                  x="660"
-                  y="47"
+                  textAnchor="middle"
+                  verticalCenter
+                />
+                <line
+                  x1="572"
+                  y1="56"
+                  x2="650"
+                  y2="34"
+                  stroke={reg.accent.liability}
+                  strokeWidth="2.2"
+                />
+                <circle cx="572" cy="56" r="5" fill={reg.accent.liability} />
+                <FittedSvgText
+                  text={`[${pt.refNumber}]`}
+                  x={660}
+                  y={39}
+                  maxWidth={118}
+                  fontSize={18}
+                  minFontSize={13}
                   fontFamily={FONTS.mono}
-                  fontSize="18"
-                  fontWeight="700"
-                  fill={PAGE_PALETTE.brickRed}
+                  fontWeight={700}
+                  fill={reg.accent.liability}
                   style={TABULAR_NUMS}
-                >
-                  [{pt.refNumber}]
-                </text>
+                />
+                <FittedSvgText
+                  text={pt.specValue}
+                  x={660}
+                  y={61}
+                  maxWidth={142}
+                  fontSize={13}
+                  minFontSize={10}
+                  fontFamily={FONTS.sans}
+                  fontWeight={600}
+                  fill={reg.ink.muted}
+                />
               </g>
             );
           })}

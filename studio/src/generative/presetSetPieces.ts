@@ -970,7 +970,7 @@ export const SP08_UBER_4MONTH_TOKEN_BURN: SceneBlueprint = {
   ],
   polish: {
     mastheadEyebrow: "EP.01 · ESCAPE HATCH 02 (UNIVERSAL BASIC COMPUTE)",
-    mastheadTitle: "Why Paying Citizens in ComputeSlices Breaks on Price & Volume",
+    mastheadTitle: "Why Paying Citizens in Compute Slices Breaks on Price & Volume",
     mastheadFolio: "PLATE SP-08 · TOKEN DEFLATION",
     sourceCitation: "Forbes Enterprise AI Spend Report · Epoch AI Inference Price Index",
     enableCameraPush: true,
@@ -2599,9 +2599,21 @@ export const SP24_2032_SOCIAL_SECURITY_VAULT: SceneBlueprint = {
       id: "fica-to-vault-pipe",
       kind: "flow-pipe",
       fromActorId: "form941-fica-rig",
-      toActorId: "oasi-vault-vault-alias",
+      toActorId: "oasi-trust-vault",
       tone: "navy",
-      particleCount: 16,
+      particleCount: 18,
+      severFlowOnTrigger: true,
+      triggerAtProgress: 0.48,
+      metricBadge: "W-2 TAX BASE SHRINKS",
+    },
+    {
+      id: "vault-to-cut-guillotine",
+      kind: "guillotine-cut",
+      fromActorId: "oasi-trust-vault",
+      toActorId: "auto-cut-2032-stamp",
+      tone: "crimson",
+      triggerAtProgress: 0.66,
+      metricBadge: "STATUTORY LAW",
     },
   ],
   mechanisms: [
@@ -2631,30 +2643,6 @@ export const SP24_2032_SOCIAL_SECURITY_VAULT: SceneBlueprint = {
     staggerFrames: 5,
   },
 };
-
-// Fix connector target ID on SP24 cleanly before freezing catalog
-SP24_2032_SOCIAL_SECURITY_VAULT.connectors = [
-  {
-    id: "fica-to-vault-pipe",
-    kind: "flow-pipe",
-    fromActorId: "form941-fica-rig",
-    toActorId: "oasi-trust-vault",
-    tone: "navy",
-    particleCount: 18,
-    severFlowOnTrigger: true,
-    triggerAtProgress: 0.48,
-    metricBadge: "W-2 TAX BASE SHRINKS",
-  },
-  {
-    id: "vault-to-cut-guillotine",
-    kind: "guillotine-cut",
-    fromActorId: "oasi-trust-vault",
-    toActorId: "auto-cut-2032-stamp",
-    tone: "crimson",
-    triggerAtProgress: 0.66,
-    metricBadge: "STATUTORY LAW",
-  },
-];
 
 // ============================================================================
 // Unified 24-Set-Piece Registry, Roadmap Slug Aliases & Semantic Resolver

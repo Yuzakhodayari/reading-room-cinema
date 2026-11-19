@@ -1,10 +1,14 @@
 import React from "react";
 import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { FONTS, TABULAR_NUM_STYLE, getOpticalTracking } from "../design/fonts";
+import { fitSvgTextToWidth, wrapSvgTextLines } from "../design/fitText";
 import {
   COLORS,
   OVER_FOOTAGE_PALETTE,
   PAGE_PALETTE,
+  REGISTERS,
+  RegisterId,
+  RegisterPalette,
   studioSpring,
 } from "../design/tokens";
 
@@ -27,53 +31,206 @@ export interface SimulatorBaseProps {
   summaryLabel?: string;
   paletteMode?: "page" | "over-footage";
   mode?: SimulatorDisplayMode;
+  register?: RegisterId;
   atFrame?: number;
 }
 
 interface SimulatorShellTheme {
   isGlass: boolean;
+  isCompact: boolean;
+  isDark: boolean;
   inkHeadline: string;
   inkBody: string;
   inkMuted: string;
   navyInk: string;
   accentAlert: string;
   accentTeal: string;
+  accentCapital: string;
   accentSlate: string;
   panelBg: string;
   panelBorder: string;
   wellBg: string;
+  solidPanelBg: string;
+  solidPanelInk: string;
+  solidPanelMuted: string;
+  riskBg: string;
+  riskBorder: string;
+  highlightWash: string;
 }
 
-function getSimulatorTheme(isGlass: boolean): SimulatorShellTheme {
+function resolveSimulatorRegister(register?: RegisterId): RegisterPalette {
+  return REGISTERS[register ?? "page_editorial"];
+}
+
+function getSimulatorTheme(
+  isGlass: boolean,
+  isCompact: boolean,
+  reg: RegisterPalette
+): SimulatorShellTheme {
   if (isGlass) {
     return {
       isGlass: true,
+      isCompact,
+      isDark: true,
       inkHeadline: OVER_FOOTAGE_PALETTE.textHeadline,
       inkBody: OVER_FOOTAGE_PALETTE.textBody,
       inkMuted: OVER_FOOTAGE_PALETTE.textMuted,
       navyInk: OVER_FOOTAGE_PALETTE.accentPrimary,
       accentAlert: OVER_FOOTAGE_PALETTE.brickRedText,
       accentTeal: OVER_FOOTAGE_PALETTE.chartSecondary,
+      accentCapital: OVER_FOOTAGE_PALETTE.accentWarm,
       accentSlate: OVER_FOOTAGE_PALETTE.accentPrimary,
       panelBg: "rgba(15, 25, 35, 0.56)",
       panelBorder: OVER_FOOTAGE_PALETTE.glassBorder,
       wellBg: OVER_FOOTAGE_PALETTE.glassDarkWell,
+      solidPanelBg: PAGE_PALETTE.navyDeep,
+      solidPanelInk: OVER_FOOTAGE_PALETTE.textHeadline,
+      solidPanelMuted: OVER_FOOTAGE_PALETTE.textBody,
+      riskBg: OVER_FOOTAGE_PALETTE.riskFill,
+      riskBorder: OVER_FOOTAGE_PALETTE.brickRedText,
+      highlightWash: OVER_FOOTAGE_PALETTE.highlightSweep,
     };
   }
   return {
     isGlass: false,
-    inkHeadline: PAGE_PALETTE.navy,
-    inkBody: PAGE_PALETTE.navy,
-    inkMuted: PAGE_PALETTE.muted,
-    navyInk: PAGE_PALETTE.navy,
-    accentAlert: PAGE_PALETTE.brickRed,
-    accentTeal: PAGE_PALETTE.chartSecondary,
-    accentSlate: PAGE_PALETTE.gold,
-    panelBg: PAGE_PALETTE.paper,
-    panelBorder: PAGE_PALETTE.paperBorder,
-    wellBg: PAGE_PALETTE.paperLight,
+    isCompact,
+    isDark: reg.isDark,
+    inkHeadline: reg.ink.primary,
+    inkBody: reg.ink.secondary,
+    inkMuted: reg.ink.muted,
+    navyInk: reg.isDark ? reg.accent.statutory : reg.rule.oxford,
+    accentAlert: reg.accent.liability,
+    accentTeal: reg.accent.solvent,
+    accentCapital: reg.accent.capital,
+    accentSlate: reg.accent.statutory,
+    panelBg: reg.bg.elevated,
+    panelBorder: reg.rule.hairline,
+    wellBg: reg.bg.recessed,
+    solidPanelBg: reg.isDark ? reg.bg.recessed : PAGE_PALETTE.navyDeep,
+    solidPanelInk: reg.isDark ? reg.ink.primary : OVER_FOOTAGE_PALETTE.textHeadline,
+    solidPanelMuted: reg.isDark ? reg.ink.secondary : OVER_FOOTAGE_PALETTE.textBody,
+    riskBg: reg.isDark ? "rgba(163, 64, 46, 0.24)" : PAGE_PALETTE.riskFill,
+    riskBorder: reg.accent.liability,
+    highlightWash: reg.accent.highlighterWash,
   };
 }
+
+interface FittedSvgTextProps {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  fontSize: number;
+  minFontSize?: number;
+  fontFamily: string;
+  fontWeight?: number | string;
+  fill: string;
+  textAnchor?: "start" | "middle" | "end";
+  dominantBaseline?: "auto" | "central" | "hanging";
+  style?: React.CSSProperties;
+}
+
+const FittedSvgText: React.FC<FittedSvgTextProps> = ({
+  text,
+  x,
+  y,
+  maxWidth,
+  fontSize,
+  minFontSize,
+  fontFamily,
+  fontWeight = 700,
+  fill,
+  textAnchor = "start",
+  dominantBaseline,
+  style,
+}) => {
+  const fitted = fitSvgTextToWidth(
+    text,
+    maxWidth,
+    fontSize,
+    minFontSize ?? Math.max(10, fontSize * 0.66),
+    fontFamily,
+    { fontWeight }
+  );
+  return (
+    <text
+      x={x}
+      y={y}
+      fontFamily={fontFamily}
+      fontSize={fitted.fontSize}
+      fontWeight={fontWeight}
+      fill={fill}
+      textAnchor={textAnchor}
+      dominantBaseline={dominantBaseline}
+      style={style}
+    >
+      {fitted.text}
+    </text>
+  );
+};
+
+interface WrappedSvgTextProps {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+  fontSize: number;
+  minFontSize?: number;
+  maxLines?: number;
+  lineHeight?: number;
+  fontFamily: string;
+  fontWeight?: number | string;
+  fill: string;
+  textAnchor?: "start" | "middle" | "end";
+  verticalCenter?: boolean;
+  style?: React.CSSProperties;
+}
+
+const WrappedSvgText: React.FC<WrappedSvgTextProps> = ({
+  text,
+  x,
+  y,
+  maxWidth,
+  fontSize,
+  minFontSize,
+  maxLines = 2,
+  lineHeight = 1.18,
+  fontFamily,
+  fontWeight = 700,
+  fill,
+  textAnchor = "start",
+  verticalCenter = false,
+  style,
+}) => {
+  const wrapped = wrapSvgTextLines(text, maxWidth, fontSize, fontFamily, maxLines, {
+    minFontSize: minFontSize ?? Math.max(10, fontSize * 0.66),
+    lineHeight,
+    fontWeight,
+  });
+  if (wrapped.lines.length === 0) return null;
+  const totalHeight = (wrapped.lines.length - 1) * wrapped.lineHeightPx;
+  const startY = verticalCenter ? y - totalHeight * 0.5 : y;
+
+  return (
+    <text
+      x={x}
+      y={startY}
+      fontFamily={fontFamily}
+      fontSize={wrapped.fontSize}
+      fontWeight={fontWeight}
+      fill={fill}
+      textAnchor={textAnchor}
+      dominantBaseline={verticalCenter ? "central" : undefined}
+      style={style}
+    >
+      {wrapped.lines.map((line, idx) => (
+        <tspan key={`sim-wl-${idx}`} x={x} dy={idx === 0 ? 0 : wrapped.lineHeightPx}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+};
 
 interface SimulatorShellProps {
   eyebrow: string;
@@ -84,6 +241,7 @@ interface SimulatorShellProps {
   summaryLabel?: string;
   mode?: SimulatorDisplayMode;
   paletteMode?: "page" | "over-footage";
+  register?: RegisterId;
   atFrame?: number;
   renderGraphic: (theme: SimulatorShellTheme, elapsed: number, fps: number) => React.ReactNode;
 }
@@ -97,6 +255,7 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
   summaryLabel = "KEY SYSTEM READOUT",
   mode,
   paletteMode = "page",
+  register,
   atFrame = 0,
   renderGraphic,
 }) => {
@@ -109,50 +268,69 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
     [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
+  const highlightSweep = interpolate(elapsed, [10, 40], [0, 100], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
   const resolvedMode: SimulatorDisplayMode =
     mode ?? (paletteMode === "over-footage" ? "over-footage" : "page");
   const isGlass = resolvedMode === "over-footage";
-  const theme = getSimulatorTheme(isGlass);
+  const isCompact = resolvedMode !== "page";
+  const reg = resolveSimulatorRegister(register);
+  const theme = getSimulatorTheme(isGlass, isCompact, reg);
 
   if (resolvedMode !== "page") {
     return (
       <div
         style={{
+          position: "relative",
           width: "640px",
-          background: isGlass
-            ? OVER_FOOTAGE_PALETTE.glassPrimary
-            : PAGE_PALETTE.paperLight,
+          background: isGlass ? OVER_FOOTAGE_PALETTE.glassPrimary : reg.bg.elevated,
           backdropFilter: isGlass ? "blur(14px) saturate(155%)" : undefined,
           WebkitBackdropFilter: isGlass ? "blur(14px) saturate(155%)" : undefined,
-          border: `1px solid ${
-            isGlass ? OVER_FOOTAGE_PALETTE.glassBorder : PAGE_PALETTE.paperBorder
-          }`,
-          borderRadius: "18px",
-          padding: "24px 28px",
+          border: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassBorder : reg.rule.hairline}`,
+          borderRadius: "16px",
+          padding: "24px 26px 20px 26px",
           boxSizing: "border-box",
           boxShadow: isGlass
-            ? "0 22px 48px rgba(15, 25, 35, 0.48)"
-            : "0 20px 44px rgba(28, 43, 58, 0.12)",
+            ? "0 24px 52px -12px rgba(15, 25, 35, 0.52)"
+            : "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)",
           opacity: enter,
           transform: `translate3d(0, ${((1 - enter) * 16).toFixed(1)}px, 0)`,
           userSelect: "none",
+          overflow: "hidden",
         }}
       >
         <div
           style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: isGlass
+              ? OVER_FOOTAGE_PALETTE.chartSecondary
+              : reg.isDark
+              ? reg.accent.statutory
+              : reg.rule.oxford,
+          }}
+        />
+        <div
+          style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "baseline",
+            alignItems: "center",
+            gap: "12px",
             marginBottom: "8px",
           }}
         >
           <span
             style={{
               fontFamily: FONTS.mono,
-              fontSize: "11px",
+              fontSize: "12px",
               fontWeight: 700,
-              letterSpacing: getOpticalTracking(11, "mono"),
+              letterSpacing: getOpticalTracking(12, "mono"),
               textTransform: "uppercase",
               color: theme.accentAlert,
             }}
@@ -167,6 +345,11 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
                 fontSize: "15px",
                 fontWeight: 700,
                 color: theme.accentTeal,
+                backgroundColor: isGlass ? OVER_FOOTAGE_PALETTE.glassDarkWell : reg.bg.recessed,
+                border: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
+                padding: "3px 10px",
+                borderRadius: "4px",
+                flexShrink: 0,
               }}
             >
               {summaryMetric}
@@ -176,7 +359,7 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
         <div
           style={{
             fontFamily: FONTS.serif,
-            fontSize: "24px",
+            fontSize: "23px",
             fontWeight: 700,
             lineHeight: 1.18,
             color: theme.inkHeadline,
@@ -190,16 +373,37 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
             width: "100%",
             borderRadius: "12px",
             backgroundColor: theme.panelBg,
-            border: `1px solid ${theme.panelBorder}`,
-            padding: "12px",
+            border: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
+            padding: "11px",
             boxSizing: "border-box",
           }}
         >
           {renderGraphic(theme, elapsed, fps)}
         </div>
+        <div
+          style={{
+            marginTop: "10px",
+            paddingTop: "8px",
+            borderTop: `1px solid ${isGlass ? OVER_FOOTAGE_PALETTE.glassInnerHairline : reg.rule.hairline}`,
+            fontFamily: FONTS.mono,
+            fontSize: "11px",
+            color: theme.inkMuted,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            ...TABULAR_NUM_STYLE,
+          }}
+        >
+          {sourceCitation}
+        </div>
       </div>
     );
   }
+
+  const topAccentColor = reg.isDark ? reg.accent.statutory : reg.rule.oxford;
+  const dualShadow = reg.isDark
+    ? "0 24px 52px -14px rgba(3, 9, 18, 0.56), 0 4px 16px rgba(3, 9, 18, 0.30)"
+    : "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)";
 
   return (
     <div
@@ -207,8 +411,8 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
         position: "relative",
         width: "1920px",
         height: "1080px",
-        backgroundColor: PAGE_PALETTE.paperLight,
-        padding: "56px 88px 48px 88px",
+        backgroundColor: reg.bg.canvas,
+        padding: "54px 88px 46px 88px",
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -222,8 +426,8 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
           position: "absolute",
           inset: 0,
           backgroundImage: `
-            linear-gradient(to right, ${COLORS.gridLine} 1px, transparent 1px),
-            linear-gradient(to bottom, ${COLORS.gridLine} 1px, transparent 1px)
+            linear-gradient(to right, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px),
+            linear-gradient(to bottom, ${reg.isDark ? "rgba(191, 211, 230, 0.06)" : COLORS.gridLine} 1px, transparent 1px)
           `,
           backgroundSize: "64px 64px",
           pointerEvents: "none",
@@ -238,8 +442,9 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-end",
-          borderBottom: `2.5px solid ${PAGE_PALETTE.navy}`,
-          paddingBottom: "20px",
+          borderBottom: `2px solid ${topAccentColor}`,
+          paddingBottom: "18px",
+          gap: "32px",
         }}
       >
         <div style={{ maxWidth: "1260px" }}>
@@ -250,8 +455,8 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
               fontWeight: 700,
               letterSpacing: "0.1em",
               textTransform: "uppercase",
-              color: PAGE_PALETTE.brickRed,
-              marginBottom: "8px",
+              color: reg.accent.liability,
+              marginBottom: "6px",
             }}
           >
             {eyebrow}
@@ -260,10 +465,10 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
             style={{
               margin: 0,
               fontFamily: FONTS.serif,
-              fontSize: "48px",
+              fontSize: "46px",
               fontWeight: 700,
               lineHeight: 1.08,
-              color: PAGE_PALETTE.navy,
+              color: reg.ink.primary,
             }}
           >
             {title}
@@ -274,7 +479,7 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
               fontFamily: FONTS.sans,
               fontSize: "19px",
               lineHeight: 1.4,
-              color: PAGE_PALETTE.muted,
+              color: reg.ink.muted,
             }}
           >
             {subtitle}
@@ -284,12 +489,14 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
         {summaryMetric && (
           <div
             style={{
-              backgroundColor: PAGE_PALETTE.paper,
-              border: `1.5px solid ${PAGE_PALETTE.navy}`,
-              borderLeft: `5px solid ${PAGE_PALETTE.brickRed}`,
-              borderRadius: "10px",
-              padding: "14px 22px",
+              backgroundColor: reg.bg.elevated,
+              border: `1px solid ${reg.rule.hairline}`,
+              borderLeft: `4px solid ${reg.accent.liability}`,
+              borderRadius: "8px",
+              padding: "12px 22px",
               textAlign: "right",
+              boxShadow: dualShadow,
+              flexShrink: 0,
             }}
           >
             <div
@@ -299,22 +506,44 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
                 fontWeight: 700,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
-                color: PAGE_PALETTE.muted,
+                color: reg.ink.muted,
               }}
             >
               {summaryLabel}
             </div>
             <div
               style={{
-                ...TABULAR_NUM_STYLE,
-                fontFamily: FONTS.mono,
-                fontSize: "32px",
-                fontWeight: 700,
-                color: PAGE_PALETTE.navy,
+                position: "relative",
+                display: "inline-block",
                 marginTop: "4px",
+                padding: "0 4px",
               }}
             >
-              {summaryMetric}
+              <span
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  bottom: "2px",
+                  height: "18px",
+                  width: `${highlightSweep}%`,
+                  backgroundColor: reg.accent.highlighterWash,
+                  borderRadius: "3px",
+                  zIndex: 0,
+                }}
+              />
+              <span
+                style={{
+                  ...TABULAR_NUM_STYLE,
+                  position: "relative",
+                  zIndex: 1,
+                  fontFamily: FONTS.mono,
+                  fontSize: "30px",
+                  fontWeight: 700,
+                  color: reg.ink.primary,
+                }}
+              >
+                {summaryMetric}
+              </span>
             </div>
           </div>
         )}
@@ -326,18 +555,29 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
           position: "relative",
           zIndex: 1,
           flex: 1,
-          margin: "24px 0",
-          backgroundColor: PAGE_PALETTE.paper,
-          border: `2px solid ${PAGE_PALETTE.navy}`,
-          borderRadius: "16px",
-          padding: "24px 32px",
+          margin: "22px 0",
+          backgroundColor: reg.bg.elevated,
+          border: `1px solid ${reg.rule.hairline}`,
+          borderRadius: "10px",
+          padding: "26px 32px 22px 32px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 20px 44px rgba(28, 43, 58, 0.09)",
+          boxShadow: dualShadow,
           opacity: enter,
+          overflow: "hidden",
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "4px",
+            backgroundColor: topAccentColor,
+          }}
+        />
         {renderGraphic(theme, elapsed, fps)}
       </div>
 
@@ -349,9 +589,11 @@ const SimulatorShell: React.FC<SimulatorShellProps> = ({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          borderTop: `1px solid ${reg.rule.hairline}`,
+          paddingTop: "12px",
           fontFamily: FONTS.mono,
           fontSize: "12.5px",
-          color: PAGE_PALETTE.muted,
+          color: reg.ink.muted,
           ...TABULAR_NUM_STYLE,
         }}
       >
@@ -394,6 +636,7 @@ export const SupplyChainBomStrip: React.FC<SupplyChainBomStripProps> = ({
   summaryLabel = "80% WAGE VAPORIZATION",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => {
   return (
@@ -406,6 +649,7 @@ export const SupplyChainBomStrip: React.FC<SupplyChainBomStripProps> = ({
       summaryLabel={summaryLabel}
       mode={mode}
       paletteMode={paletteMode}
+      register={register}
       atFrame={atFrame}
       renderGraphic={(theme, elapsed, fps) => {
         const vapor = interpolate(
@@ -415,6 +659,81 @@ export const SupplyChainBomStrip: React.FC<SupplyChainBomStripProps> = ({
           { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
         );
         const currentPrice = Math.round(retailPrice - (retailPrice - 24) * vapor);
+
+        if (theme.isCompact) {
+          return (
+            <svg width="100%" height="100%" viewBox="0 0 564 348">
+              <rect x="8" y="8" width="548" height="86" rx="10" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+              <FittedSvgText text="X-RAY CLEARING PRICE" x={24} y={36} maxWidth={250} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} />
+              <text x="24" y="76" fontFamily={FONTS.mono} fontSize="34" fontWeight="700" fill={theme.inkHeadline} style={TABULAR_NUM_STYLE}>
+                ${currentPrice}
+              </text>
+              <FittedSvgText
+                text={`${Math.round((1 - vapor * 0.8) * 100)}% of $${retailPrice} MSRP`}
+                x={540}
+                y={64}
+                maxWidth={260}
+                fontSize={16}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={theme.accentTeal}
+                textAnchor="end"
+                style={TABULAR_NUM_STYLE}
+              />
+              {slices.slice(0, 4).map((sl, idx) => {
+                const y = 104 + idx * 48;
+                const isLast = idx === 3;
+                const rowItem = isLast ? slices[slices.length - 1] ?? sl : sl;
+                const val = rowItem.isLabor ? Math.round(rowItem.dollars * (1 - vapor * 0.92)) : rowItem.dollars;
+                return (
+                  <g key={`c-bom-${idx}`} transform={`translate(8, ${y})`} opacity={rowItem.isLabor ? Math.max(0.32, 1 - vapor * 0.65) : 1}>
+                    <rect
+                      width="548"
+                      height="40"
+                      rx="7"
+                      fill={rowItem.isLabor ? theme.wellBg : theme.solidPanelBg}
+                      stroke={rowItem.isLabor ? theme.riskBorder : theme.accentTeal}
+                      strokeWidth="1.6"
+                    />
+                    <FittedSvgText
+                      text={rowItem.label}
+                      x={16}
+                      y={26}
+                      maxWidth={390}
+                      fontSize={15}
+                      fontFamily={FONTS.sans}
+                      fontWeight={700}
+                      fill={rowItem.isLabor ? theme.inkHeadline : theme.solidPanelInk}
+                    />
+                    <FittedSvgText
+                      text={`$${val}`}
+                      x={532}
+                      y={26}
+                      maxWidth={110}
+                      fontSize={16}
+                      fontFamily={FONTS.mono}
+                      fontWeight={700}
+                      fill={rowItem.isLabor ? theme.accentAlert : theme.accentTeal}
+                      textAnchor="end"
+                      style={TABULAR_NUM_STYLE}
+                    />
+                  </g>
+                );
+              })}
+              <FittedSvgText
+                text="Labor layers compress to $24 raw atoms + 18 kWh plinth."
+                x={282}
+                y={330}
+                maxWidth={532}
+                fontSize={15}
+                fontFamily={FONTS.sans}
+                fontWeight={600}
+                fill={theme.inkMuted}
+                textAnchor="middle"
+              />
+            </svg>
+          );
+        }
 
         return (
           <svg width="100%" height="100%" viewBox="0 0 1560 640">
@@ -429,16 +748,16 @@ export const SupplyChainBomStrip: React.FC<SupplyChainBomStripProps> = ({
               stroke={theme.navyInk}
               strokeWidth="2"
             />
-            <text
-              x="84"
-              y="118"
+            <FittedSvgText
+              text="X-RAY UNIT COST AUDIT"
+              x={84}
+              y={118}
+              maxWidth={358}
+              fontSize={14}
               fontFamily={FONTS.mono}
-              fontSize="14"
-              fontWeight="700"
+              fontWeight={700}
               fill={theme.accentAlert}
-            >
-              X-RAY UNIT COST AUDIT
-            </text>
+            />
             <text
               x="84"
               y="196"
@@ -450,16 +769,16 @@ export const SupplyChainBomStrip: React.FC<SupplyChainBomStripProps> = ({
             >
               ${currentPrice}
             </text>
-            <text
-              x="84"
-              y="232"
+            <FittedSvgText
+              text={`Effective Clearing Price (${Math.round((1 - vapor * 0.8) * 100)}% of 2025 MSRP)`}
+              x={84}
+              y={232}
+              maxWidth={358}
+              fontSize={17}
               fontFamily={FONTS.sans}
-              fontSize="17"
-              fontWeight="600"
+              fontWeight={600}
               fill={theme.inkMuted}
-            >
-              Effective Clearing Price ({Math.round((1 - vapor * 0.8) * 100)}% of 2025 MSRP)
-            </text>
+            />
 
             {/* Technical Shoe Cross-Section Vector */}
             <g transform="translate(86, 290)">
@@ -478,17 +797,17 @@ export const SupplyChainBomStrip: React.FC<SupplyChainBomStripProps> = ({
                 rx="8"
                 fill={PAGE_PALETTE.navy}
               />
-              <text
-                x="184"
-                y="174"
-                textAnchor="middle"
+              <FittedSvgText
+                text="$24 ATOMS + 18 kWh SOLE PLINTH"
+                x={184}
+                y={174}
+                maxWidth={310}
+                fontSize={12}
                 fontFamily={FONTS.mono}
-                fontSize="12"
-                fontWeight="700"
+                fontWeight={700}
                 fill={OVER_FOOTAGE_PALETTE.textHeadline}
-              >
-                $24 ATOMS + 18 kWh SOLE PLINTH
-              </text>
+                textAnchor="middle"
+              />
             </g>
 
             {/* Right Decomposed Stack */}
@@ -527,33 +846,26 @@ export const SupplyChainBomStrip: React.FC<SupplyChainBomStripProps> = ({
                         : PAGE_PALETTE.chartSecondary
                     }
                   />
-                  <text
-                    x="32"
-                    y="40"
+                  <FittedSvgText
+                    text={sl.label}
+                    x={32}
+                    y={40}
+                    maxWidth={760}
+                    fontSize={20}
                     fontFamily={FONTS.sans}
-                    fontSize="20"
-                    fontWeight="700"
-                    fill={
-                      sl.isLabor
-                        ? theme.inkHeadline
-                        : OVER_FOOTAGE_PALETTE.textHeadline
-                    }
-                  >
-                    {sl.label}
-                  </text>
-                  <text
-                    x="32"
-                    y="63"
+                    fontWeight={700}
+                    fill={sl.isLabor ? theme.inkHeadline : OVER_FOOTAGE_PALETTE.textHeadline}
+                  />
+                  <FittedSvgText
+                    text={sl.detail}
+                    x={32}
+                    y={63}
+                    maxWidth={760}
+                    fontSize={13}
                     fontFamily={FONTS.mono}
-                    fontSize="13"
-                    fill={
-                      sl.isLabor
-                        ? theme.inkMuted
-                        : OVER_FOOTAGE_PALETTE.accentPrimary
-                    }
-                  >
-                    {sl.detail}
-                  </text>
+                    fontWeight={500}
+                    fill={sl.isLabor ? theme.inkMuted : OVER_FOOTAGE_PALETTE.accentPrimary}
+                  />
                   <text
                     x="928"
                     y="50"
@@ -605,6 +917,7 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
   summaryLabel = "NON-DEFLATING LIABILITY",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => {
   return (
@@ -617,8 +930,9 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
       summaryLabel={summaryLabel}
       mode={mode}
       paletteMode={paletteMode}
+      register={register}
       atFrame={atFrame}
-      renderGraphic={(_theme, elapsed, fps) => {
+      renderGraphic={(theme, elapsed, fps) => {
         const flipProg = interpolate(
           studioSpring(elapsed, fps, "archivalSettle", flipFrameOffset),
           [0, 1],
@@ -633,7 +947,7 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
             style={{
               width: "100%",
               height: "100%",
-              minHeight: "340px",
+              minHeight: theme.isCompact ? "286px" : "340px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -643,9 +957,9 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
             <div
               style={{
                 position: "relative",
-                width: "92%",
-                height: "84%",
-                minHeight: "300px",
+                width: theme.isCompact ? "98%" : "92%",
+                height: theme.isCompact ? "270px" : "84%",
+                minHeight: theme.isCompact ? "270px" : "300px",
                 transformStyle: "preserve-3d",
                 transform: `rotateY(${deg.toFixed(2)}deg)`,
               }}
@@ -656,9 +970,10 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                     position: "absolute",
                     inset: 0,
                     backgroundColor: PAGE_PALETTE.paperLight,
-                    border: `8px solid ${PAGE_PALETTE.paperBorder}`,
-                    borderRadius: "16px",
-                    padding: "40px 52px",
+                    border: `${theme.isCompact ? "4px" : "8px"} solid ${PAGE_PALETTE.paperBorder}`,
+                    borderRadius: "14px",
+                    padding: theme.isCompact ? "22px 24px" : "40px 52px",
+                    boxSizing: "border-box",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",
@@ -668,7 +983,7 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                   <div
                     style={{
                       fontFamily: FONTS.mono,
-                      fontSize: "14px",
+                      fontSize: theme.isCompact ? "13px" : "14px",
                       fontWeight: 700,
                       color: PAGE_PALETTE.chartSecondary,
                       letterSpacing: "0.08em",
@@ -680,8 +995,9 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                     <div
                       style={{
                         fontFamily: FONTS.display,
-                        fontSize: "54px",
+                        fontSize: theme.isCompact ? "28px" : "54px",
                         fontWeight: 700,
+                        lineHeight: 1.12,
                         color: PAGE_PALETTE.navy,
                         letterSpacing: "-0.02em",
                       }}
@@ -690,19 +1006,20 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                     </div>
                     <div
                       style={{
-                        marginTop: "14px",
+                        marginTop: theme.isCompact ? "10px" : "14px",
                         fontFamily: FONTS.sans,
-                        fontSize: "22px",
+                        fontSize: theme.isCompact ? "16px" : "22px",
+                        lineHeight: 1.35,
                         color: PAGE_PALETTE.muted,
                       }}
                     >
                       {frontSubtext}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: "18px", alignItems: "center" }}>
-                    <div style={{ width: "88px", height: "12px", borderRadius: "6px", backgroundColor: PAGE_PALETTE.chartSecondary }} />
-                    <div style={{ width: "88px", height: "12px", borderRadius: "6px", backgroundColor: PAGE_PALETTE.brickRed }} />
-                    <span style={{ fontFamily: FONTS.mono, fontSize: "13px", color: PAGE_PALETTE.muted }}>
+                  <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+                    <div style={{ width: theme.isCompact ? "48px" : "88px", height: "10px", borderRadius: "6px", backgroundColor: PAGE_PALETTE.chartSecondary }} />
+                    <div style={{ width: theme.isCompact ? "48px" : "88px", height: "10px", borderRadius: "6px", backgroundColor: PAGE_PALETTE.brickRed }} />
+                    <span style={{ fontFamily: FONTS.mono, fontSize: theme.isCompact ? "12px" : "13px", color: PAGE_PALETTE.muted }}>
                       ASSUMES ZERO NOMINAL LIABILITIES
                     </span>
                   </div>
@@ -715,8 +1032,9 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                     transform: "rotateY(180deg)",
                     backgroundColor: PAGE_PALETTE.navyDeep,
                     border: `4px solid ${PAGE_PALETTE.brickRed}`,
-                    borderRadius: "16px",
-                    padding: "40px 52px",
+                    borderRadius: "14px",
+                    padding: theme.isCompact ? "22px 24px" : "40px 52px",
+                    boxSizing: "border-box",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",
@@ -728,19 +1046,19 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                       display: "flex",
                       justifyContent: "space-between",
                       fontFamily: FONTS.mono,
-                      fontSize: "14px",
+                      fontSize: theme.isCompact ? "12px" : "14px",
                       fontWeight: 700,
                       color: OVER_FOOTAGE_PALETTE.brickRedText,
                     }}
                   >
-                    <span>SIDE B · CAST-IRON PROMISSORY LIEN</span>
-                    <span>RIVETED FIXED PRINCIPAL</span>
+                    <span>SIDE B · CAST-IRON LIEN</span>
+                    <span>RIVETED PRINCIPAL</span>
                   </div>
                   <div>
                     <div
                       style={{
                         fontFamily: FONTS.mono,
-                        fontSize: "20px",
+                        fontSize: theme.isCompact ? "14px" : "20px",
                         fontWeight: 700,
                         color: OVER_FOOTAGE_PALETTE.accentPrimary,
                         letterSpacing: "0.08em",
@@ -752,10 +1070,10 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                       style={{
                         ...TABULAR_NUM_STYLE,
                         fontFamily: FONTS.mono,
-                        fontSize: "68px",
+                        fontSize: theme.isCompact ? "34px" : "68px",
                         fontWeight: 700,
                         color: OVER_FOOTAGE_PALETTE.textHeadline,
-                        marginTop: "10px",
+                        marginTop: "8px",
                       }}
                     >
                       {backMonthlyPayment}
@@ -764,13 +1082,13 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
                   <div
                     style={{
                       fontFamily: FONTS.mono,
-                      fontSize: "15px",
+                      fontSize: theme.isCompact ? "13px" : "15px",
                       color: OVER_FOOTAGE_PALETTE.textBody,
                       borderTop: "1px solid rgba(191,214,234,0.28)",
-                      paddingTop: "14px",
+                      paddingTop: "12px",
                     }}
                   >
-                    360 SCHEDULED PAYMENTS · ZERO DEFLATION INDEXATION · DEFAULT = FORECLOSURE
+                    360 SCHEDULED PAYMENTS · ZERO DEFLATION INDEXATION
                   </div>
                 </div>
               )}
@@ -783,7 +1101,7 @@ export const PaloAltoWhiteboardFlip: React.FC<PaloAltoWhiteboardFlipProps> = ({
 };
 
 // ============================================================================
-// 3. DualTaxPlumbingSchematic (W-2 Withholding Guillotine vs Corporate Bypass)
+// 3. DualTaxPlumbingSchematic (Brass & Steel Mechanical Tax Manifold)
 // ============================================================================
 export interface DualTaxPlumbingSchematicProps extends SimulatorBaseProps {
   w2GrossLabel?: string;
@@ -807,6 +1125,7 @@ export const DualTaxPlumbingSchematic: React.FC<DualTaxPlumbingSchematicProps> =
   summaryLabel = "PAYROLL vs CORP SHARE",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -818,92 +1137,438 @@ export const DualTaxPlumbingSchematic: React.FC<DualTaxPlumbingSchematicProps> =
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed, fps) => {
       const bladeDrop = interpolate(
         Math.sin(elapsed * 0.16),
         [-1, 1],
-        [0, 38],
+        [0, 32],
         { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
       );
-      const flowShift = (elapsed * 4) % 48;
+      const flowShift = (elapsed * 4.2) % 48;
+      const wheelDeg = (elapsed * 2.6) % 360;
+      const needleOsc = Math.sin(elapsed * 0.12) * 14;
       const enter = studioSpring(elapsed, fps, "editorialSnap", 4);
+
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348" opacity={enter}>
+            {/* Top W-2 Guillotine Channel */}
+            <rect x="8" y="8" width="548" height="122" rx="10" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="1.8" />
+            <FittedSvgText text="W-2 PAYROLL · 84% SHARE" x={22} y={32} maxWidth={290} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} />
+            <FittedSvgText text="-28.4% INTERCEPT" x={542} y={32} maxWidth={200} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} textAnchor="end" style={TABULAR_NUM_STYLE} />
+
+            {/* Pipe & Guillotine Shear */}
+            <rect x="22" y="54" width="218" height="36" rx="5" fill={PAGE_PALETTE.navy} />
+            <line x1="32" y1="72" x2="232" y2="72" stroke={OVER_FOOTAGE_PALETTE.accentPrimary} strokeWidth="4" strokeDasharray="12 12" strokeDashoffset={-flowShift} />
+            {/* Guillotine Housing */}
+            <rect x="242" y="42" width="44" height="62" rx="4" fill="#354656" stroke={theme.inkHeadline} strokeWidth="1.8" />
+            <g transform={`translate(248, ${(44 + bladeDrop * 0.45).toFixed(1)})`}>
+              <rect width="32" height="22" fill={PAGE_PALETTE.brickRed} />
+              <polygon points="0,22 32,22 32,34 0,25" fill="#E27358" />
+            </g>
+            {/* Downspout to IRS */}
+            <rect x="254" y="102" width="20" height="22" fill={PAGE_PALETTE.brickRed} />
+            <rect x="290" y="60" width="252" height="24" rx="4" fill={theme.accentSlate} />
+            <FittedSvgText text="NET DEPOSIT (71.6%)" x={416} y={76} maxWidth={230} fontSize={13} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} textAnchor="middle" />
+            <FittedSvgText text="IRS TREASURY VAULT" x={264} y={120} maxWidth={230} fontSize={12.5} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} textAnchor="middle" />
+
+            {/* Bottom 3-Valve Bypass Manifold */}
+            <rect x="8" y="142" width="548" height="148" rx="10" fill={theme.wellBg} stroke={theme.accentTeal} strokeWidth="1.8" />
+            <FittedSvgText text="CAPITAL & COMPUTE BYPASS VALVES" x={22} y={166} maxWidth={350} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentTeal} />
+            <FittedSvgText text="0.0% TAX" x={542} y={166} maxWidth={140} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentTeal} textAnchor="end" style={TABULAR_NUM_STYLE} />
+
+            {bypassRoutes.map((route, idx) => {
+              const vy = 180 + idx * 35;
+              return (
+                <g key={`c-valve-${idx}`} transform={`translate(22, ${vy})`}>
+                  <line x1="0" y1="14" x2="520" y2="14" stroke={theme.accentTeal} strokeWidth="4" opacity={0.45} />
+                  <circle cx="22" cy="14" r="12" fill={PAGE_PALETTE.navy} stroke="#C5A367" strokeWidth="2" />
+                  <g transform={`translate(22, 14) rotate(${(wheelDeg + idx * 45).toFixed(1)})`}>
+                    <line x1="-8" y1="0" x2="8" y2="0" stroke="#F7C35C" strokeWidth="2" />
+                    <line x1="0" y1="-8" x2="0" y2="8" stroke="#F7C35C" strokeWidth="2" />
+                  </g>
+                  <rect x="44" y="0" width="476" height="28" rx="6" fill={theme.panelBg} stroke={theme.accentTeal} strokeWidth="1.4" />
+                  <FittedSvgText
+                    text={`V0${idx + 1} · ${route}`}
+                    x={58}
+                    y={19}
+                    maxWidth={448}
+                    fontSize={14}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={theme.inkHeadline}
+                  />
+                </g>
+              );
+            })}
+
+            {/* Bottom Effective Rate Meter Bar */}
+            <rect x="8" y="300" width="548" height="40" rx="8" fill={theme.solidPanelBg} stroke={theme.navyInk} strokeWidth="1.6" />
+            <rect x="14" y="306" width="380" height="28" rx="5" fill={PAGE_PALETTE.brickRed} />
+            <FittedSvgText text="W-2 SHEAR: -28.4%" x={26} y={325} maxWidth={240} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE} />
+            <FittedSvgText text="EQUITY: 0.0%" x={542} y={325} maxWidth={148} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.chartSecondary} textAnchor="end" style={TABULAR_NUM_STYLE} />
+          </svg>
+        );
+      }
+
+      const brassStroke = "#B08D57";
+      const pipeSteel = "#24374A";
+      const pipeHighlight = "#3E5A74";
 
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620" opacity={enter}>
-          {/* Top Conduit: W-2 Payroll Pipe */}
-          <text x="64" y="72" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.inkHeadline}>
-            {w2GrossLabel}
-          </text>
-          <rect x="64" y="94" width="600" height="78" rx="8" fill={PAGE_PALETTE.navy} />
+          {/* =============================================================== */}
+          {/* TOP CHANNEL: RIVETED W-2 PAYROLL PIPE & GUILLOTINE SHEAR        */}
+          {/* =============================================================== */}
+          {/* Clean non-overlapping top label bar */}
+          <FittedSvgText
+            text={w2GrossLabel}
+            x={48}
+            y={32}
+            maxWidth={560}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
+          <rect x="816" y="10" width="440" height="32" rx="6" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="1.6" />
+          <FittedSvgText
+            text={w2SkimLabel}
+            x={1036}
+            y={31}
+            maxWidth={416}
+            fontSize={13.5}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+
+          {/* Main Riveted W-2 Pressure Pipe */}
+          <rect x="48" y="88" width="584" height="72" rx="8" fill={pipeSteel} stroke={theme.navyInk} strokeWidth="2.2" />
+          <rect x="48" y="96" width="584" height="10" fill={pipeHighlight} opacity={0.45} />
+          {/* Pipe Flange Collars & Rivets */}
+          {[140, 340, 540].map((fx) => (
+            <g key={`fl-${fx}`}>
+              <rect x={fx - 8} y="80" width="16" height="88" rx="3" fill={brassStroke} stroke={PAGE_PALETTE.navyDeep} strokeWidth="1.5" />
+              <circle cx={fx} cy="92" r="3" fill={PAGE_PALETTE.navyDeep} />
+              <circle cx={fx} cy="156" r="3" fill={PAGE_PALETTE.navyDeep} />
+            </g>
+          ))}
+          {/* Animated Dollar Flow Pulses Inside W-2 Pipe */}
           <line
-            x1="84"
-            y1="133"
-            x2="650"
-            y2="133"
+            x1="72"
+            y1="124"
+            x2="618"
+            y2="124"
             stroke={OVER_FOOTAGE_PALETTE.accentPrimary}
             strokeWidth="6"
-            strokeDasharray="22 26"
+            strokeDasharray="20 28"
             strokeDashoffset={-flowShift}
           />
-          {/* Narrowed Post-Guillotine Worker Pipe */}
-          <rect x="740" y="114" width="750" height="44" rx="6" fill={theme.accentSlate} />
-          <text x="1115" y="142" textAnchor="middle" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            NET CHECKING DEPOSIT (POST-WITHHOLDING)
-          </text>
-
-          {/* Treasury Skim Downspout */}
-          <rect x="668" y="152" width="56" height="108" fill={PAGE_PALETTE.brickRed} />
-          <text x="744" y="218" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={theme.accentAlert}>
-            IRS TREASURY INTERCEPT
-          </text>
-
-          {/* Reciprocating Guillotine Gate */}
-          <g transform={`translate(656, ${(44 + bladeDrop).toFixed(1)})`}>
-            <rect x="0" y="0" width="80" height="58" rx="4" fill={PAGE_PALETTE.brickRed} stroke={theme.inkHeadline} strokeWidth="2.5" />
-            <polygon points="0,58 80,58 80,86 0,68" fill="#C76250" stroke={theme.inkHeadline} strokeWidth="2" />
-          </g>
-          <text x="700" y="42" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={theme.accentAlert}>
-            {w2SkimLabel}
-          </text>
-
-          {/* Divider */}
-          <line x1="64" y1="292" x2="1496" y2="292" stroke={theme.panelBorder} strokeWidth="2" strokeDasharray="8 8" />
-
-          {/* Bottom Conduit: Corporate & Asset Manifold */}
-          <text x="64" y="342" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.accentTeal}>
-            AUTONOMOUS COMPUTE & EQUITY MANIFOLD · THREE LEGAL BYPASS LOOPS
-          </text>
-          <rect x="64" y="370" width="280" height="92" rx="10" fill={PAGE_PALETTE.chartSecondary} />
-          <text x="204" y="422" textAnchor="middle" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            GROSS OPERATING CASH
-          </text>
-
-          {bypassRoutes.map((route, idx) => {
-            const ry = 352 + idx * 82;
+          {[0, 1, 2, 3, 4].map((pIdx) => {
+            const px = 86 + ((elapsed * 3.8 + pIdx * 110) % 520);
             return (
-              <g key={`byp-${idx}`}>
-                <path
-                  d={`M 344 416 C 430 416, 430 ${ry + 24}, 510 ${ry + 24} L 1060 ${ry + 24} C 1140 ${ry + 24}, 1140 416, 1216 416`}
-                  fill="none"
-                  stroke={PAGE_PALETTE.chartSecondary}
-                  strokeWidth="16"
-                />
-                <rect x="536" y={ry} width="500" height="48" rx="8" fill={theme.wellBg} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2" />
-                <text x="786" y={ry + 30} textAnchor="middle" fontFamily={FONTS.mono} fontSize="14.5" fontWeight="700" fill={theme.inkHeadline}>
-                  VALVE 0{idx + 1} · {route}
+              <g key={`wpulse-${pIdx}`} transform={`translate(${px.toFixed(1)}, 124)`}>
+                <circle r="11" fill={PAGE_PALETTE.chartSecondary} stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="1.5" />
+                <text x="0" y="4" textAnchor="middle" fontFamily={FONTS.mono} fontSize="11" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
+                  $
                 </text>
               </g>
             );
           })}
 
-          <rect x="1216" y="370" width="280" height="92" rx="10" fill={PAGE_PALETTE.navy} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="3" />
-          <text x="1356" y="412" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            COMPOUNDING EQUITY
-          </text>
-          <text x="1356" y="438" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-            0.0% REALIZED TAX EVENT
-          </text>
+          {/* Guided Vertical Steel Guillotine Shear Frame */}
+          <rect x="634" y="44" width="114" height="134" rx="6" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.5" />
+          {/* Vertical Guide Rails */}
+          <rect x="642" y="52" width="12" height="118" fill={pipeSteel} />
+          <rect x="728" y="52" width="12" height="118" fill={pipeSteel} />
+          {/* Steel Crosshead Cap */}
+          <rect x="630" y="38" width="122" height="16" rx="4" fill={brassStroke} stroke={PAGE_PALETTE.navyDeep} strokeWidth="1.8" />
+          {/* Reciprocating Honed Guillotine Blade */}
+          <g transform={`translate(656, ${(58 + bladeDrop).toFixed(1)})`}>
+            <rect x="0" y="0" width="70" height="44" rx="3" fill={PAGE_PALETTE.brickRed} stroke={PAGE_PALETTE.navyDeep} strokeWidth="2" />
+            <polygon points="0,44 70,44 70,70 0,52" fill="#D46550" stroke={PAGE_PALETTE.navyDeep} strokeWidth="1.8" />
+            <text x="35" y="28" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
+              -28.4%
+            </text>
+          </g>
+
+          {/* Intercept Downspout -> Itemized IRS Treasury Vault Tank */}
+          <rect x="664" y="178" width="54" height="44" fill={PAGE_PALETTE.brickRed} stroke={theme.navyInk} strokeWidth="2" />
+          <line x1="691" y1="184" x2="691" y2="218" stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="4" strokeDasharray="8 10" strokeDashoffset={-flowShift * 0.7} />
+          <path d="M 691 222 L 691 236 L 788 236" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="18" strokeLinejoin="round" />
+          <path d="M 691 222 L 691 236 L 788 236" fill="none" stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="3.5" strokeDasharray="10 14" strokeDashoffset={-flowShift} />
+
+          {/* Itemized IRS Treasury Vault Tank with Live Analog Gauge */}
+          <g transform="translate(788, 194)">
+            <rect width="388" height="78" rx="10" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="2.4" />
+            <rect x="10" y="10" width="84" height="58" rx="6" fill={PAGE_PALETTE.navyDeep} stroke={brassStroke} strokeWidth="1.6" />
+            {/* Live Analog Pressure Dial */}
+            <circle cx="52" cy="39" r="22" fill="#FAF8F3" stroke={brassStroke} strokeWidth="2.5" />
+            <path d="M 36 44 A 18 18 0 0 1 68 44" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="3" />
+            <line
+              x1="52"
+              y1="42"
+              x2={(52 + Math.cos(((225 + needleOsc) * Math.PI) / 180) * 15).toFixed(1)}
+              y2={(42 + Math.sin(((225 + needleOsc) * Math.PI) / 180) * 15).toFixed(1)}
+              stroke={PAGE_PALETTE.brickRed}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+            <circle cx="52" cy="42" r="3" fill={PAGE_PALETTE.navyDeep} />
+            <FittedSvgText
+              text="IRS TREASURY VAULT"
+              x={110}
+              y={34}
+              maxWidth={264}
+              fontSize={14}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.accentAlert}
+            />
+            <FittedSvgText
+              text="84% RECEIPTS · UPSTREAM SKIM"
+              x={110}
+              y={58}
+              maxWidth={264}
+              fontSize={13}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={theme.inkHeadline}
+              style={TABULAR_NUM_STYLE}
+            />
+          </g>
+
+          {/* Narrowed Post-Guillotine Worker Pipe -> Net Deposit */}
+          <rect x="748" y="106" width="444" height="36" rx="5" fill={theme.accentSlate} stroke={theme.navyInk} strokeWidth="1.8" />
+          <line x1="760" y1="124" x2="1182" y2="124" stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="3.5" strokeDasharray="14 18" strokeDashoffset={-flowShift} />
+          <rect x="1192" y="88" width="320" height="72" rx="10" fill={PAGE_PALETTE.navy} stroke={theme.accentSlate} strokeWidth="2.4" />
+          <FittedSvgText
+            text="NET CHECKING DEPOSIT"
+            x={1352}
+            y={118}
+            maxWidth={288}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="71.6% POST-WITHHOLDING"
+            x={1352}
+            y={142}
+            maxWidth={288}
+            fontSize={12.5}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.accentPrimary}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+
+          {/* Horizontal Hairline Divider */}
+          <line x1="48" y1="286" x2="1512" y2="286" stroke={theme.panelBorder} strokeWidth="2" strokeDasharray="8 8" />
+
+          {/* =============================================================== */}
+          {/* BOTTOM CHANNEL: 3 ROTARY BRASS/TEAL MECHANICAL BYPASS VALVES    */}
+          {/* =============================================================== */}
+          <FittedSvgText
+            text="AUTONOMOUS COMPUTE & EQUITY MANIFOLD · THREE STATUTORY BYPASS VALVES"
+            x={48}
+            y={316}
+            maxWidth={1100}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentTeal}
+          />
+
+          {/* Gross Operating Cash Intake Manifold */}
+          <rect x="48" y="366" width="248" height="114" rx="10" fill={PAGE_PALETTE.chartSecondary} stroke={theme.navyInk} strokeWidth="2.4" />
+          <rect x="290" y="378" width="14" height="90" rx="3" fill={brassStroke} stroke={PAGE_PALETTE.navyDeep} strokeWidth="1.5" />
+          <WrappedSvgText
+            text="GROSS OPERATING CASH"
+            x={172}
+            y={414}
+            maxWidth={210}
+            fontSize={17}
+            maxLines={2}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+            verticalCenter
+          />
+          <FittedSvgText
+            text="100% UNTAXED INFLOW"
+            x={172}
+            y={458}
+            maxWidth={216}
+            fontSize={12}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textBody}
+            textAnchor="middle"
+          />
+
+          {/* Three Smooth Cubic-Bezier Conduit Loops + Animated Rotary Valves */}
+          {bypassRoutes.map((route, idx) => {
+            const cy = 352 + idx * 72;
+            const particleX = 594 + ((elapsed * 3.4 + idx * 96) % 440);
+            const needleAng = 210 + Math.sin(elapsed * 0.1 + idx * 1.4) * 24;
+            return (
+              <g key={`byp-${idx}`}>
+                <path
+                  d={`M 304 424 C 378 424, 378 ${cy}, 456 ${cy} L 1094 ${cy} C 1146 ${cy}, 1146 424, 1196 424`}
+                  fill="none"
+                  stroke={PAGE_PALETTE.chartSecondary}
+                  strokeWidth="14"
+                />
+                <path
+                  d={`M 304 424 C 378 424, 378 ${cy}, 456 ${cy} L 1094 ${cy} C 1146 ${cy}, 1146 424, 1196 424`}
+                  fill="none"
+                  stroke={OVER_FOOTAGE_PALETTE.textHeadline}
+                  strokeWidth="3"
+                  strokeDasharray="12 18"
+                  strokeDashoffset={-flowShift}
+                  opacity={0.7}
+                />
+
+                {/* Animated Bypass Particle */}
+                <circle cx={particleX} cy={cy} r="6.5" fill="#F7C35C" stroke={PAGE_PALETTE.navyDeep} strokeWidth="1.5" />
+
+                {/* Rotary Brass/Teal Valve Housing + Spinning 6-Spoke Handwheel */}
+                <g transform={`translate(492, ${cy})`}>
+                  <rect x="-28" y="-22" width="56" height="44" rx="6" fill={pipeSteel} stroke={brassStroke} strokeWidth="2.2" />
+                  <circle r="21" fill={PAGE_PALETTE.navyDeep} stroke={brassStroke} strokeWidth="2.6" />
+                  <g transform={`rotate(${(wheelDeg + idx * 40).toFixed(1)})`}>
+                    <line x1="-15" y1="0" x2="15" y2="0" stroke="#F7C35C" strokeWidth="2.5" />
+                    <line x1="-7.5" y1="-13" x2="7.5" y2="13" stroke="#F7C35C" strokeWidth="2.5" />
+                    <line x1="-7.5" y1="13" x2="7.5" y2="-13" stroke="#F7C35C" strokeWidth="2.5" />
+                  </g>
+                  <circle r="5" fill={brassStroke} />
+                </g>
+
+                {/* Brass-Trimmed Valve Specification Plaque */}
+                <rect x="540" y={cy - 24} width="470" height="48" rx="7" fill={theme.wellBg} stroke={brassStroke} strokeWidth="2" />
+                <FittedSvgText
+                  text={`VALVE 0${idx + 1} · ${route}`}
+                  x={560}
+                  y={cy + 5}
+                  maxWidth={378}
+                  fontSize={14.5}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.inkHeadline}
+                />
+
+                {/* Mini Analog Bypass Gauge */}
+                <g transform={`translate(1038, ${cy})`}>
+                  <circle r="17" fill="#FAF8F3" stroke={brassStroke} strokeWidth="2.2" />
+                  <path d="M -11 4 A 12 12 0 0 1 11 4" fill="none" stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
+                  <line
+                    x1="0"
+                    y1="2"
+                    x2={(Math.cos((needleAng * Math.PI) / 180) * 11).toFixed(1)}
+                    y2={(Math.sin((needleAng * Math.PI) / 180) * 11).toFixed(1)}
+                    stroke={PAGE_PALETTE.navyDeep}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <circle r="2.5" fill={PAGE_PALETTE.navyDeep} />
+                </g>
+              </g>
+            );
+          })}
+
+          {/* Compounding Equity Accumulator Tank */}
+          <g transform="translate(1196, 336)">
+            <rect width="316" height="174" rx="12" fill={PAGE_PALETTE.navyDeep} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="3" />
+            {/* Fluid Sight-Glass Bar on Right Edge */}
+            <rect x="282" y="18" width="18" height="138" rx="4" fill="#162E47" stroke={brassStroke} strokeWidth="1.4" />
+            <rect x="284" y="42" width="14" height="112" rx="3" fill={PAGE_PALETTE.chartSecondary} />
+            <FittedSvgText
+              text="COMPOUNDING EQUITY"
+              x={144}
+              y={58}
+              maxWidth={248}
+              fontSize={16}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.textHeadline}
+              textAnchor="middle"
+            />
+            <FittedSvgText
+              text="0.0% REALIZED"
+              x={144}
+              y={104}
+              maxWidth={248}
+              fontSize={24}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+              textAnchor="middle"
+              style={TABULAR_NUM_STYLE}
+            />
+            <FittedSvgText
+              text="STATUTORY TAX EVENT"
+              x={144}
+              y={132}
+              maxWidth={248}
+              fontSize={13}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.accentPrimary}
+              textAnchor="middle"
+            />
+          </g>
+
+          {/* =============================================================== */}
+          {/* BOTTOM COMPARATIVE EFFECTIVE-RATE METER BAR                     */}
+          {/* =============================================================== */}
+          <rect x="48" y="556" width="1464" height="48" rx="8" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="1.8" />
+          <FittedSvgText
+            text="EFFECTIVE WITHHOLDING RATE:"
+            x={68}
+            y={585}
+            maxWidth={240}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkMuted}
+          />
+          <rect x="316" y="566" width="480" height="28" rx="5" fill={PAGE_PALETTE.brickRed} />
+          <FittedSvgText
+            text="W-2 PAYROLL: 28.4% AUTOMATIC SHEAR"
+            x={556}
+            y={585}
+            maxWidth={450}
+            fontSize={13.5}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+          <rect x="820" y="566" width="674" height="28" rx="5" fill={PAGE_PALETTE.navy} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="1.6" />
+          <rect x="822" y="568" width="18" height="24" rx="3" fill={PAGE_PALETTE.chartSecondary} />
+          <FittedSvgText
+            text="CAPITAL & COMPUTE BYPASS: 0.0% REALIZED TAX EVENT"
+            x={1157}
+            y={585}
+            maxWidth={630}
+            fontSize={13.5}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
         </svg>
       );
     }}
@@ -935,6 +1600,7 @@ export const SovereignPrioritySpillway: React.FC<SovereignPrioritySpillwayProps>
   summaryLabel = "SENIOR CREDITOR GATE",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -946,17 +1612,56 @@ export const SovereignPrioritySpillway: React.FC<SovereignPrioritySpillwayProps>
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed) => {
       const streamDash = (elapsed * 3.5) % 36;
+
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            {[
+              { label: tier1Label, amt: `${tier1Amount} · SENIOR LIEN`, col: theme.accentAlert, bg: theme.riskBg, border: theme.riskBorder, dry: false },
+              { label: tier2Label, amt: `${tier2Amount} · MANDATORY`, col: theme.accentTeal, bg: theme.wellBg, border: theme.accentTeal, dry: false },
+              { label: tier3Label, amt: "$0.00 SURPLUS WITHOUT MONETIZATION", col: theme.accentAlert, bg: theme.wellBg, border: theme.panelBorder, dry: true },
+            ].map((tier, idx) => {
+              const y = 12 + idx * 112;
+              return (
+                <g key={`c-sp-${idx}`} transform={`translate(8, ${y})`}>
+                  <rect
+                    width="548"
+                    height="98"
+                    rx="10"
+                    fill={tier.bg}
+                    stroke={tier.border}
+                    strokeWidth="2"
+                    strokeDasharray={tier.dry ? "6 5" : undefined}
+                  />
+                  <FittedSvgText text={tier.label} x={20} y={36} maxWidth={508} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={tier.dry ? theme.inkMuted : tier.col} />
+                  <FittedSvgText text={tier.amt} x={20} y={74} maxWidth={508} fontSize={19} fontFamily={FONTS.mono} fontWeight={700} fill={tier.dry ? theme.accentAlert : theme.inkHeadline} style={TABULAR_NUM_STYLE} />
+                </g>
+              );
+            })}
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Upstream Reservoir */}
           <rect x="56" y="88" width="330" height="460" rx="12" fill={PAGE_PALETTE.navy} />
           <rect x="74" y="168" width="294" height="364" rx="8" fill={PAGE_PALETTE.gold} opacity={0.85} />
-          <text x="221" y="136" textAnchor="middle" fontFamily={FONTS.mono} fontSize="14" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            DEPLETING TAX RESERVOIR
-          </text>
+          <FittedSvgText
+            text="DEPLETING TAX RESERVOIR"
+            x={221}
+            y={136}
+            maxWidth={290}
+            fontSize={14}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
 
           {/* Concrete Stepped Dam Wall */}
           <polygon points="386,74 470,74 548,548 386,548" fill={PAGE_PALETTE.paperBorder} stroke={PAGE_PALETTE.navy} strokeWidth="3" />
@@ -964,34 +1669,52 @@ export const SovereignPrioritySpillway: React.FC<SovereignPrioritySpillwayProps>
           {/* Tier 1 Senior Bondholder Spillway */}
           <path d="M 386 156 L 720 156" stroke={PAGE_PALETTE.brickRed} strokeWidth="34" />
           <path d="M 386 156 L 720 156" stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="6" strokeDasharray="16 20" strokeDashoffset={-streamDash} />
-          <rect x="720" y="106" width="776" height="104" rx="10" fill={theme.wellBg} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
-          <text x="752" y="148" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.accentAlert}>
-            {tier1Label}
-          </text>
-          <text x="752" y="186" fontFamily={FONTS.mono} fontSize="28" fontWeight="700" fill={theme.inkHeadline} style={TABULAR_NUM_STYLE}>
-            {tier1Amount} · DEFAULT = TREASURY MARKET FREEZE
-          </text>
+          <rect x="720" y="106" width="776" height="104" rx="10" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2.5" />
+          <FittedSvgText text={tier1Label} x={752} y={148} maxWidth={716} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} />
+          <FittedSvgText
+            text={`${tier1Amount} · DEFAULT = TREASURY MARKET FREEZE`}
+            x={752}
+            y={186}
+            maxWidth={716}
+            fontSize={26}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            style={TABULAR_NUM_STYLE}
+          />
 
           {/* Tier 2 Statutory Penstock */}
           <path d="M 426 318 L 720 318" stroke={PAGE_PALETTE.chartSecondary} strokeWidth="28" />
           <path d="M 426 318 L 720 318" stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="5" strokeDasharray="14 22" strokeDashoffset={-streamDash} />
-          <rect x="720" y="268" width="776" height="104" rx="10" fill={theme.wellBg} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2" />
-          <text x="752" y="310" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.accentTeal}>
-            {tier2Label}
-          </text>
-          <text x="752" y="348" fontFamily={FONTS.mono} fontSize="26" fontWeight="700" fill={theme.inkHeadline} style={TABULAR_NUM_STYLE}>
-            {tier2Amount} · MANDATORY OUTLAYS
-          </text>
+          <rect x="720" y="268" width="776" height="104" rx="10" fill={theme.wellBg} stroke={theme.accentTeal} strokeWidth="2" />
+          <FittedSvgText text={tier2Label} x={752} y={310} maxWidth={716} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentTeal} />
+          <FittedSvgText
+            text={`${tier2Amount} · MANDATORY OUTLAYS`}
+            x={752}
+            y={348}
+            maxWidth={716}
+            fontSize={26}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            style={TABULAR_NUM_STYLE}
+          />
 
           {/* Tier 3 Starved Citizen Trough */}
           <line x1="478" y1="484" x2="720" y2="484" stroke={theme.inkMuted} strokeWidth="4" strokeDasharray="6 10" />
           <rect x="720" y="432" width="776" height="108" rx="10" fill={theme.wellBg} stroke={theme.inkMuted} strokeWidth="2" strokeDasharray="8 6" />
-          <text x="752" y="476" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.inkMuted}>
-            {tier3Label}
-          </text>
-          <text x="752" y="514" fontFamily={FONTS.mono} fontSize="24" fontWeight="700" fill={theme.accentAlert} style={TABULAR_NUM_STYLE}>
-            RESIDUAL FLOW: $0.00 SURPLUS WITHOUT MONETIZATION
-          </text>
+          <FittedSvgText text={tier3Label} x={752} y={476} maxWidth={716} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkMuted} />
+          <FittedSvgText
+            text="RESIDUAL FLOW: $0.00 SURPLUS WITHOUT MONETIZATION"
+            x={752}
+            y={514}
+            maxWidth={716}
+            fontSize={23}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+            style={TABULAR_NUM_STYLE}
+          />
         </svg>
       );
     }}
@@ -1017,6 +1740,7 @@ export const SplitEraStrikeDiptych: React.FC<SplitEraStrikeDiptychProps> = ({
   summaryLabel = "2034 ROBOTIC THROUGHPUT",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -1028,48 +1752,137 @@ export const SplitEraStrikeDiptych: React.FC<SplitEraStrikeDiptychProps> = ({
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed) => {
       const trolleyX = 960 + Math.sin(elapsed * 0.08) * 140;
+
+      if (theme.isCompact) {
+        const miniTrolley = 340 + Math.sin(elapsed * 0.08) * 48;
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="264" height="332" rx="12" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+            <FittedSvgText text="1955 · WALKOUT" x={24} y={36} maxWidth={232} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} />
+            <path d="M 48 184 L 70 84 L 210 84 M 90 184 L 70 84" fill="none" stroke={theme.navyInk} strokeWidth="5" />
+            <rect x="132" y="96" width="74" height="34" rx="4" fill={PAGE_PALETTE.brickRed} />
+            <FittedSvgText text="HALTED" x={169} y={118} maxWidth={66} fontSize={13} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} textAnchor="middle" />
+            <rect x="20" y="216" width="240" height="108" rx="8" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="1.6" />
+            <FittedSvgText text="-$1.4M / DAY BLEED" x={34} y={248} maxWidth={212} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} />
+            <WrappedSvgText text="Worker leverage: CRITICAL (0% output)." x={34} y={286} maxWidth={212} fontSize={15} maxLines={2} fontFamily={FONTS.sans} fontWeight={700} fill={theme.inkHeadline} verticalCenter />
+
+            <rect x="292" y="8" width="264" height="332" rx="12" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2" />
+            <FittedSvgText text="2034 · ROBOTIC PORT" x={308} y={36} maxWidth={232} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentTeal} />
+            <path d="M 320 184 L 320 84 L 528 84 L 528 184" fill="none" stroke={OVER_FOOTAGE_PALETTE.accentPrimary} strokeWidth="5" />
+            <rect x={miniTrolley} y="96" width="84" height="34" rx="4" fill={PAGE_PALETTE.chartSecondary} />
+            <FittedSvgText text="AGV 99.9%" x={miniTrolley + 42} y={118} maxWidth={76} fontSize={12.5} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} textAnchor="middle" />
+            <rect x="304" y="216" width="240" height="108" rx="8" fill="rgba(28, 43, 58, 0.9)" stroke={OVER_FOOTAGE_PALETTE.glassBorder} strokeWidth="1.4" />
+            <FittedSvgText text="CASH FLOW: 24/7" x={318} y={248} maxWidth={212} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.chartSecondary} />
+            <WrappedSvgText text="Shutdown leverage: 0.0%." x={318} y={286} maxWidth={212} fontSize={15} maxLines={2} fontFamily={FONTS.sans} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} verticalCenter />
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Left Panel: 1955 Frozen Pier */}
-          <rect x="40" y="44" width="716" height="532" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="2.5" />
-          <text x="76" y="92" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={theme.inkHeadline}>
-            {leftEra}
-          </text>
+          <rect x="40" y="44" width="716" height="532" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.5" />
+          <FittedSvgText
+            text={leftEra}
+            x={76}
+            y={92}
+            maxWidth={644}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
           {/* Frozen Gantry Crane */}
-          <path d="M 140 420 L 180 180 L 520 180 M 220 420 L 180 180" fill="none" stroke={PAGE_PALETTE.navy} strokeWidth="8" />
+          <path d="M 140 420 L 180 180 L 520 180 M 220 420 L 180 180" fill="none" stroke={theme.navyInk} strokeWidth="8" />
           <rect x="330" y="210" width="96" height="58" fill={PAGE_PALETTE.brickRed} />
-          <text x="378" y="244" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            HALTED
-          </text>
-          <rect x="76" y="448" width="644" height="96" rx="8" fill={PAGE_PALETTE.riskFill} stroke={PAGE_PALETTE.brickRed} strokeWidth="2" />
-          <text x="104" y="486" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-            OWNER REVENUE BLEED: -$1.4M / DAY
-          </text>
-          <text x="104" y="518" fontFamily={FONTS.sans} fontSize="18" fontWeight="700" fill={PAGE_PALETTE.navy}>
-            Worker Leverage: CRITICAL (Production = 0% Without Labor)
-          </text>
+          <FittedSvgText
+            text="HALTED"
+            x={378}
+            y={244}
+            maxWidth={84}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
+          <rect x="76" y="438" width="644" height="108" rx="8" fill={theme.riskBg} stroke={theme.riskBorder} strokeWidth="2" />
+          <FittedSvgText
+            text="OWNER REVENUE BLEED: -$1.4M / DAY"
+            x={104}
+            y={474}
+            maxWidth={588}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
+          <WrappedSvgText
+            text="Worker Leverage: CRITICAL (Production = 0% Without Labor)"
+            x={104}
+            y={512}
+            maxWidth={588}
+            fontSize={18}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            verticalCenter
+          />
 
           {/* Right Panel: 2034 Robotic Port */}
-          <rect x="804" y="44" width="716" height="532" rx="14" fill={PAGE_PALETTE.navyDeep} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
-          <text x="840" y="92" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-            {rightEra}
-          </text>
+          <rect x="804" y="44" width="716" height="532" rx="14" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2.5" />
+          <FittedSvgText
+            text={rightEra}
+            x={840}
+            y={92}
+            maxWidth={644}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+          />
           {/* Moving Robotic Gantry */}
           <path d="M 880 420 L 880 176 L 1440 176 L 1440 420" fill="none" stroke={OVER_FOOTAGE_PALETTE.accentPrimary} strokeWidth="7" />
           <rect x={trolleyX} y="190" width="110" height="54" rx="4" fill={PAGE_PALETTE.chartSecondary} />
-          <text x={trolleyX + 55} y="223" textAnchor="middle" fontFamily={FONTS.mono} fontSize="12" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            AGV · 99.9%
-          </text>
-          <rect x="840" y="448" width="644" height="96" rx="8" fill="rgba(28, 43, 58, 0.9)" stroke={OVER_FOOTAGE_PALETTE.glassBorder} strokeWidth="1.5" />
-          <text x="868" y="486" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-            OWNER CASH FLOW: UNINTERRUPTED (24/7 LIGHTS-OUT)
-          </text>
-          <text x="868" y="518" fontFamily={FONTS.sans} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            Protest Shifted to Capitol Steps · Economic Shutdown Leverage: 0.0%
-          </text>
+          <FittedSvgText
+            text="AGV · 99.9%"
+            x={trolleyX + 55}
+            y={223}
+            maxWidth={96}
+            fontSize={12}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
+          <rect x="840" y="438" width="644" height="108" rx="8" fill="rgba(28, 43, 58, 0.9)" stroke={OVER_FOOTAGE_PALETTE.glassBorder} strokeWidth="1.5" />
+          <FittedSvgText
+            text="OWNER CASH FLOW: UNINTERRUPTED (24/7 LIGHTS-OUT)"
+            x={868}
+            y={474}
+            maxWidth={588}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+          />
+          <WrappedSvgText
+            text="Protest Shifted to Capitol Steps · Economic Shutdown Leverage: 0.0%"
+            x={868}
+            y={512}
+            maxWidth={588}
+            fontSize={18}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            verticalCenter
+          />
         </svg>
       );
     }}
@@ -1107,6 +1920,7 @@ export const LogarithmicWattageLadder: React.FC<LogarithmicWattageLadderProps> =
   summaryLabel = "CAMPUS BASELOAD DRAW",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -1118,62 +1932,137 @@ export const LogarithmicWattageLadder: React.FC<LogarithmicWattageLadderProps> =
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
-    renderGraphic={(theme, elapsed, fps) => (
-      <svg width="100%" height="100%" viewBox="0 0 1560 620">
-        {rungs.map((r, idx) => {
-          const prog = interpolate(
-            studioSpring(elapsed, fps, "editorialSnap", idx * 7),
-            [0, 1],
-            [0, 1],
-            { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-          );
-          const y = 56 + idx * 134;
-          const fill =
-            r.tone === "brick"
-              ? PAGE_PALETTE.brickRed
-              : r.tone === "navy"
-              ? PAGE_PALETTE.navy
-              : r.tone === "teal"
-              ? PAGE_PALETTE.chartSecondary
-              : PAGE_PALETTE.gold;
+    renderGraphic={(theme, elapsed, fps) => {
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            {rungs.slice(0, 4).map((r, idx) => {
+              const prog = interpolate(
+                studioSpring(elapsed, fps, "editorialSnap", idx * 6),
+                [0, 1],
+                [0, 1],
+                { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+              );
+              const y = 10 + idx * 84;
+              const fill =
+                r.tone === "brick"
+                  ? PAGE_PALETTE.brickRed
+                  : r.tone === "navy"
+                  ? PAGE_PALETTE.navy
+                  : r.tone === "teal"
+                  ? PAGE_PALETTE.chartSecondary
+                  : PAGE_PALETTE.gold;
+              const barW = Math.round((r.barWidth / 980) * 392 * prog);
+              return (
+                <g key={`c-watt-${idx}`} transform={`translate(8, ${y})`} opacity={prog}>
+                  <rect width="120" height="72" rx="8" fill={theme.wellBg} stroke={fill} strokeWidth="2" />
+                  <FittedSvgText text={r.wattage} x={60} y={34} maxWidth={104} fontSize={20} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} textAnchor="middle" style={TABULAR_NUM_STYLE} />
+                  <FittedSvgText text={r.exponent} x={60} y={56} maxWidth={104} fontSize={12.5} fontFamily={FONTS.mono} fontWeight={600} fill={theme.inkMuted} textAnchor="middle" style={TABULAR_NUM_STYLE} />
 
-          return (
-            <g key={`watt-${idx}`} transform={`translate(56, ${y})`} opacity={prog}>
-              <rect x="0" y="0" width="220" height="104" rx="10" fill={theme.wellBg} stroke={fill} strokeWidth="2.5" />
-              <text x="110" y="48" textAnchor="middle" fontFamily={FONTS.mono} fontSize="30" fontWeight="700" fill={theme.inkHeadline} style={TABULAR_NUM_STYLE}>
-                {r.wattage}
-              </text>
-              <text x="110" y="80" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="600" fill={theme.inkMuted} style={TABULAR_NUM_STYLE}>
-                {r.exponent}
-              </text>
+                  <rect x="132" y="0" width="416" height="72" rx="8" fill={theme.wellBg} stroke={theme.panelBorder} strokeWidth="1.4" />
+                  <rect x="132" y="0" width={Math.max(12, barW)} height="72" rx="8" fill={fill} opacity={0.28} />
+                  <rect x="132" y="0" width={Math.max(10, barW)} height="8" rx="4" fill={fill} />
+                  <FittedSvgText text={r.objectLabel} x={148} y={34} maxWidth={384} fontSize={16} fontFamily={FONTS.sans} fontWeight={700} fill={theme.inkHeadline} />
+                  <FittedSvgText text={r.equivalence} x={148} y={56} maxWidth={384} fontSize={13.5} fontFamily={FONTS.mono} fontWeight={600} fill={theme.inkMuted} />
+                </g>
+              );
+            })}
+          </svg>
+        );
+      }
 
-              <rect x="248" y="10" width={Math.max(40, r.barWidth * prog)} height="84" rx="10" fill={fill} />
-              <text
-                x={276}
-                y="48"
-                fontFamily={FONTS.sans}
-                fontSize="21"
-                fontWeight="700"
-                fill={OVER_FOOTAGE_PALETTE.textHeadline}
-              >
-                {r.objectLabel}
-              </text>
-              <text
-                x={276}
-                y="76"
-                fontFamily={FONTS.mono}
-                fontSize="14"
-                fontWeight="600"
-                fill={OVER_FOOTAGE_PALETTE.textBody}
-              >
-                {r.equivalence}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    )}
+      return (
+        <svg width="100%" height="100%" viewBox="0 0 1560 620">
+          {rungs.map((r, idx) => {
+            const prog = interpolate(
+              studioSpring(elapsed, fps, "editorialSnap", idx * 7),
+              [0, 1],
+              [0, 1],
+              { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+            );
+            const y = 56 + idx * 134;
+            const fill =
+              r.tone === "brick"
+                ? PAGE_PALETTE.brickRed
+                : r.tone === "navy"
+                ? PAGE_PALETTE.navy
+                : r.tone === "teal"
+                ? PAGE_PALETTE.chartSecondary
+                : PAGE_PALETTE.gold;
+            const activeBarW = Math.max(36, r.barWidth * 1.18 * prog);
+
+            return (
+              <g key={`watt-${idx}`} transform={`translate(56, ${y})`} opacity={prog}>
+                <rect x="0" y="0" width="220" height="104" rx="10" fill={theme.wellBg} stroke={fill} strokeWidth="2.5" />
+                <FittedSvgText
+                  text={r.wattage}
+                  x={110}
+                  y={48}
+                  maxWidth={196}
+                  fontSize={30}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.inkHeadline}
+                  textAnchor="middle"
+                  style={TABULAR_NUM_STYLE}
+                />
+                <FittedSvgText
+                  text={r.exponent}
+                  x={110}
+                  y={80}
+                  maxWidth={196}
+                  fontSize={13}
+                  fontFamily={FONTS.mono}
+                  fontWeight={600}
+                  fill={theme.inkMuted}
+                  textAnchor="middle"
+                  style={TABULAR_NUM_STYLE}
+                />
+
+                {/* Full-width recessed track ensures high-contrast legibility for short & long bars alike */}
+                <rect x="248" y="8" width="1200" height="88" rx="10" fill={theme.wellBg} stroke={theme.panelBorder} strokeWidth="1.6" />
+                <rect x="248" y="8" width={Math.min(1200, activeBarW)} height="88" rx="10" fill={fill} opacity={0.22} />
+                <rect x="248" y="8" width={Math.min(1200, activeBarW)} height="10" rx="5" fill={fill} />
+                <FittedSvgText
+                  text={r.objectLabel}
+                  x={276}
+                  y={48}
+                  maxWidth={820}
+                  fontSize={22}
+                  fontFamily={FONTS.sans}
+                  fontWeight={700}
+                  fill={theme.inkHeadline}
+                />
+                <FittedSvgText
+                  text={r.equivalence}
+                  x={276}
+                  y={76}
+                  maxWidth={820}
+                  fontSize={14.5}
+                  fontFamily={FONTS.mono}
+                  fontWeight={600}
+                  fill={theme.inkMuted}
+                />
+                <FittedSvgText
+                  text={`${r.wattage} RATED`}
+                  x={1420}
+                  y={58}
+                  maxWidth={220}
+                  fontSize={16}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={r.tone === "brick" ? theme.accentAlert : theme.inkHeadline}
+                  textAnchor="end"
+                  style={TABULAR_NUM_STYLE}
+                />
+              </g>
+            );
+          })}
+        </svg>
+      );
+    }}
   />
 );
 
@@ -1203,6 +2092,7 @@ export const VelocityMismatchChronometer: React.FC<VelocityMismatchChronometerPr
   summaryLabel = "20:1 CLOCK RATIO",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -1214,16 +2104,71 @@ export const VelocityMismatchChronometer: React.FC<VelocityMismatchChronometerPr
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed) => {
       const fastAngle = elapsed * 9.5;
       const slowAngle = elapsed * 0.45;
       const slowProgress = Math.min(1, elapsed / 240);
 
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="548" height="156" rx="10" fill={theme.wellBg} stroke={theme.accentTeal} strokeWidth="1.8" />
+            <g transform="translate(64, 86)">
+              <circle r="36" fill="none" stroke={theme.accentTeal} strokeWidth="4" strokeDasharray="8 6" />
+              <line
+                x1="0"
+                y1="0"
+                x2={(Math.cos((fastAngle * Math.PI) / 180) * 28).toFixed(1)}
+                y2={(Math.sin((fastAngle * Math.PI) / 180) * 28).toFixed(1)}
+                stroke={theme.accentTeal}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <circle r="5" fill={theme.accentTeal} />
+            </g>
+            <FittedSvgText text={fastTrackLabel} x={118} y={40} maxWidth={424} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentTeal} />
+            {[0, 1, 2].map((gen) => (
+              <g key={`c-gen-${gen}`} transform={`translate(${118 + gen * 144}, 60)`}>
+                <rect width="134" height="78" rx="7" fill={PAGE_PALETTE.navy} />
+                <FittedSvgText text={`GEN ${gen + 1}.0`} x={67} y={36} maxWidth={118} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.chartSecondary} textAnchor="middle" />
+                <FittedSvgText text={`+${gen * 6} MO`} x={67} y={60} maxWidth={118} fontSize={13} fontFamily={FONTS.mono} fontWeight={600} fill={OVER_FOOTAGE_PALETTE.textBody} textAnchor="middle" />
+              </g>
+            ))}
+
+            <rect x="8" y="180" width="548" height="160" rx="10" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="1.8" />
+            <g transform="translate(64, 260)">
+              <circle r="36" fill="none" stroke={theme.accentAlert} strokeWidth="4" />
+              <line
+                x1="0"
+                y1="0"
+                x2={(Math.cos((slowAngle * Math.PI) / 180) * 26).toFixed(1)}
+                y2={(Math.sin((slowAngle * Math.PI) / 180) * 26).toFixed(1)}
+                stroke={theme.accentAlert}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <circle r="5" fill={theme.accentAlert} />
+            </g>
+            <FittedSvgText text={slowTrackLabel} x={118} y={212} maxWidth={424} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} />
+            <rect x="118" y="226" width="424" height="12" rx="6" fill={theme.panelBorder} />
+            <rect x="118" y="226" width={Math.max(18, 96 * slowProgress)} height="12" rx="6" fill={PAGE_PALETTE.brickRed} />
+            {checkpoints.slice(0, 2).map((cp, idx) => (
+              <g key={`c-cp-${idx}`} transform={`translate(${118 + idx * 216}, 252)`}>
+                <rect width="208" height="72" rx="7" fill={idx === 0 ? theme.riskBg : theme.panelBg} stroke={theme.riskBorder} strokeWidth="1.5" />
+                <FittedSvgText text={`GATE 0${idx + 1} · LOCKED`} x={104} y={26} maxWidth={188} fontSize={12.5} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} textAnchor="middle" />
+                <WrappedSvgText text={cp} x={104} y={50} maxWidth={188} fontSize={13.5} maxLines={2} fontFamily={FONTS.sans} fontWeight={700} fill={theme.inkHeadline} textAnchor="middle" verticalCenter />
+              </g>
+            ))}
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Top High-RPM Software Track */}
-          <rect x="56" y="54" width="1448" height="220" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
+          <rect x="56" y="54" width="1448" height="220" rx="14" fill={theme.wellBg} stroke={theme.accentTeal} strokeWidth="2.5" />
           <g transform="translate(170, 164)">
             <circle r="68" fill="none" stroke={PAGE_PALETTE.chartSecondary} strokeWidth="6" strokeDasharray="12 8" />
             <line
@@ -1237,23 +2182,46 @@ export const VelocityMismatchChronometer: React.FC<VelocityMismatchChronometerPr
             />
             <circle r="8" fill={PAGE_PALETTE.chartSecondary} />
           </g>
-          <text x="284" y="110" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={theme.accentTeal}>
-            {fastTrackLabel}
-          </text>
+          <FittedSvgText
+            text={fastTrackLabel}
+            x={284}
+            y={110}
+            maxWidth={1172}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentTeal}
+          />
           {[0, 1, 2, 3, 4].map((gen) => (
             <g key={`gen-${gen}`} transform={`translate(${284 + gen * 232}, 138)`}>
               <rect width="212" height="92" rx="8" fill={PAGE_PALETTE.navy} />
-              <text x="106" y="42" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-                GEN {gen + 1}.0 SHIPPED
-              </text>
-              <text x="106" y="68" textAnchor="middle" fontFamily={FONTS.mono} fontSize="12" fill={OVER_FOOTAGE_PALETTE.textBody}>
-                +{gen * 6} MONTHS
-              </text>
+              <FittedSvgText
+                text={`GEN ${gen + 1}.0 SHIPPED`}
+                x={106}
+                y={42}
+                maxWidth={188}
+                fontSize={15}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+                textAnchor="middle"
+              />
+              <FittedSvgText
+                text={`+${gen * 6} MONTHS`}
+                x={106}
+                y={68}
+                maxWidth={188}
+                fontSize={12}
+                fontFamily={FONTS.mono}
+                fontWeight={600}
+                fill={OVER_FOOTAGE_PALETTE.textBody}
+                textAnchor="middle"
+              />
             </g>
           ))}
 
           {/* Bottom Glacial Grid Permitting Track */}
-          <rect x="56" y="328" width="1448" height="238" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
+          <rect x="56" y="328" width="1448" height="238" rx="14" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2.5" />
           <g transform="translate(170, 447)">
             <circle r="68" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="6" />
             <line
@@ -1267,20 +2235,45 @@ export const VelocityMismatchChronometer: React.FC<VelocityMismatchChronometerPr
             />
             <circle r="9" fill={PAGE_PALETTE.brickRed} />
           </g>
-          <text x="284" y="380" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={theme.accentAlert}>
-            {slowTrackLabel}
-          </text>
-          <rect x="284" y="400" width="1172" height="18" rx="9" fill={PAGE_PALETTE.paperBorder} />
+          <FittedSvgText
+            text={slowTrackLabel}
+            x={284}
+            y={380}
+            maxWidth={1172}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
+          <rect x="284" y="400" width="1172" height="18" rx="9" fill={theme.panelBorder} />
           <rect x="284" y="400" width={Math.max(28, 260 * slowProgress)} height="18" rx="9" fill={PAGE_PALETTE.brickRed} />
-          {checkpoints.map((cp, idx) => (
+          {checkpoints.slice(0, 4).map((cp, idx) => (
             <g key={`cp-${idx}`} transform={`translate(${284 + idx * 296}, 436)`}>
-              <rect width="276" height="96" rx="8" fill={idx === 0 ? PAGE_PALETTE.riskFill : theme.panelBg} stroke={PAGE_PALETTE.brickRed} strokeWidth="1.8" />
-              <text x="138" y="44" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-                GATE 0{idx + 1} · LOCKED
-              </text>
-              <text x="138" y="70" textAnchor="middle" fontFamily={FONTS.sans} fontSize="14" fontWeight="700" fill={PAGE_PALETTE.navy}>
-                {cp}
-              </text>
+              <rect width="276" height="96" rx="8" fill={idx === 0 ? theme.riskBg : theme.panelBg} stroke={theme.riskBorder} strokeWidth="1.8" />
+              <FittedSvgText
+                text={`GATE 0${idx + 1} · LOCKED`}
+                x={138}
+                y={36}
+                maxWidth={244}
+                fontSize={13}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={theme.accentAlert}
+                textAnchor="middle"
+              />
+              <WrappedSvgText
+                text={cp}
+                x={138}
+                y={68}
+                maxWidth={244}
+                fontSize={14}
+                maxLines={2}
+                fontFamily={FONTS.sans}
+                fontWeight={700}
+                fill={theme.inkHeadline}
+                textAnchor="middle"
+                verticalCenter
+              />
             </g>
           ))}
         </svg>
@@ -1310,6 +2303,7 @@ export const CircularAccountingLoop: React.FC<CircularAccountingLoopProps> = ({
   summaryLabel = "COLLATERAL RE-USE",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -1321,12 +2315,40 @@ export const CircularAccountingLoop: React.FC<CircularAccountingLoopProps> = ({
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed) => {
       const orbitDeg = (elapsed * 2.2) % 360;
       const orbitRad = (orbitDeg * Math.PI) / 180;
       const px = 780 + Math.cos(orbitRad) * 320;
       const py = 320 + Math.sin(orbitRad) * 195;
+
+      if (theme.isCompact) {
+        const cx = 282 + Math.cos(orbitRad) * 158;
+        const cy = 178 + Math.sin(orbitRad) * 96;
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <ellipse cx="282" cy="178" rx="158" ry="96" fill="none" stroke={theme.accentAlert} strokeWidth="4" strokeDasharray="10 8" />
+            <circle cx={cx} cy={cy} r="9" fill={PAGE_PALETTE.brickRed} stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="2" />
+
+            <rect x="172" y="136" width="220" height="84" rx="10" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2" />
+            <FittedSvgText text="END-USER CASH CHECK" x={282} y={168} maxWidth={196} fontSize={13} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} textAnchor="middle" />
+            <FittedSvgText text="GPUs Depreciate 3–4 Yrs" x={282} y={196} maxWidth={196} fontSize={15} fontFamily={FONTS.sans} fontWeight={700} fill={theme.inkHeadline} textAnchor="middle" />
+
+            <rect x="142" y="12" width="280" height="62" rx="9" fill={PAGE_PALETTE.navy} />
+            <FittedSvgText text={nodeA} x={282} y={38} maxWidth={256} fontSize={15} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} textAnchor="middle" />
+            <FittedSvgText text="1. Equity + Backstop" x={282} y={58} maxWidth={256} fontSize={13} fontFamily={FONTS.mono} fontWeight={600} fill={OVER_FOOTAGE_PALETTE.chartSecondary} textAnchor="middle" />
+
+            <rect x="292" y="272" width="260" height="66" rx="9" fill={PAGE_PALETTE.chartSecondary} />
+            <FittedSvgText text={nodeB} x={422} y={298} maxWidth={236} fontSize={14.5} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} textAnchor="middle" />
+            <FittedSvgText text="2. Pledges Racks" x={422} y={320} maxWidth={236} fontSize={13} fontFamily={FONTS.mono} fontWeight={600} fill={OVER_FOOTAGE_PALETTE.textBody} textAnchor="middle" />
+
+            <rect x="12" y="272" width="260" height="66" rx="9" fill={PAGE_PALETTE.brickRed} />
+            <FittedSvgText text={nodeC} x={142} y={298} maxWidth={236} fontSize={14.5} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} textAnchor="middle" />
+            <FittedSvgText text="3. Buys Vendor GPUs" x={142} y={320} maxWidth={236} fontSize={13} fontFamily={FONTS.mono} fontWeight={600} fill={OVER_FOOTAGE_PALETTE.textBody} textAnchor="middle" />
+          </svg>
+        );
+      }
 
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
@@ -1343,40 +2365,104 @@ export const CircularAccountingLoop: React.FC<CircularAccountingLoopProps> = ({
           <circle cx={px} cy={py} r="14" fill={PAGE_PALETTE.brickRed} stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="3" />
 
           {/* Center Audit Box */}
-          <rect x="610" y="258" width="340" height="124" rx="12" fill={theme.wellBg} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
-          <text x="780" y="306" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={theme.accentAlert}>
-            EXTERNAL END-USER CASH CHECK
-          </text>
-          <text x="780" y="346" textAnchor="middle" fontFamily={FONTS.sans} fontSize="19" fontWeight="700" fill={theme.inkHeadline}>
-            GPUs Depreciate in 3–4 Yrs
-          </text>
+          <rect x="610" y="258" width="340" height="124" rx="12" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2.5" />
+          <FittedSvgText
+            text="EXTERNAL END-USER CASH CHECK"
+            x={780}
+            y={306}
+            maxWidth={308}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="GPUs Depreciate in 3–4 Yrs"
+            x={780}
+            y={346}
+            maxWidth={308}
+            fontSize={19}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            textAnchor="middle"
+          />
 
           {/* Node A Top */}
           <rect x="570" y="42" width="420" height="104" rx="12" fill={PAGE_PALETTE.navy} />
-          <text x="780" y="88" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            {nodeA}
-          </text>
-          <text x="780" y="118" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-            1. Equity Check + Offtake Backstop
-          </text>
+          <FittedSvgText
+            text={nodeA}
+            x={780}
+            y={88}
+            maxWidth={388}
+            fontSize={18}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="1. Equity Check + Offtake Backstop"
+            x={780}
+            y={118}
+            maxWidth={388}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={600}
+            fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+            textAnchor="middle"
+          />
 
           {/* Node B Bottom Right */}
           <rect x="980" y="446" width="440" height="108" rx="12" fill={PAGE_PALETTE.chartSecondary} />
-          <text x="1200" y="492" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            {nodeB}
-          </text>
-          <text x="1200" y="522" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fill={OVER_FOOTAGE_PALETTE.textBody}>
-            2. Pledges H100/B200 Racks as Collateral
-          </text>
+          <FittedSvgText
+            text={nodeB}
+            x={1200}
+            y={492}
+            maxWidth={404}
+            fontSize={18}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="2. Pledges H100/B200 Racks as Collateral"
+            x={1200}
+            y={522}
+            maxWidth={404}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={600}
+            fill={OVER_FOOTAGE_PALETTE.textBody}
+            textAnchor="middle"
+          />
 
           {/* Node C Bottom Left */}
           <rect x="140" y="446" width="440" height="108" rx="12" fill={PAGE_PALETTE.brickRed} />
-          <text x="360" y="492" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            {nodeC}
-          </text>
-          <text x="360" y="522" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fill={OVER_FOOTAGE_PALETTE.textBody}>
-            3. Debt Proceeds Buy More Vendor GPUs
-          </text>
+          <FittedSvgText
+            text={nodeC}
+            x={360}
+            y={492}
+            maxWidth={404}
+            fontSize={18}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text="3. Debt Proceeds Buy More Vendor GPUs"
+            x={360}
+            y={522}
+            maxWidth={404}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={600}
+            fill={OVER_FOOTAGE_PALETTE.textBody}
+            textAnchor="middle"
+          />
         </svg>
       );
     }}
@@ -1404,6 +2490,7 @@ export const AsymmetricExchangeSimulator: React.FC<AsymmetricExchangeSimulatorPr
   summaryLabel = "INTERCEPT COST SKEW",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -1415,19 +2502,65 @@ export const AsymmetricExchangeSimulator: React.FC<AsymmetricExchangeSimulatorPr
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed) => {
       const firedCount = Math.min(28, Math.floor(elapsed / 6));
       const cells: number[] = [];
       for (let i = 0; i < 32; i++) cells.push(i);
 
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="8" width="244" height="332" rx="10" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2" />
+            <FittedSvgText text="INBOUND SWARM" x={22} y={36} maxWidth={216} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} />
+            <FittedSvgText text={droneUnitCost} x={22} y={56} maxWidth={216} fontSize={13} fontFamily={FONTS.mono} fontWeight={600} fill={theme.inkMuted} />
+            {[0, 1, 2, 3].map((d) => {
+              const dx = 36 + ((elapsed * 2.4 + d * 42) % 165);
+              const dy = 104 + d * 42;
+              return (
+                <g key={`c-drn-${d}`} transform={`translate(${dx.toFixed(1)}, ${dy})`}>
+                  <polygon points="0,-8 22,0 0,8 5,0" fill={PAGE_PALETTE.brickRed} />
+                </g>
+              );
+            })}
+            <FittedSvgText text="28 DRONES: $560K" x={22} y={316} maxWidth={216} fontSize={16} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} style={TABULAR_NUM_STYLE} />
+
+            <rect x="264" y="8" width="292" height="332" rx="10" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2" />
+            <FittedSvgText text="VLS MAGAZINE (32)" x={280} y={36} maxWidth={260} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.chartSecondary} />
+            <FittedSvgText text={interceptorUnitCost} x={280} y={56} maxWidth={260} fontSize={13} fontFamily={FONTS.mono} fontWeight={600} fill={OVER_FOOTAGE_PALETTE.textBody} />
+            {cells.slice(0, 16).map((idx) => {
+              const col = idx % 4;
+              const row = Math.floor(idx / 4);
+              const isDep = idx < Math.min(16, Math.floor(firedCount * 0.57));
+              return (
+                <g key={`c-vls-${idx}`} transform={`translate(${280 + col * 66}, ${76 + row * 50})`}>
+                  <rect width="58" height="40" rx="5" fill={isDep ? "rgba(163, 64, 46, 0.34)" : PAGE_PALETTE.chartSecondary} stroke={isDep ? OVER_FOOTAGE_PALETTE.brickRedText : OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="1.4" />
+                  <text x="29" y="25" textAnchor="middle" fontFamily={FONTS.mono} fontSize="13" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
+                    {isDep ? "OUT" : `C${idx + 1}`}
+                  </text>
+                </g>
+              );
+            })}
+            <FittedSvgText text={`DRAIN: $${(firedCount * 4.2).toFixed(1)}M`} x={280} y={316} maxWidth={260} fontSize={17} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.brickRedText} style={TABULAR_NUM_STYLE} />
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Left Swarm Wave */}
-          <rect x="48" y="64" width="620" height="492" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
-          <text x="84" y="114" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={theme.accentAlert}>
-            INBOUND SWARM · {droneUnitCost}
-          </text>
+          <rect x="48" y="64" width="620" height="492" rx="14" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2.5" />
+          <FittedSvgText
+            text={`INBOUND SWARM · ${droneUnitCost}`}
+            x={84}
+            y={114}
+            maxWidth={548}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
           {[0, 1, 2, 3, 4, 5, 6, 7].map((d) => {
             const dx = 110 + ((elapsed * 3.2 + d * 68) % 460);
             const dy = 176 + (d % 4) * 82 + Math.sin(elapsed * 0.1 + d) * 8;
@@ -1440,18 +2573,40 @@ export const AsymmetricExchangeSimulator: React.FC<AsymmetricExchangeSimulatorPr
               </g>
             );
           })}
-          <text x="84" y="518" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.inkHeadline} style={TABULAR_NUM_STYLE}>
-            SWARM EXPENDITURE (28 UNITS): ${(28 * 20).toLocaleString()}K TOTAL
-          </text>
+          <FittedSvgText
+            text={`SWARM EXPENDITURE (28 UNITS): $${(28 * 20).toLocaleString()}K TOTAL`}
+            x={84}
+            y={518}
+            maxWidth={548}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            style={TABULAR_NUM_STYLE}
+          />
 
           {/* Right Mk 41 VLS Magazine */}
-          <rect x="736" y="64" width="776" height="492" rx="14" fill={PAGE_PALETTE.navyDeep} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
-          <text x="774" y="114" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-            MK 41 VLS MAGAZINE (32 CELLS) · {carrierAssetValue}
-          </text>
-          <text x="774" y="144" fontFamily={FONTS.mono} fontSize="13" fill={OVER_FOOTAGE_PALETTE.textBody}>
-            {interceptorUnitCost} · RELOAD AT SEA: IMPOSSIBLE
-          </text>
+          <rect x="736" y="64" width="776" height="492" rx="14" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2.5" />
+          <FittedSvgText
+            text={`MK 41 VLS MAGAZINE (32 CELLS) · ${carrierAssetValue}`}
+            x={774}
+            y={114}
+            maxWidth={700}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+          />
+          <FittedSvgText
+            text={`${interceptorUnitCost} · RELOAD AT SEA: IMPOSSIBLE`}
+            x={774}
+            y={144}
+            maxWidth={700}
+            fontSize={13}
+            fontFamily={FONTS.mono}
+            fontWeight={600}
+            fill={OVER_FOOTAGE_PALETTE.textBody}
+          />
 
           {cells.map((idx) => {
             const col = idx % 8;
@@ -1483,9 +2638,17 @@ export const AsymmetricExchangeSimulator: React.FC<AsymmetricExchangeSimulatorPr
             );
           })}
 
-          <text x="774" y="518" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.brickRedText} style={TABULAR_NUM_STYLE}>
-            DEFENDER DRAIN ({firedCount} CELLS FIRED): ${(firedCount * 4.2).toFixed(1)}M EXPENDED
-          </text>
+          <FittedSvgText
+            text={`DEFENDER DRAIN (${firedCount} CELLS FIRED): $${(firedCount * 4.2).toFixed(1)}M EXPENDED`}
+            x={774}
+            y={518}
+            maxWidth={700}
+            fontSize={18}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.brickRedText}
+            style={TABULAR_NUM_STYLE}
+          />
         </svg>
       );
     }}
@@ -1511,6 +2674,7 @@ export const SubseaCableCrossSection: React.FC<SubseaCableCrossSectionProps> = (
   summaryLabel = "$10T DAILY CLEARING",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -1522,6 +2686,7 @@ export const SubseaCableCrossSection: React.FC<SubseaCableCrossSectionProps> = (
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed, fps) => {
       const anchorDrop = interpolate(
@@ -1531,6 +2696,32 @@ export const SubseaCableCrossSection: React.FC<SubseaCableCrossSectionProps> = (
         { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
       );
       const isSevered = anchorDrop > 110;
+
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <g transform="translate(106, 154)">
+              <circle r="86" fill={PAGE_PALETTE.navy} stroke={theme.inkHeadline} strokeWidth="2.5" />
+              <circle r="64" fill="#465A6E" stroke={OVER_FOOTAGE_PALETTE.accentPrimary} strokeWidth="1.5" />
+              <circle r="44" fill="#9E7B54" stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="1.5" />
+              <circle r="22" fill={isSevered ? PAGE_PALETTE.brickRed : PAGE_PALETTE.chartSecondary} stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="2" />
+            </g>
+            <FittedSvgText text="21mm GLASS CORE" x={106} y={272} maxWidth={184} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} textAnchor="middle" />
+
+            <rect x="216" y="12" width="340" height="324" rx="10" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+            <FittedSvgText text={dailySettlementLabel} x={232} y={42} maxWidth={308} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} />
+            <rect x="232" y="164" width="308" height="24" rx="12" fill={PAGE_PALETTE.navy} />
+            <line x1="240" y1="176" x2={isSevered ? "386" : "532"} y2="176" stroke={isSevered ? PAGE_PALETTE.brickRed : PAGE_PALETTE.chartSecondary} strokeWidth="5" strokeDasharray="10 8" />
+            <g transform={`translate(390, ${(82 + anchorDrop * 0.56).toFixed(1)})`}>
+              <line x1="0" y1="-34" x2="0" y2="24" stroke={PAGE_PALETTE.brickRed} strokeWidth="6" />
+              <path d="M -22 12 Q 0 38 22 12" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="6" strokeLinecap="round" />
+            </g>
+            <rect x="232" y="232" width="308" height="86" rx="8" fill={isSevered ? theme.riskBg : theme.panelBg} stroke={theme.riskBorder} strokeWidth="1.6" />
+            <FittedSvgText text={isSevered ? "FAULT · ANCHOR CUT" : "NOMINAL CARRIER"} x={246} y={262} maxWidth={280} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} />
+            <WrappedSvgText text="Repair ship mobilization: 3 to 8 weeks." x={246} y={292} maxWidth={280} fontSize={14.5} maxLines={2} fontFamily={FONTS.sans} fontWeight={700} fill={theme.inkHeadline} verticalCenter />
+          </svg>
+        );
+      }
 
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
@@ -1555,10 +2746,17 @@ export const SubseaCableCrossSection: React.FC<SubseaCableCrossSectionProps> = (
           </g>
 
           {/* Right Longitudinal Seabed Conduit + Dragging Anchor */}
-          <rect x="640" y="72" width="860" height="476" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="2" />
-          <text x="680" y="122" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={theme.inkHeadline}>
-            {cableCountLabel} · {dailySettlementLabel}
-          </text>
+          <rect x="640" y="72" width="860" height="476" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+          <FittedSvgText
+            text={`${cableCountLabel} · ${dailySettlementLabel}`}
+            x={680}
+            y={122}
+            maxWidth={780}
+            fontSize={16}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
 
           {/* Cable Run */}
           <rect x="680" y="328" width="780" height="36" rx="18" fill={PAGE_PALETTE.navy} />
@@ -1578,13 +2776,27 @@ export const SubseaCableCrossSection: React.FC<SubseaCableCrossSectionProps> = (
             <path d="M -38 22 Q 0 64 38 22" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="9" strokeLinecap="round" />
           </g>
 
-          <rect x="680" y="424" width="780" height="88" rx="8" fill={isSevered ? PAGE_PALETTE.riskFill : theme.panelBg} stroke={PAGE_PALETTE.brickRed} strokeWidth="2" />
-          <text x="710" y="462" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={PAGE_PALETTE.brickRed}>
-            {isSevered ? "FAULT DETECTED · ANCHOR SEVERANCE AT SEABED CHOKEPOINT" : "NOMINAL OPTICAL CARRIER · 8 FIBER PAIRS"}
-          </text>
-          <text x="710" y="492" fontFamily={FONTS.sans} fontSize="17" fontWeight="700" fill={PAGE_PALETTE.navy}>
-            Outer Diameter: 21mm (Garden Hose) · Repair Ship Mobilization: 3 to 8 Weeks
-          </text>
+          <rect x="680" y="424" width="780" height="88" rx="8" fill={isSevered ? theme.riskBg : theme.panelBg} stroke={theme.riskBorder} strokeWidth="2" />
+          <FittedSvgText
+            text={isSevered ? "FAULT DETECTED · ANCHOR SEVERANCE AT SEABED CHOKEPOINT" : "NOMINAL OPTICAL CARRIER · 8 FIBER PAIRS"}
+            x={710}
+            y={462}
+            maxWidth={720}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
+          <FittedSvgText
+            text="Outer Diameter: 21mm (Garden Hose) · Repair Ship Mobilization: 3 to 8 Weeks"
+            x={710}
+            y={492}
+            maxWidth={720}
+            fontSize={17}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
         </svg>
       );
     }}
@@ -1610,6 +2822,7 @@ export const LithographyNodeLock: React.FC<LithographyNodeLockProps> = ({
   summaryLabel = "FRONTIER NODE GAP",
   mode,
   paletteMode,
+  register,
   atFrame = 0,
 }) => (
   <SimulatorShell
@@ -1621,52 +2834,169 @@ export const LithographyNodeLock: React.FC<LithographyNodeLockProps> = ({
     summaryLabel={summaryLabel}
     mode={mode}
     paletteMode={paletteMode}
+    register={register}
     atFrame={atFrame}
     renderGraphic={(theme, elapsed, fps) => {
       const switchTrip = studioSpring(elapsed, fps, "mechanicalTick", 32) > 0.6;
+
+      if (theme.isCompact) {
+        return (
+          <svg width="100%" height="100%" viewBox="0 0 564 348">
+            <rect x="8" y="10" width="174" height="328" rx="10" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+            <FittedSvgText text="PHOENIX FAB 21" x={95} y={42} maxWidth={150} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} textAnchor="middle" />
+            <circle cx="95" cy="158" r="56" fill={theme.panelBg} stroke={theme.navyInk} strokeWidth="2.5" />
+            <FittedSvgText text="4nm N4" x={95} y={165} maxWidth={96} fontSize={20} fontFamily={FONTS.mono} fontWeight={700} fill={theme.inkHeadline} textAnchor="middle" style={TABULAR_NUM_STYLE} />
+            <WrappedSvgText text="Ships back to Asia for CoWoS." x={95} y={276} maxWidth={148} fontSize={14} maxLines={2} fontFamily={FONTS.sans} fontWeight={700} fill={theme.inkMuted} textAnchor="middle" verticalCenter />
+
+            <rect x="195" y="10" width="174" height="328" rx="10" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2" />
+            <FittedSvgText text="TAIWAN FRONTIER" x={282} y={42} maxWidth={150} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.chartSecondary} textAnchor="middle" />
+            <circle cx="282" cy="158" r="56" fill="#18364A" stroke={OVER_FOOTAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
+            <FittedSvgText text="2nm / A16" x={282} y={165} maxWidth={96} fontSize={19} fontFamily={FONTS.mono} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textHeadline} textAnchor="middle" style={TABULAR_NUM_STYLE} />
+            <WrappedSvgText text="92% global frontier share." x={282} y={276} maxWidth={148} fontSize={14} maxLines={2} fontFamily={FONTS.sans} fontWeight={700} fill={OVER_FOOTAGE_PALETTE.textBody} textAnchor="middle" verticalCenter />
+
+            <rect x="382" y="10" width="174" height="328" rx="10" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2" />
+            <FittedSvgText text="ASML EUV LOCK" x={469} y={42} maxWidth={150} fontSize={14} fontFamily={FONTS.mono} fontWeight={700} fill={theme.accentAlert} textAnchor="middle" />
+            <rect x="398" y="102" width="142" height="112" rx="8" fill={switchTrip ? PAGE_PALETTE.brickRed : PAGE_PALETTE.navy} />
+            <WrappedSvgText
+              text={switchTrip ? "LASER LOCKED" : "ARMED"}
+              x={469}
+              y={158}
+              maxWidth={126}
+              fontSize={16}
+              maxLines={2}
+              fontFamily={FONTS.mono}
+              fontWeight={700}
+              fill={OVER_FOOTAGE_PALETTE.accentWarm}
+              textAnchor="middle"
+              verticalCenter
+            />
+            <WrappedSvgText text="Zero yield on firmware cut." x={469} y={276} maxWidth={148} fontSize={14} maxLines={2} fontFamily={FONTS.sans} fontWeight={700} fill={theme.inkHeadline} textAnchor="middle" verticalCenter />
+          </svg>
+        );
+      }
+
       return (
         <svg width="100%" height="100%" viewBox="0 0 1560 620">
           {/* Left: Phoenix 4nm */}
-          <rect x="48" y="64" width="460" height="492" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.navy} strokeWidth="2.5" />
-          <text x="80" y="114" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.inkHeadline}>
-            {trailingFabLabel}
-          </text>
-          <circle cx="278" cy="300" r="126" fill={PAGE_PALETTE.paper} stroke={PAGE_PALETTE.navy} strokeWidth="3" />
-          <text x="278" y="308" textAnchor="middle" fontFamily={FONTS.mono} fontSize="34" fontWeight="700" fill={PAGE_PALETTE.navy} style={TABULAR_NUM_STYLE}>
-            4nm N4
-          </text>
-          <text x="80" y="508" fontFamily={FONTS.sans} fontSize="16" fontWeight="700" fill={theme.inkMuted}>
-            1–2 Generations Behind · Ships Back to Asia for CoWoS
-          </text>
+          <rect x="48" y="64" width="460" height="492" rx="14" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2.5" />
+          <FittedSvgText
+            text={trailingFabLabel}
+            x={80}
+            y={114}
+            maxWidth={396}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
+          <circle cx="278" cy="300" r="126" fill={theme.panelBg} stroke={theme.navyInk} strokeWidth="3" />
+          <FittedSvgText
+            text="4nm N4"
+            x={278}
+            y={310}
+            maxWidth={210}
+            fontSize={34}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+          <WrappedSvgText
+            text="1–2 Generations Behind · Ships Back to Asia for CoWoS"
+            x={80}
+            y={496}
+            maxWidth={396}
+            fontSize={16}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.inkMuted}
+          />
 
           {/* Center: Frontier 2nm/A16 */}
-          <rect x="550" y="64" width="460" height="492" rx="14" fill={PAGE_PALETTE.navyDeep} stroke={PAGE_PALETTE.chartSecondary} strokeWidth="2.5" />
-          <text x="582" y="114" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.chartSecondary}>
-            {frontierFabLabel}
-          </text>
+          <rect x="550" y="64" width="460" height="492" rx="14" fill={theme.solidPanelBg} stroke={theme.accentTeal} strokeWidth="2.5" />
+          <FittedSvgText
+            text={frontierFabLabel}
+            x={582}
+            y={114}
+            maxWidth={396}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.chartSecondary}
+          />
           <circle cx="780" cy="300" r="126" fill="#18364A" stroke={OVER_FOOTAGE_PALETTE.chartSecondary} strokeWidth="3" />
-          <text x="780" y="308" textAnchor="middle" fontFamily={FONTS.mono} fontSize="34" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-            2nm / A16
-          </text>
-          <text x="582" y="508" fontFamily={FONTS.sans} fontSize="16" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textBody}>
-            92% Global Frontier Share · Co-Located CoWoS-L
-          </text>
+          <FittedSvgText
+            text="2nm / A16"
+            x={780}
+            y={310}
+            maxWidth={210}
+            fontSize={34}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+            style={TABULAR_NUM_STYLE}
+          />
+          <WrappedSvgText
+            text="92% Global Frontier Share · Co-Located CoWoS-L"
+            x={582}
+            y={496}
+            maxWidth={396}
+            fontSize={16}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textBody}
+          />
 
           {/* Right: ASML EUV Remote Kill-Switch */}
-          <rect x="1052" y="64" width="460" height="492" rx="14" fill={theme.wellBg} stroke={PAGE_PALETTE.brickRed} strokeWidth="2.5" />
-          <text x="1084" y="114" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.accentAlert}>
-            ASML HIGH-NA EUV ($380M SCANNER)
-          </text>
+          <rect x="1052" y="64" width="460" height="492" rx="14" fill={theme.wellBg} stroke={theme.riskBorder} strokeWidth="2.5" />
+          <FittedSvgText
+            text="ASML HIGH-NA EUV ($380M SCANNER)"
+            x={1084}
+            y={114}
+            maxWidth={396}
+            fontSize={15}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={theme.accentAlert}
+          />
           <rect x="1120" y="200" width="324" height="196" rx="12" fill={switchTrip ? PAGE_PALETTE.brickRed : PAGE_PALETTE.navy} />
-          <text x="1282" y="286" textAnchor="middle" fontFamily={FONTS.mono} fontSize="20" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-            REMOTE TELEMETRY BREAKER
-          </text>
-          <text x="1282" y="328" textAnchor="middle" fontFamily={FONTS.mono} fontSize="26" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.accentWarm}>
-            {switchTrip ? "LASER SOURCE LOCKED" : "CALIBRATION ARMED"}
-          </text>
-          <text x="1084" y="508" fontFamily={FONTS.sans} fontSize="16" fontWeight="700" fill={theme.inkHeadline}>
-            Zero Usable Yield Within Days of Firmware Cut
-          </text>
+          <FittedSvgText
+            text="REMOTE TELEMETRY BREAKER"
+            x={1282}
+            y={282}
+            maxWidth={292}
+            fontSize={19}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.textHeadline}
+            textAnchor="middle"
+          />
+          <FittedSvgText
+            text={switchTrip ? "LASER SOURCE LOCKED" : "CALIBRATION ARMED"}
+            x={1282}
+            y={328}
+            maxWidth={292}
+            fontSize={24}
+            fontFamily={FONTS.mono}
+            fontWeight={700}
+            fill={OVER_FOOTAGE_PALETTE.accentWarm}
+            textAnchor="middle"
+          />
+          <WrappedSvgText
+            text="Zero Usable Yield Within Days of Firmware Cut"
+            x={1084}
+            y={496}
+            maxWidth={396}
+            fontSize={16}
+            maxLines={2}
+            fontFamily={FONTS.sans}
+            fontWeight={700}
+            fill={theme.inkHeadline}
+          />
         </svg>
       );
     }}
@@ -1721,6 +3051,7 @@ function createParametricSimulator(config: {
     stages = config.defaultStages,
     mode,
     paletteMode,
+    register,
     atFrame = 0,
   }) => (
     <SimulatorShell
@@ -1732,6 +3063,7 @@ function createParametricSimulator(config: {
       summaryLabel={summaryLabel}
       mode={mode}
       paletteMode={paletteMode}
+      register={register}
       atFrame={atFrame}
       renderGraphic={(theme, elapsed, fps) => {
         const settle = interpolate(
@@ -1742,6 +3074,107 @@ function createParametricSimulator(config: {
         );
         const pulse = Math.sin(elapsed * 0.08);
         const dash = (elapsed * 3.2) % 40;
+        const brass = "#B08D57";
+
+        if (theme.isCompact) {
+          return (
+            <svg width="100%" height="100%" viewBox="0 0 564 348">
+              {/* Compact Left Mechanical Dial / Apparatus Summary */}
+              <rect x="8" y="8" width="548" height="94" rx="10" fill={theme.wellBg} stroke={theme.navyInk} strokeWidth="2" />
+              <FittedSvgText
+                text={leftMetric}
+                x={24}
+                y={42}
+                maxWidth={220}
+                fontSize={16}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={theme.accentTeal}
+                style={TABULAR_NUM_STYLE}
+              />
+              <FittedSvgText
+                text="->"
+                x={282}
+                y={44}
+                maxWidth={36}
+                fontSize={18}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={theme.inkMuted}
+                textAnchor="middle"
+              />
+              <FittedSvgText
+                text={rightMetric}
+                x={540}
+                y={42}
+                maxWidth={220}
+                fontSize={16}
+                fontFamily={FONTS.mono}
+                fontWeight={700}
+                fill={theme.accentAlert}
+                textAnchor="end"
+                style={TABULAR_NUM_STYLE}
+              />
+              <rect x="24" y="64" width="516" height="18" rx="6" fill={theme.panelBorder} />
+              <rect x="24" y="64" width={Math.max(32, 340 * settle)} height="18" rx="6" fill={PAGE_PALETTE.brickRed} />
+              <circle cx={24 + 340 * settle} cy="73" r="11" fill={brass} stroke={PAGE_PALETTE.navyDeep} strokeWidth="2" />
+
+              {/* Compact 3-Stage Mechanical Telemetry Stack */}
+              {stages.slice(0, 3).map((st, idx) => {
+                const sy = 116 + idx * 76;
+                const borderCol =
+                  st.tone === "brick"
+                    ? theme.riskBorder
+                    : st.tone === "teal"
+                    ? theme.accentTeal
+                    : theme.navyInk;
+                const labelCol =
+                  st.tone === "brick"
+                    ? theme.accentAlert
+                    : st.tone === "teal"
+                    ? theme.accentTeal
+                    : theme.inkMuted;
+                return (
+                  <g key={`c-pst-${idx}`} transform={`translate(8, ${sy})`}>
+                    <rect width="548" height="66" rx="8" fill={st.tone === "brick" ? theme.riskBg : theme.wellBg} stroke={borderCol} strokeWidth="1.6" />
+                    <FittedSvgText
+                      text={`0${idx + 1} · ${st.label.toUpperCase()}`}
+                      x={16}
+                      y={26}
+                      maxWidth={318}
+                      fontSize={14}
+                      fontFamily={FONTS.mono}
+                      fontWeight={700}
+                      fill={labelCol}
+                    />
+                    <FittedSvgText
+                      text={st.metric}
+                      x={532}
+                      y={28}
+                      maxWidth={190}
+                      fontSize={17}
+                      fontFamily={FONTS.mono}
+                      fontWeight={700}
+                      fill={theme.inkHeadline}
+                      textAnchor="end"
+                      style={TABULAR_NUM_STYLE}
+                    />
+                    <FittedSvgText
+                      text={st.detail}
+                      x={16}
+                      y={50}
+                      maxWidth={516}
+                      fontSize={14}
+                      fontFamily={FONTS.sans}
+                      fontWeight={600}
+                      fill={theme.inkMuted}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+          );
+        }
 
         return (
           <svg width="100%" height="100%" viewBox="0 0 1560 620">
@@ -1753,56 +3186,125 @@ function createParametricSimulator(config: {
               height="524"
               rx="14"
               fill={theme.wellBg}
-              stroke={PAGE_PALETTE.navy}
+              stroke={theme.navyInk}
               strokeWidth="2.2"
             />
+            {/* Corner Brass Calibration Rivets */}
+            {[
+              [64, 68],
+              [814, 68],
+              [64, 552],
+              [814, 552],
+            ].map(([rx, ry], rIdx) => (
+              <circle key={`rv-${rIdx}`} cx={rx} cy={ry} r="5" fill={brass} stroke={PAGE_PALETTE.navyDeep} strokeWidth="1.2" />
+            ))}
 
             {config.archetype === "balance-beam" && (
               <g transform="translate(439, 340)">
-                <polygon points="-58,150 58,150 0,20" fill={PAGE_PALETTE.navy} />
+                <line x1="-320" y1="150" x2="320" y2="150" stroke={theme.panelBorder} strokeWidth="3" />
+                <polygon points="-64,150 64,150 0,18" fill={PAGE_PALETTE.navy} stroke={brass} strokeWidth="2.5" />
                 <g transform={`rotate(${(13.5 * settle + pulse * 0.8).toFixed(2)})`}>
-                  <rect x="-300" y="-10" width="600" height="20" rx="6" fill={PAGE_PALETTE.gold} />
-                  <rect x="-290" y="-110" width="160" height="92" rx="8" fill={PAGE_PALETTE.chartSecondary} />
-                  <text x="-210" y="-56" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-                    {leftMetric}
-                  </text>
-                  <rect x="130" y="-138" width="176" height="120" rx="8" fill={PAGE_PALETTE.brickRed} />
-                  <text x="218" y="-70" textAnchor="middle" fontFamily={FONTS.mono} fontSize="20" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-                    {rightMetric}
-                  </text>
+                  <rect x="-306" y="-12" width="612" height="22" rx="6" fill={brass} stroke={PAGE_PALETTE.navyDeep} strokeWidth="2" />
+                  <line x1="-210" y1="-12" x2="-210" y2="-22" stroke={PAGE_PALETTE.navyDeep} strokeWidth="5" />
+                  <rect x="-296" y="-114" width="172" height="94" rx="8" fill={PAGE_PALETTE.chartSecondary} stroke={PAGE_PALETTE.navyDeep} strokeWidth="2" />
+                  <WrappedSvgText
+                    text={leftMetric}
+                    x={-210}
+                    y={-67}
+                    maxWidth={148}
+                    fontSize={17}
+                    minFontSize={12}
+                    maxLines={2}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                    textAnchor="middle"
+                    verticalCenter
+                    style={TABULAR_NUM_STYLE}
+                  />
+                  <line x1="218" y1="-12" x2="218" y2="-22" stroke={PAGE_PALETTE.navyDeep} strokeWidth="5" />
+                  <rect x="124" y="-142" width="188" height="122" rx="8" fill={PAGE_PALETTE.brickRed} stroke={PAGE_PALETTE.navyDeep} strokeWidth="2" />
+                  <WrappedSvgText
+                    text={rightMetric}
+                    x={218}
+                    y={-81}
+                    maxWidth={164}
+                    fontSize={19}
+                    minFontSize={13}
+                    maxLines={2}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                    textAnchor="middle"
+                    verticalCenter
+                    style={TABULAR_NUM_STYLE}
+                  />
                 </g>
+                <circle cx="0" cy="0" r="14" fill={brass} stroke={PAGE_PALETTE.navyDeep} strokeWidth="3" />
               </g>
             )}
 
             {config.archetype === "industrial-queue" && (
-              <g transform="translate(88, 120)">
-                <text x="0" y="0" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.accentAlert}>
-                  SERIAL BOTTLENECK · {leftMetric} {"->"} {rightMetric}
-                </text>
+              <g transform="translate(88, 114)">
+                <FittedSvgText
+                  text={`SERIAL BOTTLENECK · ${leftMetric} -> ${rightMetric}`}
+                  x={0}
+                  y={4}
+                  maxWidth={700}
+                  fontSize={15}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.accentAlert}
+                />
                 {[0, 1, 2, 3, 4].map((slot) => (
-                  <g key={`q-${slot}`} transform={`translate(${slot * 136}, 48)`}>
+                  <g key={`q-${slot}`} transform={`translate(${slot * 136}, 46)`}>
                     <rect
                       width="118"
-                      height="210"
+                      height="218"
                       rx="8"
                       fill={slot < 4 ? PAGE_PALETTE.brickRed : PAGE_PALETTE.chartSecondary}
-                      opacity={slot < 4 ? 0.88 : 1}
+                      stroke={PAGE_PALETTE.navyDeep}
+                      strokeWidth="2"
+                      opacity={slot < 4 ? 0.9 : 1}
                     />
-                    <text x="59" y="106" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-                      {slot < 4 ? `QUEUE #${slot + 1}` : "ACTIVE BAY"}
+                    <rect x="10" y="14" width="98" height="14" rx="4" fill={PAGE_PALETTE.navyDeep} opacity={0.35} />
+                    <circle cx="59" cy="58" r="14" fill={PAGE_PALETTE.navyDeep} stroke={brass} strokeWidth="2" />
+                    <text x="59" y="63" textAnchor="middle" fontFamily={FONTS.mono} fontSize="12" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
+                      0{slot + 1}
                     </text>
-                    <text x="59" y="136" textAnchor="middle" fontFamily={FONTS.mono} fontSize="12" fill={OVER_FOOTAGE_PALETTE.textBody}>
-                      {slot < 4 ? "BACKLOGGED" : "ENERGIZED"}
-                    </text>
+                    <FittedSvgText
+                      text={slot < 4 ? `QUEUE #${slot + 1}` : "ACTIVE BAY"}
+                      x={59}
+                      y={122}
+                      maxWidth={102}
+                      fontSize={15}
+                      fontFamily={FONTS.mono}
+                      fontWeight={700}
+                      fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                      textAnchor="middle"
+                    />
+                    <FittedSvgText
+                      text={slot < 4 ? "BACKLOGGED" : "ENERGIZED"}
+                      x={59}
+                      y={152}
+                      maxWidth={102}
+                      fontSize={12}
+                      fontFamily={FONTS.mono}
+                      fontWeight={600}
+                      fill={OVER_FOOTAGE_PALETTE.textBody}
+                      textAnchor="middle"
+                    />
                   </g>
                 ))}
-                <line x1="0" y1="312" x2="680" y2="312" stroke={PAGE_PALETTE.navy} strokeWidth="6" strokeDasharray="18 14" strokeDashoffset={-dash} />
+                {/* Conveyor Rail & Rollers */}
+                <rect x="0" y="302" width="664" height="16" rx="8" fill={PAGE_PALETTE.navy} />
+                <line x1="12" y1="310" x2="652" y2="310" stroke={brass} strokeWidth="5" strokeDasharray="16 14" strokeDashoffset={-dash} />
               </g>
             )}
 
             {config.archetype === "hydraulic-reservoir" && (
               <g transform="translate(92, 108)">
-                <rect x="0" y="36" width="260" height="340" rx="12" fill={PAGE_PALETTE.navy} />
+                <rect x="0" y="36" width="260" height="340" rx="12" fill={PAGE_PALETTE.navy} stroke={brass} strokeWidth="2.5" />
                 <rect
                   x="16"
                   y={36 + 110 * settle}
@@ -1811,9 +3313,21 @@ function createParametricSimulator(config: {
                   rx="8"
                   fill={PAGE_PALETTE.chartSecondary}
                 />
-                <text x="130" y="20" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={theme.inkHeadline}>
-                  {leftMetric}
-                </text>
+                {/* Tank Sight-Glass Graduations */}
+                {[0, 1, 2, 3, 4].map((gTick) => (
+                  <line key={`hg-${gTick}`} x1="216" y1={86 + gTick * 60} x2="236" y2={86 + gTick * 60} stroke={OVER_FOOTAGE_PALETTE.textHeadline} strokeWidth="2" />
+                ))}
+                <FittedSvgText
+                  text={leftMetric}
+                  x={130}
+                  y={20}
+                  maxWidth={256}
+                  fontSize={15}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.inkHeadline}
+                  textAnchor="middle"
+                />
                 <path
                   d="M 260 196 C 340 196, 350 96, 420 96 L 610 96"
                   fill="none"
@@ -1828,28 +3342,78 @@ function createParametricSimulator(config: {
                   strokeDasharray="14 18"
                   strokeDashoffset={-dash}
                 />
-                <rect x="420" y="176" width="260" height="200" rx="12" fill={PAGE_PALETTE.brickRed} />
-                <text x="550" y="282" textAnchor="middle" fontFamily={FONTS.mono} fontSize="20" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-                  {rightMetric}
-                </text>
+                <circle cx="345" cy="146" r="18" fill={PAGE_PALETTE.navyDeep} stroke={brass} strokeWidth="2.5" />
+                <rect x="420" y="176" width="260" height="200" rx="12" fill={PAGE_PALETTE.brickRed} stroke={brass} strokeWidth="2.5" />
+                <WrappedSvgText
+                  text={rightMetric}
+                  x={550}
+                  y={276}
+                  maxWidth={228}
+                  fontSize={20}
+                  minFontSize={13}
+                  maxLines={2}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                  textAnchor="middle"
+                  verticalCenter
+                />
               </g>
             )}
 
             {config.archetype === "rotary-governor" && (
-              <g transform="translate(439, 308)">
-                <circle r="168" fill="none" stroke={PAGE_PALETTE.navy} strokeWidth="14" />
-                <circle r="132" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="5" strokeDasharray="16 12" />
+              <g transform="translate(439, 304)">
+                <circle r="172" fill="none" stroke={theme.navyInk} strokeWidth="14" />
+                <circle r="134" fill="none" stroke={PAGE_PALETTE.brickRed} strokeWidth="5" strokeDasharray="16 12" />
+                {/* Graduated Perimeter Ticks */}
+                {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((ang) => {
+                  const rad = (ang * Math.PI) / 180;
+                  return (
+                    <line
+                      key={`rt-${ang}`}
+                      x1={(Math.cos(rad) * 150).toFixed(1)}
+                      y1={(Math.sin(rad) * 150).toFixed(1)}
+                      x2={(Math.cos(rad) * 164).toFixed(1)}
+                      y2={(Math.sin(rad) * 164).toFixed(1)}
+                      stroke={brass}
+                      strokeWidth="3"
+                    />
+                  );
+                })}
                 <g transform={`rotate(${(elapsed * 3.4).toFixed(1)})`}>
-                  <line x1="-148" y1="0" x2="148" y2="0" stroke={PAGE_PALETTE.chartSecondary} strokeWidth="10" />
-                  <line x1="0" y1="-148" x2="0" y2="148" stroke={PAGE_PALETTE.chartSecondary} strokeWidth="10" />
+                  <line x1="-144" y1="0" x2="144" y2="0" stroke={PAGE_PALETTE.chartSecondary} strokeWidth="10" strokeLinecap="round" />
+                  <line x1="0" y1="-144" x2="0" y2="144" stroke={PAGE_PALETTE.chartSecondary} strokeWidth="10" strokeLinecap="round" />
+                  <circle cx="136" cy="0" r="10" fill={brass} />
+                  <circle cx="-136" cy="0" r="10" fill={brass} />
                 </g>
-                <circle r="54" fill={PAGE_PALETTE.navyDeep} />
-                <text x="0" y="6" textAnchor="middle" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline} style={TABULAR_NUM_STYLE}>
-                  {leftMetric}
-                </text>
-                <text x="0" y="218" textAnchor="middle" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={theme.accentAlert} style={TABULAR_NUM_STYLE}>
-                  TRIP THRESHOLD · {rightMetric}
-                </text>
+                <circle r="58" fill={PAGE_PALETTE.navyDeep} stroke={brass} strokeWidth="3" />
+                <WrappedSvgText
+                  text={leftMetric}
+                  x={0}
+                  y={0}
+                  maxWidth={96}
+                  fontSize={15}
+                  minFontSize={10.5}
+                  maxLines={2}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                  textAnchor="middle"
+                  verticalCenter
+                  style={TABULAR_NUM_STYLE}
+                />
+                <FittedSvgText
+                  text={`TRIP THRESHOLD · ${rightMetric}`}
+                  x={0}
+                  y={216}
+                  maxWidth={680}
+                  fontSize={16}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.accentAlert}
+                  textAnchor="middle"
+                  style={TABULAR_NUM_STYLE}
+                />
               </g>
             )}
 
@@ -1869,23 +3433,44 @@ function createParametricSimulator(config: {
                         height="190"
                         rx="6"
                         fill={blk >= 3 ? PAGE_PALETTE.brickRed : PAGE_PALETTE.navy}
+                        stroke={brass}
+                        strokeWidth="2"
                       />
+                      <circle cx="0" cy="-160" r="6" fill={brass} />
                     </g>
                   );
                 })}
-                <line x1="0" y1="316" x2="680" y2="316" stroke={PAGE_PALETTE.navy} strokeWidth="5" />
-                <text x="0" y="28" fontFamily={FONTS.mono} fontSize="16" fontWeight="700" fill={theme.accentAlert}>
-                  {leftMetric} {"->"} {rightMetric}
-                </text>
+                <line x1="0" y1="316" x2="680" y2="316" stroke={theme.navyInk} strokeWidth="5" />
+                <FittedSvgText
+                  text={`${leftMetric} -> ${rightMetric}`}
+                  x={0}
+                  y={28}
+                  maxWidth={680}
+                  fontSize={16}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={theme.accentAlert}
+                />
               </g>
             )}
 
             {config.archetype === "truss-tollgate" && (
               <g transform="translate(92, 118)">
-                <polygon points="40,60 640,60 580,148 100,148" fill={PAGE_PALETTE.brickRed} />
-                <text x="340" y="112" textAnchor="middle" fontFamily={FONTS.mono} fontSize="18" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-                  OVERHEAD LOAD · {rightMetric}
-                </text>
+                <polygon points="40,60 640,60 580,148 100,148" fill={PAGE_PALETTE.brickRed} stroke={PAGE_PALETTE.navyDeep} strokeWidth="2.5" />
+                <FittedSvgText
+                  text={`OVERHEAD LOAD · ${rightMetric}`}
+                  x={340}
+                  y={112}
+                  maxWidth={460}
+                  fontSize={18}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                  textAnchor="middle"
+                />
+                {/* Structural Truss Web Diagonals */}
+                <line x1="172" y1="148" x2="340" y2="358" stroke={brass} strokeWidth="5" />
+                <line x1="508" y1="148" x2="340" y2="358" stroke={brass} strokeWidth="5" />
                 {[0, 1, 2].map((col) => (
                   <rect
                     key={`tr-col-${col}`}
@@ -1895,12 +3480,22 @@ function createParametricSimulator(config: {
                     height="210"
                     rx="4"
                     fill={PAGE_PALETTE.navy}
+                    stroke={brass}
+                    strokeWidth="2"
                   />
                 ))}
-                <rect x="40" y="358" width="600" height="44" rx="6" fill={PAGE_PALETTE.chartSecondary} />
-                <text x="340" y="386" textAnchor="middle" fontFamily={FONTS.mono} fontSize="15" fontWeight="700" fill={OVER_FOOTAGE_PALETTE.textHeadline}>
-                  SUPPORT BASE · {leftMetric}
-                </text>
+                <rect x="40" y="358" width="600" height="44" rx="6" fill={PAGE_PALETTE.chartSecondary} stroke={PAGE_PALETTE.navyDeep} strokeWidth="2" />
+                <FittedSvgText
+                  text={`SUPPORT BASE · ${leftMetric}`}
+                  x={340}
+                  y={386}
+                  maxWidth={560}
+                  fontSize={15}
+                  fontFamily={FONTS.mono}
+                  fontWeight={700}
+                  fill={OVER_FOOTAGE_PALETTE.textHeadline}
+                  textAnchor="middle"
+                />
               </g>
             )}
 
@@ -1909,29 +3504,60 @@ function createParametricSimulator(config: {
               const sy = 56 + idx * 172;
               const borderCol =
                 st.tone === "brick"
-                  ? PAGE_PALETTE.brickRed
+                  ? theme.riskBorder
                   : st.tone === "teal"
-                  ? PAGE_PALETTE.chartSecondary
-                  : PAGE_PALETTE.navy;
+                  ? theme.accentTeal
+                  : theme.navyInk;
+              const accentCol =
+                st.tone === "brick"
+                  ? theme.accentAlert
+                  : st.tone === "teal"
+                  ? theme.accentTeal
+                  : theme.inkMuted;
               return (
                 <g key={`p-st-${idx}`} transform={`translate(874, ${sy})`}>
                   <rect
                     width="640"
                     height="148"
                     rx="12"
-                    fill={theme.wellBg}
+                    fill={st.tone === "brick" ? theme.riskBg : theme.wellBg}
                     stroke={borderCol}
                     strokeWidth="2.2"
                   />
-                  <text x="28" y="44" fontFamily={FONTS.mono} fontSize="13.5" fontWeight="700" fill={borderCol}>
-                    STAGE 0{idx + 1} · {st.label.toUpperCase()}
-                  </text>
-                  <text x="28" y="92" fontFamily={FONTS.mono} fontSize="34" fontWeight="700" fill={theme.inkHeadline} style={TABULAR_NUM_STYLE}>
-                    {st.metric}
-                  </text>
-                  <text x="28" y="124" fontFamily={FONTS.sans} fontSize="16" fontWeight="600" fill={theme.inkMuted}>
-                    {st.detail}
-                  </text>
+                  <rect x="0" y="16" width="5" height="116" rx="2.5" fill={borderCol} />
+                  <FittedSvgText
+                    text={`STAGE 0${idx + 1} · ${st.label.toUpperCase()}`}
+                    x={28}
+                    y={42}
+                    maxWidth={584}
+                    fontSize={13.5}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={accentCol}
+                  />
+                  <FittedSvgText
+                    text={st.metric}
+                    x={28}
+                    y={90}
+                    maxWidth={584}
+                    fontSize={34}
+                    minFontSize={20}
+                    fontFamily={FONTS.mono}
+                    fontWeight={700}
+                    fill={theme.inkHeadline}
+                    style={TABULAR_NUM_STYLE}
+                  />
+                  <FittedSvgText
+                    text={st.detail}
+                    x={28}
+                    y={124}
+                    maxWidth={584}
+                    fontSize={16}
+                    minFontSize={12}
+                    fontFamily={FONTS.sans}
+                    fontWeight={600}
+                    fill={theme.inkMuted}
+                  />
                 </g>
               );
             })}

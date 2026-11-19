@@ -1664,67 +1664,461 @@ export function detectContinuityEntity(text) {
   return undefined;
 }
 
-function extractStructuredBeatData(text, category, sourceCitation) {
-  const regex =
-    /([$€£])?\s*(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(%|percent\b|trillion\b|billion\b|million\b|thousand\b|gigawatts?\b|terawatt-hours?\b|megawatt-day\b))?/gi;
-  const metrics = [];
-  let m = regex.exec(text);
-  while (m !== null) {
-    const prefix = m[1] || "";
-    const numeric = Number((m[2] || "").replace(/,/g, ""));
-    const unitRaw = (m[3] || "").toLowerCase();
-    const isBareYear = !prefix && !unitRaw && Number.isInteger(numeric) && numeric >= 1900 && numeric <= 2099;
-    if (Number.isFinite(numeric) && !isBareYear && (prefix || unitRaw)) {
-      let suffix = "";
-      if (unitRaw === "%" || unitRaw === "percent") suffix = "%";
-      else if (unitRaw === "trillion") suffix = "T";
-      else if (unitRaw === "billion") suffix = "B";
-      else if (unitRaw === "million") suffix = "M";
-      else if (unitRaw === "thousand") suffix = "K";
-      else if (unitRaw.startsWith("gigawatt")) suffix = " GW";
-      else if (unitRaw.startsWith("terawatt")) suffix = " TWh";
-      else if (unitRaw.startsWith("megawatt")) suffix = "/MW-day";
-      metrics.push({ raw: `${prefix}${m[2]}${suffix}`, numeric, unit: suffix || prefix });
+const PLANNER_SPELLED_NUMBERS = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+};
+
+function parseSpelledNumber(rawWords) {
+  const cleaned = String(rawWords || "")
+    .toLowerCase()
+    .replace(/\b(a|an|and)\b/g, " ")
+    .replace(/[-]+/g, " ")
+    .trim();
+  if (!cleaned) return null;
+  if (cleaned === "half" || cleaned === "one half") return 50;
+  if (cleaned === "one third" || cleaned === "a third") return 33;
+  if (cleaned === "two thirds") return 67;
+  if (cleaned === "one quarter" || cleaned === "a quarter") return 25;
+  if (cleaned === "three quarters") return 75;
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  let total = 0;
+  let matchedAny = false;
+  for (const tok of tokens) {
+    if (tok === "hundred") {
+      total = (total > 0 ? total : 1) * 100;
+      matchedAny = true;
+    } else if (PLANNER_SPELLED_NUMBERS[tok] !== undefined) {
+      total += PLANNER_SPELLED_NUMBERS[tok];
+      matchedAny = true;
+    } else {
+      return null;
     }
-    m = regex.exec(text);
   }
+  return matchedAny ? total : null;
+}
+
+function inferMetricRowLabel(text, hitIndex, raw, idx) {
+  const windowLeft = text.slice(Math.max(0, hitIndex - 42), hitIndex).toLowerCase();
+  const windowBoth = text
+    .slice(Math.max(0, hitIndex - 36), Math.min(text.length, hitIndex + raw.length + 36))
+    .toLowerCase();
+
+  if (/paycheck|payroll|income tax/.test(windowBoth)) return "Paycheck & Income Share";
+  if (/corporate/.test(windowBoth)) return "Corporate Tax Share";
+  if (/national debt|federal debt|trillion in debt/.test(windowBoth)) return "Federal Debt";
+  if (/bond interest|interest payment|debt service|1\.83|2\.1/.test(windowBoth)) return "Annual Debt Interest";
+  if (/household/.test(windowBoth) && /debt|owe/.test(windowBoth)) return "Household Debt";
+  if (/mortgage|monthly/.test(windowBoth)) return "Monthly Housing Cost";
+  if (/free cash flow|capex/.test(windowBoth)) return "Hyperscale CapEx Shift";
+  if (/pjm|capacity auction|269\.92|833/.test(windowBoth)) return "Capacity Auction Rate";
+  if (/gigawatt|gw|load|capacity/.test(windowBoth)) return "Grid Load Demand";
+  if (/terawatt|twh|electricity|power/.test(windowBoth)) return "Power Consumption";
+  if (/ireland/.test(windowBoth)) return "Ireland Grid Share";
+  if (/ration|tinned meat/.test(windowBoth)) return "Ration Allocation";
+  if (/token/.test(windowBoth)) return "Token Compute Cap";
+  if (/cloud credit|aws|openai/.test(windowBoth)) return "Compute Credit Window";
+  if (/dividend|permanent fund|owed|alaska|wielechowski/.test(windowBoth)) {
+    return /veto|cut|actual|paid/.test(windowLeft) ? "Actual Payout" : "Statutory Formula";
+  }
+  if (/worker|labor|productivity|produce per hour/.test(windowBoth)) return "Productivity Index";
+  if (/shenzhen|yuan|expir/.test(windowBoth)) return "Digital Allowance";
+  if (/wait|queue|week/.test(windowBoth)) return "Interconnect Queue";
+  return idx === 0 ? "Primary Figure" : idx === 1 ? "Comparison Figure" : "Reference Baseline";
+}
+
+export function extractBeatMetrics(text) {
+  const hits = [];
+
+  const numericRegex =
+    /([+-])?\s*([$€£])?\s*(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(?:(trillion|billion|million|thousand|percent|percentage points?|gigawatts?|terawatt-hours?|megawatts?|kilowatts?|ration points?|basis points?|weeks?|years?)\b|(%)|([TBMK])\b)?(\/[A-Za-z-]+(?:\s+dollars)?)?/gi;
+  let m = numericRegex.exec(text);
+  while (m !== null) {
+    const sign = m[1] || "";
+    const prefix = m[2] || "";
+    const numRaw = m[3] || "";
+    const numStr = numRaw.replace(/,/g, "");
+    const absNumeric = Number(numStr);
+    const unitWord = (m[4] || "").toLowerCase();
+    const pctSym = m[5] || "";
+    const unitAbbr = (m[6] || "").toUpperCase();
+    const rateSuffix = m[7] || "";
+    const hasUnit = Boolean(unitWord || pctSym || unitAbbr || rateSuffix);
+    if (Number.isFinite(absNumeric)) {
+      const isBareYear =
+        !sign &&
+        !prefix &&
+        !hasUnit &&
+        Math.floor(absNumeric) === absNumeric &&
+        absNumeric >= 1900 &&
+        absNumeric <= 2099;
+      if (!isBareYear && (prefix || hasUnit)) {
+        let suffix = "";
+        if (pctSym === "%" || unitWord === "percent" || unitWord.indexOf("percentage point") === 0) suffix = "%";
+        else if (unitWord === "trillion" || unitAbbr === "T") suffix = "T";
+        else if (unitWord === "billion" || unitAbbr === "B") suffix = "B";
+        else if (unitWord === "million" || unitAbbr === "M") suffix = "M";
+        else if (unitWord === "thousand" || unitAbbr === "K") suffix = "K";
+        else if (unitWord.indexOf("gigawatt") === 0) suffix = " GW";
+        else if (unitWord.indexOf("terawatt") === 0) suffix = " TWh";
+        else if (unitWord.indexOf("megawatt") === 0) suffix = " MW";
+        else if (unitWord.indexOf("kilowatt") === 0) suffix = " kW";
+        else if (unitWord.indexOf("ration point") === 0) suffix = " pts";
+        else if (unitWord.indexOf("basis point") === 0) suffix = " bps";
+        else if (unitWord.indexOf("week") === 0) suffix = " wks";
+        else if (unitWord.indexOf("year") === 0) suffix = " yrs";
+        if (rateSuffix && rateSuffix.charAt(0) === "/") {
+          suffix = suffix + rateSuffix.trim();
+        }
+        const numeric = sign === "-" ? -absNumeric : absNumeric;
+        const raw = sign + prefix + numRaw + suffix;
+        hits.push({
+          raw,
+          numeric,
+          unit: suffix.trim() || prefix || "%",
+          labelHint: inferMetricRowLabel(text, m.index, raw, hits.length),
+          index: m.index,
+        });
+      }
+    }
+    m = numericRegex.exec(text);
+  }
+
+  const wordUnit =
+    "(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)";
+  const spelledRegex = new RegExp(
+    `\\b(negative\\s+|minus\\s+)?(?:(two[- ]thirds|one[- ]third|three[- ]quarters|one[- ]quarter|one[- ]half)|((?:(?:a\\s+)?hundred(?:\\s+and)?\\s+)?${wordUnit}(?:[-\\s]+${wordUnit}){0,2})\\s+(percent(?:age\\s+points?)?|trillion(?:\\s+dollars)?|billion(?:\\s+dollars)?|million(?:\\s+dollars)?|gigawatts?|terawatt-hours?|megawatts?|kilowatts?|ration\\s+points?|basis\\s+points?|dollars))\\b`,
+    "gi"
+  );
+
+  let sm = spelledRegex.exec(text);
+  while (sm !== null) {
+    const dir = (sm[1] || "").toLowerCase();
+    const isNeg = dir.indexOf("negative") !== -1 || dir.indexOf("minus") !== -1;
+    const sign = isNeg ? "-" : "";
+    const frac = sm[2];
+    const wordNum = sm[3];
+    const unitRaw = (sm[4] || "").toLowerCase();
+
+    if (frac) {
+      const fv = parseSpelledNumber(frac);
+      if (fv !== null) {
+        const raw = sign + String(fv) + "%";
+        hits.push({
+          raw,
+          numeric: isNeg ? -fv : fv,
+          unit: "%",
+          labelHint: inferMetricRowLabel(text, sm.index, raw, hits.length),
+          index: sm.index,
+        });
+      }
+    } else if (wordNum && unitRaw) {
+      const nv = parseSpelledNumber(wordNum);
+      if (nv !== null) {
+        let prefix = "";
+        let suffix = "";
+        const trailingCtx = text.slice(sm.index, sm.index + sm[0].length + 28).toLowerCase();
+        const isNonCurrencyMacro =
+          /\b(tokens?|watts?|bytes?|people|jobs?|workers?|citizens?|ration)\b/.test(trailingCtx);
+        if (unitRaw.indexOf("percent") === 0) suffix = "%";
+        else if (unitRaw.indexOf("trillion") === 0) {
+          prefix = unitRaw.indexOf("dollar") !== -1 || !isNonCurrencyMacro ? "$" : "";
+          suffix = "T";
+        } else if (unitRaw.indexOf("billion") === 0) {
+          prefix = unitRaw.indexOf("dollar") !== -1 || !isNonCurrencyMacro ? "$" : "";
+          suffix = "B";
+        } else if (unitRaw.indexOf("million") === 0) {
+          prefix = unitRaw.indexOf("dollar") !== -1 || !isNonCurrencyMacro ? "$" : "";
+          suffix = "M";
+        } else if (unitRaw.indexOf("gigawatt") === 0) suffix = " GW";
+        else if (unitRaw.indexOf("terawatt") === 0) suffix = " TWh";
+        else if (unitRaw.indexOf("megawatt") === 0) suffix = " MW";
+        else if (unitRaw.indexOf("kilowatt") === 0) suffix = " kW";
+        else if (unitRaw.indexOf("ration") === 0) suffix = " pts";
+        else if (unitRaw.indexOf("basis") === 0) suffix = " bps";
+        else if (unitRaw === "dollars") prefix = "$";
+
+        const raw = sign + prefix + String(nv) + suffix;
+        hits.push({
+          raw,
+          numeric: isNeg ? -nv : nv,
+          unit: suffix.trim() || prefix || "%",
+          labelHint: inferMetricRowLabel(text, sm.index, raw, hits.length),
+          index: sm.index,
+        });
+      }
+    }
+    sm = spelledRegex.exec(text);
+  }
+
+  hits.sort((a, b) => a.index - b.index);
+  const out = [];
+  const seen = new Set();
+  for (const h of hits) {
+    const key = String(h.numeric) + ":" + h.unit;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push({ raw: h.raw, numeric: h.numeric, unit: h.unit, labelHint: h.labelHint });
+    }
+  }
+  return out;
+}
+
+const HERO_PROP_RULES = [
+  { propId: "W2WithholdingGuillotine", pattern: /paycheck|payroll|income tax|w-?2|table\s*9|84(?:\.1)?\s*percent/i },
+  { propId: "IrsForm941Slicer", pattern: /corporate\s+tax|7\s*percent|form\s*941|tax\s+cut/i },
+  { propId: "DebtMonolithWall", pattern: /40\.5\s*trillion|forty\s+trillion|national\s+debt|18\.8\s*trillion/i },
+  { propId: "TreasuryBondVault", pattern: /treasury|bond\s+interest|2\.1\s*trillion|two\s+trillion|1\.83\s*trillion/i },
+  { propId: "SpillwayDam3Tier", pattern: /chopping\s+block|medicare|priority|spillway/i },
+  { propId: "SocialSecurity2032Dial", pattern: /social\s+security|2032|2033|2036|trust\s+fund/i },
+  { propId: "RunningShoeExplodedStack", pattern: /running\s+shoe|sneaker|factory\s+wage|retail\s+price/i },
+  { propId: "PaloAltoFlipWhiteboard", pattern: /palo\s+alto|startup|whiteboard|engineer/i },
+  { propId: "ClaireAustinHouseRig", pattern: /claire|austin|3,400|refinance/i },
+  { propId: "MortgageDeed30YrIron", pattern: /mortgage|underwater|2009|home\s+equity/i },
+  { propId: "BritishRationBook1941", pattern: /1941|ministry\s+of\s+food|ration|sixteen\s+points|tinned\s+meat/i },
+  { propId: "CoalScripBrassToken1912", pattern: /scrip|coal|1912|1938|paint\s+creek|island\s+creek|company\s+store/i },
+  { propId: "ShenzhenExpiringWallet", pattern: /shenzhen|suzhou|digital\s+yuan|e-cny|expir/i },
+  { propId: "ClosedScripWalletRig", pattern: /closed\s+loop|closed\s+wallet|allowance|company\s+town/i },
+  { propId: "CloudCreditTollgate", pattern: /aws|openai|cloud\s+credit|compute\s+credit/i },
+  { propId: "GovernorVetoFountainPen", pattern: /veto|bill\s+walker|one\s+signature|cut\s+her\s+check/i },
+  { propId: "SupremeCourtBenchGavel", pattern: /supreme\s+court|wielechowski|constitution|statutory/i },
+  { propId: "PjmAuctionMeter", pattern: /\bpjm\b|269\.92|833\s*percent|capacity\s+auction/i },
+  { propId: "HighVoltageSubstationRig", pattern: /gigawatt|terawatt|415|945|ireland|west\s+london|substation/i },
+  { propId: "Transformer128WeekQueue", pattern: /transformer|128\s*week|interconnect|copper\s+wire|queue/i },
+  { propId: "NuclearCoolingTowerLock", pattern: /three\s+mile\s+island|nuclear|constellation|reactor/i },
+  { propId: "TokenDeflationFurnace", pattern: /token|nvidia|jensen\s+huang|unit\s+cost/i },
+  { propId: "AutonomousAgentTerminal", pattern: /uber|agent|software|developer/i },
+  { propId: "CircularGpuSpvCarousel", pattern: /alphabet|amazon|meta|microsoft|oracle|free\s+cash\s+flow/i },
+  { propId: "EmptyAirlineGate14A", pattern: /airline|empty\s+seat|plane\s+pushes\s+back/i },
+  { propId: "PunchClock1955VsApiKey", pattern: /1947|harry\s+truman|labor\s+data|produce\s+per\s+hour/i },
+  { propId: "FedFiatPrintingPress", pattern: /stimulus|fed\b|fiat|central\s+bank|2020/i },
+  { propId: "BondVigilanteScale", pattern: /irving\s+fisher|1933|debt\s+deflation/i },
+];
+
+export function matchPropIdsForBeat(text) {
+  const matches = [];
+  for (let i = 0; i < HERO_PROP_RULES.length; i++) {
+    const rule = HERO_PROP_RULES[i];
+    if (rule.pattern.test(text)) {
+      matches.push(rule.propId);
+      if (matches.length >= 2) break;
+    }
+  }
+  return matches.length > 0 ? matches : undefined;
+}
+
+export function extractTimelineYears(text) {
+  const yearRegex = /\b(19\d{2}|20\d{2})\b/g;
+  const years = [];
+  const seen = new Set();
+  let ym = yearRegex.exec(text);
+  while (ym !== null) {
+    if (!seen.has(ym[1])) {
+      seen.add(ym[1]);
+      years.push(ym[1]);
+    }
+    ym = yearRegex.exec(text);
+  }
+  years.sort();
+  return years.length > 0 ? years : undefined;
+}
+
+export function extractStructuredBeatData(text, category, sourceCitation, recipeMeta, geoInfo) {
+  const metrics = extractBeatMetrics(text);
   const primary = metrics[0];
   const secondary = metrics[1];
-  const tableRows =
+  const years = extractTimelineYears(text);
+
+  const isDataOrExhibitBeat = Boolean(
+    recipeMeta &&
+      [
+        "macro-telemetry",
+        "forensic-exhibits",
+        "system-simulators",
+        "ui-satire-collage",
+        "data-maps-3d",
+        "doc-broadcast",
+        "vintage-editorial",
+        "diagram-metaphor",
+        "liquid-glass",
+      ].indexOf(recipeMeta.styleWorld || recipeMeta.styleFamily || "") !== -1
+  );
+
+  let tableRows =
     metrics.length > 0
-      ? metrics.slice(0, 3).map((item, idx) => ({
-          label: idx === 0 ? "Primary Figure" : idx === 1 ? "Counterpart" : "Reference",
+      ? metrics.slice(0, 4).map((item, idx) => ({
+          label: item.labelHint,
           value: item.raw,
           isHighlight: idx === 0,
-          isFlagged: category === "warning-escalation" && idx === 0,
+          isFlagged: (category === "warning-escalation" && idx === 0) || item.numeric < 0,
         }))
       : undefined;
+
+  if (!tableRows && isDataOrExhibitBeat) {
+    const shortClause = text.split(/[.;!?]/)[0]?.trim().slice(0, 42) || "Institutional Record";
+    tableRows = [
+      {
+        label: geoInfo?.highlightLabel || "Mechanism",
+        value: shortClause,
+        isHighlight: true,
+        isFlagged: category === "warning-escalation",
+      },
+      {
+        label: "Record Status",
+        value: sourceCitation ? "Cited Filing" : category === "warning-escalation" ? "Risk Constraint" : "Structural Shift",
+      },
+    ];
+  }
+
   const seriesData =
-    primary && secondary
-      ? [
-          { xLabel: "Baseline", primary: primary.numeric, unit: primary.unit },
-          { xLabel: "Comparison", primary: secondary.numeric, unit: secondary.unit, isThreshold: category === "warning-escalation" },
-        ]
-      : undefined;
-  const exhibitData = sourceCitation
+    metrics.length >= 2
+      ? metrics.slice(0, 4).map((item, idx) => ({
+          xLabel: years && years[idx] ? years[idx] : item.labelHint.slice(0, 14),
+          primary: item.numeric,
+          ...(idx === 0 && secondary ? { secondary: secondary.numeric } : {}),
+          unit: item.unit,
+          isThreshold: category === "warning-escalation" && idx === metrics.length - 1,
+        }))
+      : primary && years && years.length >= 2
+        ? years.slice(0, 3).map((yr, idx) => ({
+            xLabel: yr,
+            primary: idx === years.length - 1 ? primary.numeric : Number((primary.numeric * (0.45 + idx * 0.25)).toFixed(1)),
+            unit: primary.unit,
+            isThreshold: category === "warning-escalation" && idx === years.length - 1,
+          }))
+        : primary
+          ? [
+              { xLabel: "Baseline", primary: 0, unit: primary.unit },
+              {
+                xLabel: primary.labelHint.slice(0, 14),
+                primary: primary.numeric,
+                unit: primary.unit,
+                isThreshold: category === "warning-escalation",
+              },
+            ]
+          : undefined;
+
+  const isExhibitOrFilingBeat =
+    Boolean(sourceCitation) ||
+    category === "receipt-proof" ||
+    category === "warning-escalation" ||
+    category === "history-archive" ||
+    Boolean(recipeMeta && (recipeMeta.styleWorld === "forensic-exhibits" || recipeMeta.styleWorld === "ui-satire-collage"));
+
+  const cleanClause = text.replace(/#[0-9a-f]{3,8}\b/gi, "").trim().slice(0, 160);
+  const docketNumber = /table\s*9/i.test(text)
+    ? "TABLE-09"
+    : /wielechowski/i.test(text)
+      ? "CASE-S16107"
+      : /1941|ministry\s+of\s+food/i.test(text)
+        ? "ORDER-1941-DEC"
+        : /1938|fair\s+labor/i.test(text)
+          ? "USC-29-SEC-203"
+          : /pjm/i.test(text)
+            ? "PJM-2025-AUC"
+            : /10-k|alphabet|amazon|meta|microsoft/i.test(text)
+              ? "SEC-10K-FY26"
+              : undefined;
+
+  const exhibitData = isExhibitOrFilingBeat
     ? {
-        filingTitle: sourceCitation,
-        highlightedClause: text.slice(0, 140),
-        stampLabel: category === "warning-escalation" ? "RISK SIGNAL" : "VERIFIED",
+        filingTitle: sourceCitation || "Institutional Economic Record",
+        highlightedClause: cleanClause,
+        ...(docketNumber ? { statuteOrDocket: docketNumber } : {}),
+        ...(years && years[0] ? { effectiveDate: years[0] } : {}),
+        stampLabel:
+          category === "warning-escalation"
+            ? "RISK SIGNAL"
+            : category === "history-archive"
+              ? "ARCHIVAL RECORD"
+              : "VERIFIED",
       }
     : undefined;
-  return {
-    tableRows,
-    seriesData,
-    exhibitData,
-    data: {
-      ...(primary ? { primaryMetric: primary.raw } : {}),
-      ...(secondary ? { secondaryMetric: secondary.raw } : {}),
-      ...(tableRows ? { tableRows } : {}),
-      ...(seriesData ? { seriesData } : {}),
-      ...(exhibitData ? { exhibitData } : {}),
-    },
+
+  const upperSeries =
+    seriesData && seriesData.length >= 2
+      ? seriesData.map((pt) => pt.primary)
+      : primary
+        ? [Number((primary.numeric * 0.65).toFixed(1)), Number((primary.numeric * 0.85).toFixed(1)), primary.numeric]
+        : undefined;
+  const lowerSeries =
+    seriesData && seriesData.length >= 2
+      ? seriesData.map((pt, idx) =>
+          typeof pt.secondary === "number"
+            ? pt.secondary
+            : secondary
+              ? secondary.numeric
+              : Number((pt.primary * (0.4 - idx * 0.08)).toFixed(1))
+        )
+      : undefined;
+
+  const topStream = /tax|paycheck|treasury/i.test(text)
+    ? ["Paycheck Withholding", "Treasury General Account", "Debt & Mandatory Outlays"]
+    : /power|grid|gigawatt|pjm/i.test(text)
+      ? ["Hyperscale AI Load", "Regional Transmission Queue", "Retail Utility Rate"]
+      : ["Primary Revenue Source", "Institutional Clearing", "Recipient Disbursement"];
+
+  const bottomNodes = [
+    tableRows?.[0]?.label ?? "Primary Flow",
+    tableRows?.[1]?.label ?? "Offset Rail",
+    sourceCitation ? sourceCitation.slice(0, 26) : "Settled Ledger",
+  ];
+
+  const isRationBeat = /1941|ration|ministry\s+of\s+food|points?/i.test(text);
+  const rationTotal = isRationBeat
+    ? primary && primary.numeric >= 4 && primary.numeric <= 48
+      ? Math.round(primary.numeric)
+      : 16
+    : undefined;
+
+  const isStatutoryPayoutBeat = /wielechowski|permanent\s+fund|formula|owed|veto|dividend/i.test(text);
+  const formulaPayout = isStatutoryPayoutBeat ? (primary?.numeric ?? 2000) : undefined;
+  const actualPayout = isStatutoryPayoutBeat ? (secondary?.numeric ?? Math.round((primary?.numeric ?? 2000) * 0.5)) : undefined;
+
+  const data = {
+    ...(primary ? { primaryMetric: primary.raw } : {}),
+    ...(secondary ? { secondaryMetric: secondary.raw } : {}),
+    ...(tableRows ? { tableRows } : {}),
+    ...(seriesData ? { seriesData } : {}),
+    ...(exhibitData ? { exhibitData } : {}),
+    ...(years ? { years } : {}),
+    ...(upperSeries ? { upperSeries, upperLabel: tableRows?.[0]?.label ?? "Primary Series" } : {}),
+    ...(lowerSeries ? { lowerSeries, lowerLabel: tableRows?.[1]?.label ?? "Counterpart Series" } : {}),
+    ...(exhibitData ? { holdingSummary: exhibitData.highlightedClause } : {}),
+    ...(formulaPayout !== undefined ? { formulaPayout, actualPayout } : {}),
+    ...(rationTotal !== undefined ? { totalCoupons: rationTotal, redeemedCoupons: rationTotal } : {}),
+    topStream,
+    bottomNodes,
   };
+
+  return { tableRows, seriesData, exhibitData, data };
 }
 
 function synthesizeProsodyTimedWords(text, totalFrames) {
@@ -2446,6 +2840,11 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       currentThShare < Math.min(0.38, targetTalkingHeadShare + 0.025) &&
       (isPrePeakQuiet || needTalkingHead || currentFullThBeatRatio < 0.145);
 
+    const geoInfo = extractGeoQuery(seg.text);
+    const hasGeoTarget = Boolean(
+      geoInfo?.corridorId || geoInfo?.region || geoInfo?.highlightLabel
+    );
+
     const priorityIds = CATEGORY_RECIPE_PRIORITIES[category] || [];
     const candidateRecipes = [];
     const seenIds = new Set();
@@ -2462,7 +2861,16 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       }
     }
 
-    let chosen = candidateRecipes[0] || STYLE_CATALOG[0];
+    let chosen =
+      candidateRecipes.find(
+        (rec) =>
+          hasGeoTarget ||
+          (rec.componentHint !== "MapExplainer" &&
+            rec.id !== "data-corridor-arc-matrix" &&
+            rec.id !== "CorridorArcMatrixCard")
+      ) ||
+      candidateRecipes[0] ||
+      STYLE_CATALOG[0];
     if (isHeroPeak) {
       const investigation = RECIPE_BY_ID["doc-visual-investigation"];
       chosen =
@@ -2477,6 +2885,14 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
           if (prevFamily && rec.styleFamily === prevFamily) continue;
           if (rec.peakOnly && !isHeroPeak) continue;
           if (isPrePeakQuiet && rec.styleFamily === "doc-broadcast") continue;
+          if (
+            !hasGeoTarget &&
+            (rec.componentHint === "MapExplainer" ||
+              rec.id === "data-corridor-arc-matrix" ||
+              rec.id === "CorridorArcMatrixCard")
+          ) {
+            continue;
+          }
 
           const lastCompIdx = lastUsedBeatByComponent[rec.componentHint];
           if (pass === 0 && lastCompIdx !== undefined && i - lastCompIdx < 6) {
@@ -2567,7 +2983,13 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
         ? "page"
         : "over-footage";
 
-    const structured = extractStructuredBeatData(seg.text, category, sourceCitation);
+    const structured = extractStructuredBeatData(
+      seg.text,
+      category,
+      sourceCitation,
+      chosen,
+      geoInfo
+    );
     const isDepthBeat =
       enableDepthSandwich &&
       !isFullTalkingHead &&
@@ -2593,7 +3015,6 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       vaultNovelty.typographyWeights
     );
 
-    const geoInfo = extractGeoQuery(seg.text);
     const continuityEntityId = detectContinuityEntity(seg.text);
     if (continuityEntityId) {
       structured.data.continuityStage =
@@ -2604,7 +3025,11 @@ export function buildDraftDirectorPlan(rawSegments, options = {}) {
       !isFullTalkingHead && paletteMode === "page" && matchedSetPiece ? matchedSetPiece : undefined;
     if (activeSetPiece) usedSetPieces.add(activeSetPiece.id);
     const setPieceId = activeSetPiece ? activeSetPiece.id : chosen.setPieceId;
-    const propIds = activeSetPiece ? activeSetPiece.propIds : undefined;
+    const matchedPropIds = matchPropIdsForBeat(seg.text);
+    const combinedPropIds = Array.from(
+      new Set([...(activeSetPiece?.propIds || []), ...(matchedPropIds || [])])
+    );
+    const propIds = combinedPropIds.length > 0 ? combinedPropIds : undefined;
 
     let cameraAction =
       wordList.length <= 5 ? "verdict-slam" : VITERBI_CAMERA_ACTIONS[i % VITERBI_CAMERA_ACTIONS.length];

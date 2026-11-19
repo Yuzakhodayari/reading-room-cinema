@@ -1,15 +1,18 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { CameraPreviewStage } from "../components/glass/CameraPreviewStage";
+import { EditorialBackdrop } from "../components/EditorialBackdrop";
 import { LiquidGlassObject } from "../components/glass/LiquidGlassObject";
 import {
   GlassMagnifierCard,
+  GlassStatTriptych,
   GlassTelemetryStrip,
   GlassVerdictSeal,
 } from "../components/glass/LiquidGlassPresets";
 import { PresenterDepthStage } from "../components/glass/PresenterDepthStage";
 import { ObjectLayer, ObjectLayerStage } from "../components/layers/ObjectLayerStage";
 import { SfxCue, SfxTimeline } from "../components/SfxCue";
+import { SourceBadge } from "../components/SourceBadge";
 import { FONTS, TABULAR_NUM_STYLE } from "../design/fonts";
 import { COLORS, OVER_FOOTAGE_PALETTE, PAGE_PALETTE } from "../design/tokens";
 import { SceneBlueprintRenderer } from "../generative";
@@ -593,127 +596,311 @@ export const CINEMA_16_PILLAR_CHAPTERS: readonly CinemaPillarChapterSpec[] = [
 ];
 
 const StenographyChapterStage: React.FC = () => {
+  const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const heroSentence =
+    "Individual paychecks fund 84.1% of federal revenue while corporate receipts fell to 7.1%.";
   const chiselWords = useMemo(
-    () =>
-      synthesizeTimedWords(
-        "Individual paychecks fund 84.1% of federal revenue while corporate receipts fell to 7%.",
-        56,
-        fps
-      ),
+    () => synthesizeTimedWords(heroSentence, 44, fps),
     [fps]
   );
   const verdictWords = useMemo(
-    () => synthesizeTimedWords("WE CALL THAT AN ALLOWANCE.", 56, fps),
+    () => synthesizeTimedWords("WE CALL THAT AN ALLOWANCE.", 46, fps),
     [fps]
   );
 
+  const prosodyPills = chiselWords.slice(0, 12);
+
   return (
-    <AbsoluteFill
-      style={{
-        backgroundColor: PAGE_PALETTE.paperLight,
-        padding: "96px 112px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <div
-        style={{
-          borderBottom: `2px solid ${PAGE_PALETTE.navy}`,
-          paddingBottom: "18px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: FONTS.mono,
-            fontSize: "13px",
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            color: PAGE_PALETTE.brickRed,
-          }}
-        >
-          CINEMA STENOGRAPHY · 32 WHISPER-SYNCED MODES
-        </span>
-        <span
-          style={{
-            fontFamily: FONTS.mono,
-            fontSize: "12px",
-            color: PAGE_PALETTE.muted,
-            ...TABULAR_NUM_STYLE,
-          }}
-        >
-          SYLLABLE PROSODY CLOCK · -14.0 LUFS
-        </span>
-      </div>
-
-      <div style={{ marginTop: "12px" }}>
-        <KineticText
-          text="Individual paychecks fund 84.1% of federal revenue while corporate receipts fell to 7%."
-          timedWords={chiselWords}
-          mode="chisel-highlighter-sweep"
-          atFrame={0}
-          duration={54}
-          fontSize={38}
-          paletteMode="page"
-          color={PAGE_PALETTE.navy}
-          highlightColor={PAGE_PALETTE.brickRed}
-          enableSfx={false}
-        />
-      </div>
-
-      <div
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      <EditorialBackdrop driftSpeed={0.2} showGrid tone="light" />
+      <AbsoluteFill
         style={{
           display: "flex",
-          gap: "32px",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: "center",
         }}
       >
         <div
           style={{
-            flex: 1,
-            padding: "22px 28px",
-            borderRadius: "14px",
-            backgroundColor: PAGE_PALETTE.navyDeep,
-          }}
-        >
-          <KineticText
-            text="PJM AUCTION +833% · $269.92/MW-DAY"
-            mode="solari-split-flap"
-            atFrame={0}
-            duration={50}
-            fontSize={26}
-            paletteMode="over-footage"
-            color={OVER_FOOTAGE_PALETTE.textHeadline}
-            enableSfx={false}
-          />
-        </div>
-
-        <div
-          style={{
-            padding: "22px 32px",
-            borderRadius: "14px",
+            position: "relative",
+            width: "1480px",
             backgroundColor: PAGE_PALETTE.paper,
-            border: `2px solid ${PAGE_PALETTE.brickRed}`,
+            color: PAGE_PALETTE.navy,
+            borderRadius: "10px",
+            border: `1px solid ${PAGE_PALETTE.paperBorder}`,
+            boxShadow:
+              "0 24px 52px -14px rgba(28, 43, 58, 0.16), 0 4px 16px rgba(28, 43, 58, 0.06)",
+            padding: "40px 52px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "24px",
+            boxSizing: "border-box",
+            overflow: "hidden",
           }}
         >
-          <KineticText
-            text="WE CALL THAT AN ALLOWANCE."
-            timedWords={verdictWords}
-            mode="verdict-anvil-slam"
-            atFrame={4}
-            duration={50}
-            fontSize={30}
-            paletteMode="page"
-            color={PAGE_PALETTE.brickRed}
-            enableSfx={false}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "4px",
+              backgroundColor: PAGE_PALETTE.navy,
+            }}
           />
+
+          {/* 1. Masthead */}
+          <div
+            style={{
+              borderBottom: `2px solid ${PAGE_PALETTE.navy}`,
+              paddingBottom: "14px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: FONTS.mono,
+                fontSize: "13px",
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                color: PAGE_PALETTE.brickRed,
+              }}
+            >
+              CINEMA STENOGRAPHY · 32 WHISPER-SYNCED MODES
+            </span>
+            <span
+              style={{
+                fontFamily: FONTS.mono,
+                fontSize: "12.5px",
+                fontWeight: 600,
+                color: PAGE_PALETTE.muted,
+                ...TABULAR_NUM_STYLE,
+              }}
+            >
+              SYLLABLE PROSODY CLOCK · -14.0 LUFS
+            </span>
+          </div>
+
+          {/* 2. Hero Chisel Highlighter Sweep */}
+          <div
+            style={{
+              backgroundColor: PAGE_PALETTE.paperLight,
+              border: `1px solid ${PAGE_PALETTE.paperBorder}`,
+              borderRadius: "8px",
+              padding: "24px 30px",
+            }}
+          >
+            <KineticText
+              text={heroSentence}
+              timedWords={chiselWords}
+              mode="chisel-highlighter-sweep"
+              atFrame={0}
+              duration={44}
+              fontSize={38}
+              paletteMode="page"
+              color={PAGE_PALETTE.navy}
+              highlightColor={PAGE_PALETTE.brickRed}
+              enableSfx={false}
+            />
+          </div>
+
+          {/* 3. Middle 2-Column Comparative Stage */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.08fr 0.92fr",
+              gap: "24px",
+              alignItems: "stretch",
+            }}
+          >
+            {/* Left: Solari Split-Flap Telemetry Board */}
+            <div
+              style={{
+                padding: "24px 28px",
+                borderRadius: "10px",
+                backgroundColor: PAGE_PALETTE.navyDeep,
+                border: `1px solid ${OVER_FOOTAGE_PALETTE.glassBorder}`,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: FONTS.mono,
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  color: OVER_FOOTAGE_PALETTE.accentPrimary,
+                }}
+              >
+                SOLARI SPLIT-FLAP TELEMETRY BOARD
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <KineticText
+                  text="PAYROLL 84.1% · CORP 7.1%"
+                  mode="solari-split-flap"
+                  atFrame={0}
+                  duration={42}
+                  fontSize={22}
+                  paletteMode="over-footage"
+                  color={OVER_FOOTAGE_PALETTE.textHeadline}
+                  enableSfx={false}
+                />
+                <KineticText
+                  text="2036 INTEREST $2.1T"
+                  mode="solari-split-flap"
+                  atFrame={6}
+                  duration={40}
+                  fontSize={22}
+                  paletteMode="over-footage"
+                  color={OVER_FOOTAGE_PALETTE.textHeadline}
+                  enableSfx={false}
+                />
+              </div>
+              <div
+                style={{
+                  fontFamily: FONTS.mono,
+                  fontSize: "11.5px",
+                  color: OVER_FOOTAGE_PALETTE.textMuted,
+                  borderTop: "1px solid rgba(191, 214, 234, 0.2)",
+                  paddingTop: "10px",
+                  ...TABULAR_NUM_STYLE,
+                }}
+              >
+                TREASURY TABLE 9 · CBO BASELINE PROJECTION
+              </div>
+            </div>
+
+            {/* Right: Veto Fountain Strike + Prosody Word-Pill Timeline */}
+            <div
+              style={{
+                padding: "24px 28px",
+                borderRadius: "10px",
+                backgroundColor: PAGE_PALETTE.paperLight,
+                border: `1px solid ${PAGE_PALETTE.paperBorder}`,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: FONTS.mono,
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  color: PAGE_PALETTE.brickRed,
+                }}
+              >
+                VETO FOUNTAIN STRIKE · WHISPER WORD SYNC
+              </div>
+
+              <KineticText
+                text="FRIDAY PAYCHECK -> SOVEREIGN ALLOWANCE"
+                mode="veto-fountain-strike"
+                atFrame={0}
+                duration={44}
+                fontSize={26}
+                paletteMode="page"
+                color={PAGE_PALETTE.navy}
+                highlightColor={PAGE_PALETTE.brickRed}
+                enableSfx={false}
+              />
+
+              <div
+                style={{
+                  fontFamily: FONTS.sans,
+                  fontSize: "14px",
+                  lineHeight: 1.45,
+                  color: PAGE_PALETTE.muted,
+                }}
+              >
+                Nominal household obligations stay locked while discretionary pay erodes.
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px",
+                  paddingTop: "8px",
+                  borderTop: `1px solid ${PAGE_PALETTE.paperBorder}`,
+                }}
+              >
+                {prosodyPills.map((w, idx) => {
+                  const isActive = frame >= w.startFrame && frame <= w.endFrame;
+                  const isSpoken = frame > w.endFrame;
+                  return (
+                    <span
+                      key={`pill-${idx}`}
+                      style={{
+                        fontFamily: FONTS.mono,
+                        fontSize: "11px",
+                        fontWeight: isActive ? 700 : 600,
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        backgroundColor: isActive
+                          ? PAGE_PALETTE.brickRed
+                          : isSpoken
+                            ? PAGE_PALETTE.navy
+                            : PAGE_PALETTE.paper,
+                        color:
+                          isActive || isSpoken
+                            ? PAGE_PALETTE.paperLight
+                            : PAGE_PALETTE.muted,
+                        border: `1px solid ${
+                          isActive ? PAGE_PALETTE.brickRed : PAGE_PALETTE.paperBorder
+                        }`,
+                        ...TABULAR_NUM_STYLE,
+                      }}
+                    >
+                      {w.word}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Footer Verdict Strip */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "24px",
+              padding: "18px 26px",
+              borderRadius: "10px",
+              backgroundColor: PAGE_PALETTE.paperLight,
+              border: `2px solid ${PAGE_PALETTE.brickRed}`,
+            }}
+          >
+            <KineticText
+              text="WE CALL THAT AN ALLOWANCE."
+              timedWords={verdictWords}
+              mode="verdict-anvil-slam"
+              atFrame={4}
+              duration={46}
+              fontSize={30}
+              paletteMode="page"
+              color={PAGE_PALETTE.brickRed}
+              enableSfx={false}
+            />
+            <SourceBadge
+              sourceText="U.S. Treasury Monthly Statement · Table 9"
+              startFrame={4}
+              paletteMode="page"
+              style={{ position: "relative", bottom: "auto", left: "auto" }}
+            />
+          </div>
         </div>
-      </div>
+      </AbsoluteFill>
     </AbsoluteFill>
   );
 };
@@ -764,11 +951,11 @@ export const Cinema16PillarShowcase: React.FC = () => {
             tone: "liability",
           }}
           behindPresenter={
-            <div style={{ position: "absolute", right: "140px", bottom: "110px" }}>
+            <div style={{ position: "absolute", right: "72px", bottom: "60px" }}>
               <PropVaultRenderer
                 propId="DebtMonolithWall"
-                width={320}
-                height={230}
+                width={430}
+                height={295}
                 paletteMode="over-footage"
               />
             </div>
@@ -803,7 +990,8 @@ export const Cinema16PillarShowcase: React.FC = () => {
           eyebrow: "MACRO TELEMETRY · MIDNIGHT REGISTER",
           title: "Productivity (+278%) vs Real Hourly Pay (+119%)",
           subtitle: "Post-1973 decoupling across U.S. nonfarm payrolls",
-          metric: "84.1%",
+          metric: "DIV +159 PTS",
+          register: "midnight_telemetry",
           sourceCitation: "U.S. Bureau of Labor Statistics (BLS)",
           paletteMode: "page",
           atFrame: 0,
@@ -818,7 +1006,9 @@ export const Cinema16PillarShowcase: React.FC = () => {
           eyebrow: "FORENSIC EXHIBIT · ARCHIVAL PARCHMENT",
           title: "Wielechowski v. State (Alaska 2016)",
           subtitle: "Statutory dividend formulas yield to annual executive budget vetoes.",
-          metric: "-50%",
+          metric: "-74%",
+          register: "archival_parchment",
+          data: { formulaPayout: 3900, actualPayout: 1000 },
           sourceCitation: "Alaska Supreme Court, 403 P.3d 1141",
           paletteMode: "page",
           atFrame: 0,
@@ -874,12 +1064,38 @@ export const Cinema16PillarShowcase: React.FC = () => {
       {/* 8. Pillar #1 18-Preset Smoked-Navy Liquid Glass Rigs */}
       <Sequence from={420} durationInFrames={60}>
         <CameraPreviewStage previewMode="simulated-room">
-          <div style={{ position: "absolute", right: "68px", top: "130px" }}>
+          <div style={{ position: "absolute", left: "68px", top: "96px" }}>
+            <GlassStatTriptych
+              width={840}
+              eyebrow="EPISODE 01 · FISCAL TELEMETRY"
+              title="Federal Receipts vs. Sovereign Balance"
+              stats={[
+                { label: "Payroll Share", value: "84.1%", delta: "Individual W-2 & FICA" },
+                { label: "Corporate Tax", value: "7.1%", delta: "-3.7 pts FY25", isRisk: true },
+                { label: "Federal Debt", value: "$40.5T", delta: "Compounding Baseline", isRisk: true },
+              ]}
+              citation="U.S. Treasury Monthly Statement, Table 9"
+              enableSfx={false}
+            />
+          </div>
+          <div style={{ position: "absolute", right: "68px", top: "96px" }}>
             <GlassMagnifierCard
+              width={580}
               title="SEC Form 10-K Footnote 14"
-              clauseCode="OPTICAL 2.0X LOUPE"
+              clauseCode="FILING EXCERPT"
               focusedSnippet="Useful server depreciation schedules extended from 3 years to 6 years, lifting reported operating income."
               citation="SEC EDGAR Quarterly Filings"
+              enableSfx={false}
+            />
+          </div>
+          <div style={{ position: "absolute", right: "68px", top: "454px" }}>
+            <GlassVerdictSeal
+              width={580}
+              docketOrStatute="TREASURY TABLE 9"
+              stampLabel="VERIFIED FILING"
+              headline="Net Interest Overtakes Discretionary Outlays"
+              impactFigure="$2.1T"
+              impactSubtext="Annual CBO Debt Interest by 2036"
               enableSfx={false}
             />
           </div>
@@ -888,17 +1104,46 @@ export const Cinema16PillarShowcase: React.FC = () => {
               position: "absolute",
               left: 0,
               right: 0,
-              bottom: "48px",
+              bottom: "44px",
               display: "flex",
               justifyContent: "center",
             }}
           >
             <GlassTelemetryStrip
+              width={1440}
               tag="18 GLASS RIGS"
               channels={[
-                { label: "Payroll Tax", value: "84.1%", delta: "+2.3%" },
-                { label: "Corp Share", value: "7.0%", isRisk: true },
-                { label: "Net Interest", value: "$1.18T", isRisk: true },
+                {
+                  id: "payroll",
+                  label: "Payroll Share",
+                  value: "84.1%",
+                  delta: "+2.3%",
+                  sparkline: [0.68, 0.72, 0.75, 0.78, 0.81, 0.83, 0.86],
+                },
+                {
+                  id: "corp",
+                  label: "Corporate Tax",
+                  value: "7.1%",
+                  delta: "-3.7%",
+                  isRisk: true,
+                  sparkline: [0.84, 0.76, 0.68, 0.56, 0.44, 0.34, 0.24],
+                },
+                {
+                  id: "debt",
+                  label: "Federal Debt",
+                  value: "$40.5T",
+                  delta: "+6.8%",
+                  isRisk: true,
+                  sparkline: [0.24, 0.32, 0.43, 0.56, 0.69, 0.82, 0.94],
+                },
+                {
+                  id: "interest",
+                  label: "2036 Interest",
+                  value: "$2.1T",
+                  delta: "CBO Est.",
+                  isRisk: true,
+                  sparkline: [0.18, 0.25, 0.35, 0.48, 0.63, 0.79, 0.95],
+                },
               ]}
               sourceTag="U.S. Treasury Fiscal Data"
               enableSfx={false}
@@ -912,13 +1157,14 @@ export const Cinema16PillarShowcase: React.FC = () => {
         <StenographyChapterStage />
       </Sequence>
 
-      {/* Top-Right Non-Intrusive Showcase Index Badge */}
+      {/* Top-Center Non-Intrusive Showcase Index Badge */}
       <div
         style={{
           position: "absolute",
-          top: "24px",
-          right: "36px",
-          padding: "6px 14px",
+          top: "12px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          padding: "4px 14px",
           borderRadius: "999px",
           backgroundColor: "rgba(15, 25, 35, 0.82)",
           border: "1px solid rgba(191, 214, 234, 0.34)",

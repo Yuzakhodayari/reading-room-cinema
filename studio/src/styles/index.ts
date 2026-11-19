@@ -27,20 +27,32 @@ import { PresenterDepthStage } from "../components/glass/PresenterDepthStage";
 import { TreasuryOverlayCard } from "../compositions/TreasuryOverlayCard";
 import { TreasuryTable9Scene } from "../compositions/TreasuryTable9Scene";
 import { RegisterId } from "../design/tokens";
-import { CameraFraming, StyleEngineFamily, StyleRecipe } from "../director/schema";
+import {
+  CameraFraming,
+  DirectorExhibitData,
+  DirectorSeriesPoint,
+  DirectorTableRow,
+  StyleEngineFamily,
+  StyleRecipe,
+} from "../director/schema";
+import { BlueprintThemeRegister } from "../generative/blueprintTypes";
 import { IsometricDiorama3D } from "../generative/IsometricDiorama3D";
 import { SceneBlueprintRenderer } from "../generative/SceneBlueprintRenderer";
-import { CorridorId } from "../maps";
+import { CorridorId, resolveGeoQuery } from "../maps";
 import { DataTicker } from "../typography/DataTicker";
 import { EditorialHeadline } from "../typography/EditorialHeadline";
-import { KineticText } from "../typography/KineticText";
+import { isTypographyMode, KineticText, KineticTextMode } from "../typography/KineticText";
 import {
   BlobSimulation,
   CorridorArcMatrixCard,
+  CorridorLedgerMetric,
   DATA_MAPS_3D_STYLES,
   DataPhysicalCard,
+  IsometricModelBlock,
   IsometricStrataCutaway3D,
   MapExplainer,
+  PhysicalColumnSpec,
+  StrataLayerSpec,
   WhiteModel3D,
 } from "./dataMaps3D";
 import {
@@ -48,6 +60,8 @@ import {
   DIAGRAM_METAPHOR_STYLES,
   InstructionManualCard,
   IsometricScene,
+  ManualStepItem,
+  PatentCalloutPart,
   PatentExplodedDiagram,
   StickerCutout,
   StickFigureStage,
@@ -81,6 +95,7 @@ import {
   EvidenceCorkboardChronology,
   FORENSIC_EXHIBIT_STYLES,
   FannieMaeCovenantExhibit,
+  FiscalLedgerRow,
   FiscalLedgerTableStage,
   FoiaRedactionDeclassify,
   InsuranceRateHikeNotice,
@@ -97,6 +112,7 @@ import {
 } from "./forensicExhibits";
 import {
   AuctionPriceShockwave,
+  AuctionStepDatum,
   BandwidthConcentrationBar,
   BaseTelemetryProps,
   CapexVsDepreciationGap,
@@ -171,6 +187,7 @@ import {
   ProgrammableRuleBuilderUI,
   RefinanceDenialModal,
   RoofDroneEscrowShock,
+  SatireLineItem,
   SubscriptionTrapStack,
   TermsOfServiceScrollTrap,
   ThermalReceiptInflationRoll,
@@ -185,6 +202,7 @@ import {
   CollageCutout,
   CompanyScripVoucher,
   DepressionLedger1930s,
+  LedgerLine1930,
   MicroficheReaderStage,
   Newsreel1920s,
   SilentFilmCard,
@@ -409,6 +427,14 @@ export interface StyleRecipeRenderProps {
   enableSfx?: boolean;
   blueprintId?: string;
   corridorId?: CorridorId;
+  geoQuery?: string;
+  spokenText?: string;
+  register?: RegisterId | (string & {});
+  propIds?: string[];
+  tableRows?: DirectorTableRow[];
+  seriesData?: DirectorSeriesPoint[];
+  exhibitData?: DirectorExhibitData;
+  data?: Record<string, unknown>;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -487,23 +513,197 @@ function inferDomainTagsFromText(
   return out;
 }
 
+function isPlainRecord(val: unknown): val is Record<string, unknown> {
+  return typeof val === "object" && val !== null && !Array.isArray(val);
+}
+
+function readDataRecord(p?: StyleRecipeRenderProps): Record<string, unknown> | undefined {
+  return isPlainRecord(p?.data) ? p.data : undefined;
+}
+
+function readStr(rec: Record<string, unknown> | undefined, key: string): string | undefined {
+  if (!rec) return undefined;
+  const v = rec[key];
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+function readNum(rec: Record<string, unknown> | undefined, key: string): number | undefined {
+  if (!rec) return undefined;
+  const v = rec[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function readStrArray(rec: Record<string, unknown> | undefined, key: string): string[] | undefined {
+  if (!rec) return undefined;
+  const v = rec[key];
+  if (!Array.isArray(v)) return undefined;
+  const out = v.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return out.length > 0 ? out : undefined;
+}
+
+function readNumArray(rec: Record<string, unknown> | undefined, key: string): number[] | undefined {
+  if (!rec) return undefined;
+  const v = rec[key];
+  if (!Array.isArray(v)) return undefined;
+  const out = v.filter((item): item is number => typeof item === "number" && Number.isFinite(item));
+  return out.length > 0 ? out : undefined;
+}
+
+function readTableRows(p?: StyleRecipeRenderProps): DirectorTableRow[] | undefined {
+  const raw = Array.isArray(p?.tableRows)
+    ? p.tableRows
+    : Array.isArray(p?.data?.tableRows)
+      ? p.data.tableRows
+      : undefined;
+  if (!raw || raw.length === 0) return undefined;
+  const out: DirectorTableRow[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (isPlainRecord(item) && typeof item.label === "string" && typeof item.value === "string") {
+      out.push({
+        label: item.label,
+        value: item.value,
+        ...(typeof item.delta === "string" ? { delta: item.delta } : {}),
+        ...(typeof item.isFlagged === "boolean" ? { isFlagged: item.isFlagged } : {}),
+        ...(typeof item.isHighlight === "boolean" ? { isHighlight: item.isHighlight } : {}),
+      });
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function readSeriesData(p?: StyleRecipeRenderProps): DirectorSeriesPoint[] | undefined {
+  const raw = Array.isArray(p?.seriesData)
+    ? p.seriesData
+    : Array.isArray(p?.data?.seriesData)
+      ? p.data.seriesData
+      : undefined;
+  if (!raw || raw.length === 0) return undefined;
+  const out: DirectorSeriesPoint[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (
+      isPlainRecord(item) &&
+      typeof item.xLabel === "string" &&
+      typeof item.primary === "number" &&
+      Number.isFinite(item.primary)
+    ) {
+      out.push({
+        xLabel: item.xLabel,
+        primary: item.primary,
+        ...(typeof item.secondary === "number" && Number.isFinite(item.secondary)
+          ? { secondary: item.secondary }
+          : {}),
+        ...(typeof item.unit === "string" ? { unit: item.unit } : {}),
+        ...(typeof item.isThreshold === "boolean" ? { isThreshold: item.isThreshold } : {}),
+      });
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function readExhibitData(p?: StyleRecipeRenderProps): DirectorExhibitData | undefined {
+  const raw = isPlainRecord(p?.exhibitData)
+    ? p.exhibitData
+    : isPlainRecord(p?.data?.exhibitData)
+      ? p.data.exhibitData
+      : undefined;
+  if (!raw) return undefined;
+  return {
+    ...(typeof raw.exhibitCode === "string" ? { exhibitCode: raw.exhibitCode } : {}),
+    ...(typeof raw.filingTitle === "string" ? { filingTitle: raw.filingTitle } : {}),
+    ...(typeof raw.statuteOrDocket === "string" ? { statuteOrDocket: raw.statuteOrDocket } : {}),
+    ...(typeof raw.highlightedClause === "string" ? { highlightedClause: raw.highlightedClause } : {}),
+    ...(typeof raw.stampLabel === "string" ? { stampLabel: raw.stampLabel } : {}),
+    ...(typeof raw.effectiveDate === "string" ? { effectiveDate: raw.effectiveDate } : {}),
+  };
+}
+
+function resolveValidRegisterId(raw?: string): RegisterId | undefined {
+  if (!raw) return undefined;
+  const norm = raw.trim().toLowerCase();
+  if (norm === "archival_parchment" || norm === "archival-light-table") return "archival_parchment";
+  if (
+    norm === "midnight_telemetry" ||
+    norm === "geospatial-telemetry" ||
+    norm === "investigation-switchboard"
+  ) {
+    return "midnight_telemetry";
+  }
+  if (norm === "drafting_blueprint" || norm === "blueprint-schematic") return "drafting_blueprint";
+  if (norm === "vintage_newsreel" || norm === "silver-gelatin-chronicle") return "vintage_newsreel";
+  if (
+    norm === "page_editorial" ||
+    norm === "paper_editorial" ||
+    norm === "milk-page-editorial" ||
+    norm === "restraint-vellum"
+  ) {
+    return "page_editorial";
+  }
+  return undefined;
+}
+
+function resolveBlueprintRegister(raw?: string): BlueprintThemeRegister | undefined {
+  return resolveValidRegisterId(raw);
+}
+
+function resolveMetricTuple(p?: StyleRecipeRenderProps): {
+  primary: string;
+  secondary: string;
+  delta?: string;
+  hasExplicitPrimary: boolean;
+  hasExplicitSecondary: boolean;
+} {
+  const dataRec = readDataRecord(p);
+  const rows = readTableRows(p);
+  const rawPrimary = p?.metric ?? readStr(dataRec, "primaryMetric") ?? rows?.[0]?.value;
+  const rawSecondary = p?.secondaryMetric ?? readStr(dataRec, "secondaryMetric") ?? rows?.[1]?.value;
+  const delta = p?.delta ?? readStr(dataRec, "deltaLabel") ?? rows?.[0]?.delta;
+  return {
+    primary: rawPrimary ?? "84.1%",
+    secondary: rawSecondary ?? "7.1%",
+    delta,
+    hasExplicitPrimary: Boolean(rawPrimary),
+    hasExplicitSecondary: Boolean(rawSecondary),
+  };
+}
+
+function parseLeadingNum(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const cleaned = raw.replace(/,/g, "");
+  const m = cleaned.match(/-?\d+(?:\.\d+)?/);
+  if (!m) return undefined;
+  const val = Number(m[0]);
+  return Number.isFinite(val) ? val : undefined;
+}
+
 function renderGlassPresetById(
   presetId: GlassPresetId,
   p?: StyleRecipeRenderProps
 ): React.ReactElement {
   const title = p?.title ?? p?.headline ?? "Primary Fiscal Record";
-  const sub = p?.subtitle ?? p?.body ?? "Verified primary-source ledger metric";
-  const metric = p?.metric ?? "84.1%";
-  const secMetric = p?.secondaryMetric ?? "7.1%";
-  const cite = p?.sourceCitation ?? "U.S. Treasury Monthly Statement, Table 9";
+  const sub = p?.subtitle ?? p?.body ?? p?.spokenText ?? "Verified primary-source ledger metric";
+  const rows = readTableRows(p);
+  const series = readSeriesData(p);
+  const exhibit = readExhibitData(p);
+  const { primary: metric, secondary: secMetric, delta } = resolveMetricTuple(p);
+  const cite = exhibit?.filingTitle ?? p?.sourceCitation ?? "U.S. Treasury Monthly Statement, Table 9";
+
+  const row0 = rows?.[0];
+  const row1 = rows?.[1];
+  const row2 = rows?.[2];
 
   switch (presetId) {
     case "card":
       return React.createElement(GlassCard, {
         title,
-        badge: p?.eyebrow ?? "Key Record",
+        badge: p?.eyebrow ?? exhibit?.stampLabel ?? "Key Record",
         subtitle: sub,
-        metric: { value: metric, label: "Primary Share", delta: p?.delta },
+        metric: {
+          value: metric,
+          label: row0?.label ?? "Primary Share",
+          delta,
+        },
         citation: cite,
         enableSfx: p?.enableSfx,
         className: p?.className,
@@ -513,18 +713,18 @@ function renderGlassPresetById(
       return React.createElement(GlassCornerPill, {
         label: title,
         value: metric,
-        badge: p?.eyebrow ?? "LIVE",
+        badge: p?.eyebrow ?? exhibit?.stampLabel ?? "LIVE",
         enableSfx: p?.enableSfx,
         className: p?.className,
         style: p?.style,
       });
     case "bottom-dock":
       return React.createElement(GlassBottomDock, {
-        caption: p?.eyebrow ?? "FISCAL SPLIT",
+        caption: p?.eyebrow ?? "LEDGER SPLIT",
         items: [
-          { label: title, value: metric, active: true },
-          { label: "Corporate Share", value: secMetric },
-          { label: "Debt Service", value: "$1.18T" },
+          { label: row0?.label ?? title, value: row0?.value ?? metric, active: true },
+          { label: row1?.label ?? "Counterpart", value: row1?.value ?? secMetric },
+          { label: row2?.label ?? "Source Record", value: row2?.value ?? (delta ?? "Verified") },
         ],
         enableSfx: p?.enableSfx,
         className: p?.className,
@@ -534,9 +734,9 @@ function renderGlassPresetById(
       return React.createElement(GlassFloatingToolbar, {
         prefix: p?.eyebrow ?? "ACT",
         items: [
-          { tag: "I", label: title },
-          { tag: "II", label: "Mechanism" },
-          { tag: "III", label: "Verdict" },
+          { tag: "I", label: row0?.label ?? title },
+          { tag: "II", label: row1?.label ?? "Mechanism" },
+          { tag: "III", label: row2?.label ?? "Verdict" },
         ],
         rightSlot: metric,
         enableSfx: p?.enableSfx,
@@ -546,9 +746,9 @@ function renderGlassPresetById(
     case "toast-alert":
       return React.createElement(GlassToastAlert, {
         title,
-        message: sub,
+        message: exhibit?.highlightedClause ?? sub,
         variant: "warning",
-        tag: p?.eyebrow ?? "Risk Flag",
+        tag: p?.eyebrow ?? exhibit?.stampLabel ?? "Risk Flag",
         enableSfx: p?.enableSfx,
         className: p?.className,
         style: p?.style,
@@ -557,8 +757,8 @@ function renderGlassPresetById(
       return React.createElement(GlassSplitModal, {
         title,
         eyebrow: p?.eyebrow ?? "Bilateral Comparison",
-        left: { label: "Payroll Share", value: metric, highlight: true },
-        right: { label: "Corporate Share", value: secMetric, isRisk: true },
+        left: { label: row0?.label ?? "Baseline", value: row0?.value ?? metric, highlight: true },
+        right: { label: row1?.label ?? "Counterpart", value: row1?.value ?? secMetric, isRisk: true },
         footer: cite,
         enableSfx: p?.enableSfx,
         className: p?.className,
@@ -569,18 +769,18 @@ function renderGlassPresetById(
         heading: p?.eyebrow ?? "Archival Dossier",
         sheets: [
           {
-            exhibitCode: "EX-01",
-            title,
-            excerpt: sub,
-            metricValue: metric,
-            stamp: "VERIFIED",
+            exhibitCode: exhibit?.exhibitCode ?? "EX-01",
+            title: row0?.label ?? title,
+            excerpt: exhibit?.highlightedClause ?? sub,
+            metricValue: row0?.value ?? metric,
+            stamp: exhibit?.stampLabel ?? "VERIFIED",
           },
           {
             exhibitCode: "EX-02",
-            title: "Statutory Counter-Record",
+            title: row1?.label ?? "Counter-Record",
             excerpt: cite,
-            metricValue: secMetric,
-            isRisk: true,
+            metricValue: row1?.value ?? secMetric,
+            isRisk: Boolean(row1?.isFlagged ?? true),
           },
         ],
         citation: cite,
@@ -593,9 +793,24 @@ function renderGlassPresetById(
         title,
         eyebrow: p?.eyebrow ?? "Evidence Chain",
         nodes: [
-          { code: "01", label: "Baseline Lock", value: metric, status: "verified" },
-          { code: "02", label: "Structural Shift", value: secMetric, status: "risk" },
-          { code: "03", label: "Primary Source", detail: cite, status: "verified" },
+          {
+            code: "01",
+            label: row0?.label ?? "Baseline Lock",
+            value: row0?.value ?? metric,
+            status: row0?.isFlagged ? "risk" : "verified",
+          },
+          {
+            code: "02",
+            label: row1?.label ?? "Structural Shift",
+            value: row1?.value ?? secMetric,
+            status: "risk",
+          },
+          {
+            code: "03",
+            label: row2?.label ?? "Primary Source",
+            detail: row2?.value ?? cite,
+            status: "verified",
+          },
         ],
         enableSfx: p?.enableSfx,
         className: p?.className,
@@ -604,8 +819,8 @@ function renderGlassPresetById(
     case "magnifier-card":
       return React.createElement(GlassMagnifierCard, {
         title,
-        clauseCode: p?.eyebrow ?? "STATUTORY ZOOM",
-        focusedSnippet: sub,
+        clauseCode: exhibit?.statuteOrDocket ?? exhibit?.exhibitCode ?? p?.eyebrow ?? "STATUTORY ZOOM",
+        focusedSnippet: exhibit?.highlightedClause ?? sub,
         citation: cite,
         enableSfx: p?.enableSfx,
         className: p?.className,
@@ -615,9 +830,9 @@ function renderGlassPresetById(
       return React.createElement(GlassTelemetryStrip, {
         tag: p?.eyebrow ?? "LIVE TELEMETRY",
         channels: [
-          { label: "Primary", value: metric, delta: p?.delta ?? "+2.3%" },
-          { label: "Secondary", value: secMetric, isRisk: true },
-          { label: "Net Carry", value: "$1.18T", isRisk: true },
+          { label: row0?.label ?? "Primary", value: row0?.value ?? metric, delta: row0?.delta ?? delta },
+          { label: row1?.label ?? "Secondary", value: row1?.value ?? secMetric, isRisk: true },
+          { label: row2?.label ?? "Reference", value: row2?.value ?? (exhibit?.effectiveDate ?? cite), isRisk: Boolean(row2?.isFlagged) },
         ],
         sourceTag: cite,
         enableSfx: p?.enableSfx,
@@ -626,46 +841,72 @@ function renderGlassPresetById(
       });
     case "verdict-seal":
       return React.createElement(GlassVerdictSeal, {
-        stampLabel: p?.eyebrow ?? "STATUTORY LOCK",
+        stampLabel: exhibit?.stampLabel ?? p?.eyebrow ?? "STATUTORY LOCK",
         headline: title,
-        docketOrStatute: cite,
+        docketOrStatute: exhibit?.statuteOrDocket ?? cite,
         impactFigure: metric,
-        impactSubtext: sub,
+        impactSubtext: exhibit?.highlightedClause ?? sub,
         enableSfx: p?.enableSfx,
         className: p?.className,
         style: p?.style,
       });
-    case "compare-scale":
+    case "compare-scale": {
+      const wLeft = Math.max(5, Math.abs(series?.[0]?.primary ?? parseLeadingNum(row0?.value ?? metric) ?? 84));
+      const wRight = Math.max(5, Math.abs(series?.[1]?.primary ?? parseLeadingNum(row1?.value ?? secMetric) ?? 7));
       return React.createElement(GlassCompareScale, {
         title,
         eyebrow: p?.eyebrow ?? "Asymmetric Scale",
-        leftPan: { label: "Wage Base", displayValue: metric, weight: 84 },
-        rightPan: { label: "Corporate Tax", displayValue: secMetric, weight: 7, isRisk: true },
+        leftPan: { label: row0?.label ?? "Baseline", displayValue: row0?.value ?? metric, weight: wLeft },
+        rightPan: {
+          label: row1?.label ?? "Counterpart",
+          displayValue: row1?.value ?? secMetric,
+          weight: wRight,
+          isRisk: true,
+        },
         fulcrumLabel: cite,
         enableSfx: p?.enableSfx,
         className: p?.className,
         style: p?.style,
       });
-    case "timeline-scrubber":
+    }
+    case "timeline-scrubber": {
+      const milestones =
+        series && series.length >= 2
+          ? series.slice(0, 4).map((pt, idx) => ({
+              year: pt.xLabel,
+              label: rows?.[idx]?.label ?? (idx === series.length - 1 ? title : `Stage ${idx + 1}`),
+              value: `${pt.primary}${pt.unit ?? ""}`,
+              isRisk: Boolean(pt.isThreshold || idx === series.length - 1),
+            }))
+          : [
+              { year: exhibit?.effectiveDate ?? "Baseline", label: row0?.label ?? "Origin", value: row0?.value ?? metric },
+              { year: "Shift", label: row1?.label ?? "Transition", value: row1?.value ?? secMetric },
+              { year: "Current", label: title, value: metric, isRisk: true },
+            ];
       return React.createElement(GlassTimelineScrubber, {
         title: p?.eyebrow ?? "CHRONOLOGY",
-        milestones: [
-          { year: 1955, label: "Parity", value: "30%" },
-          { year: 2000, label: "Decoupling", value: "79%" },
-          { year: 2026, label: title, value: metric, isRisk: true },
-        ],
+        milestones,
         enableSfx: p?.enableSfx,
         className: p?.className,
         style: p?.style,
       });
+    }
     case "receipt-ticker":
       return React.createElement(GlassReceiptTicker, {
         headerTitle: title,
-        lines: [
-          { label: "Gross Inflow", amount: "+$4,420.00" },
-          { label: "Fixed Debt & Escrow", amount: "-$3,818.00", isDeduction: true },
-          { label: sub, amount: metric, highlight: true },
-        ],
+        lines:
+          rows && rows.length >= 2
+            ? rows.slice(0, 4).map((r, idx) => ({
+                label: r.label,
+                amount: r.value,
+                isDeduction: Boolean(r.isFlagged),
+                highlight: idx === 0 || Boolean(r.isHighlight),
+              }))
+            : [
+                { label: row0?.label ?? "Primary Figure", amount: metric, highlight: true },
+                { label: row1?.label ?? "Offset", amount: secMetric, isDeduction: true },
+                { label: sub, amount: delta ?? metric },
+              ],
         totalAmount: metric,
         totalIsRisk: true,
         enableSfx: p?.enableSfx,
@@ -676,8 +917,18 @@ function renderGlassPresetById(
       return React.createElement(GlassTerminalConsole, {
         sessionHeader: p?.eyebrow ?? "MACRO FEED // DESK-01",
         rows: [
-          { tickerOrKey: "PRIMARY", field: title, value: metric, status: "alert" },
-          { tickerOrKey: "OFFSET", field: "Secondary", value: secMetric, status: "nominal" },
+          {
+            tickerOrKey: "PRIMARY",
+            field: row0?.label ?? title,
+            value: row0?.value ?? metric,
+            status: "alert",
+          },
+          {
+            tickerOrKey: "OFFSET",
+            field: row1?.label ?? "Counterpart",
+            value: row1?.value ?? secMetric,
+            status: "nominal",
+          },
           { tickerOrKey: "SOURCE", field: "Filing", value: cite, status: "muted" },
         ],
         enableSfx: p?.enableSfx,
@@ -686,8 +937,8 @@ function renderGlassPresetById(
       });
     case "map-callout":
       return React.createElement(GlassMapCallout, {
-        locationName: title,
-        corridorTag: p?.eyebrow ?? "CHOKEPOINT",
+        locationName: p?.geoQuery ? title : title,
+        corridorTag: p?.corridorId ?? p?.eyebrow ?? "CORRIDOR TELEMETRY",
         primaryMetric: metric,
         summary: sub,
         isChokepointAlert: true,
@@ -700,9 +951,23 @@ function renderGlassPresetById(
         eyebrow: p?.eyebrow ?? "PRIMARY LEDGER",
         title,
         stats: [
-          { label: "Payroll Share", value: metric, delta: p?.delta ?? "+2.3%", isRisk: true },
-          { label: "Corporate Tax", value: secMetric, delta: "-3.7%" },
-          { label: "Interest Wall", value: "$1.18T", isRisk: true },
+          {
+            label: row0?.label ?? "Primary",
+            value: row0?.value ?? metric,
+            delta: row0?.delta ?? delta,
+            isRisk: true,
+          },
+          {
+            label: row1?.label ?? "Counterpart",
+            value: row1?.value ?? secMetric,
+            delta: row1?.delta,
+          },
+          {
+            label: row2?.label ?? "Context",
+            value: row2?.value ?? (exhibit?.effectiveDate ?? "Verified"),
+            delta: row2?.delta,
+            isRisk: Boolean(row2?.isFlagged),
+          },
         ],
         citation: cite,
         enableSfx: p?.enableSfx,
@@ -711,7 +976,7 @@ function renderGlassPresetById(
       });
     case "quote-citation":
       return React.createElement(GlassQuoteCitation, {
-        quote: sub,
+        quote: exhibit?.highlightedClause ?? sub,
         author: title,
         roleOrSource: cite,
         enableSfx: p?.enableSfx,
@@ -845,9 +1110,14 @@ function renderDocBroadcastByComponent(
   const sub =
     p?.subtitle ??
     p?.body ??
+    p?.spokenText ??
     "Corporate income tax collections declined to 7.1% across the same fiscal window.";
-  const cite = p?.sourceCitation ?? "U.S. Treasury Monthly Statement, Table 9";
-  const metric = p?.metric ?? "84.1%";
+  const rows = readTableRows(p);
+  const series = readSeriesData(p);
+  const exhibit = readExhibitData(p);
+  const dataRec = readDataRecord(p);
+  const cite = exhibit?.filingTitle ?? p?.sourceCitation ?? "U.S. Treasury Monthly Statement, Table 9";
+  const { primary: metric, secondary: secMetric, delta } = resolveMetricTuple(p);
   const mode = p?.paletteMode;
 
   switch (componentName) {
@@ -855,7 +1125,7 @@ function renderDocBroadcastByComponent(
       return React.createElement(NewsPackageLowerThird, {
         title,
         source: cite,
-        category: p?.eyebrow ?? "Fiscal Report",
+        category: p?.eyebrow ?? exhibit?.stampLabel ?? "Fiscal Report",
         subheadline: sub,
         metricBadge: metric,
         paletteMode: mode,
@@ -864,49 +1134,76 @@ function renderDocBroadcastByComponent(
     case "CaptionNewsCard":
       return React.createElement(CaptionNewsCard, {
         headline: title,
-        body: sub,
-        dateline: p?.eyebrow ?? "TREASURY DISPATCH",
+        body: exhibit?.highlightedClause ?? sub,
+        dateline: exhibit?.exhibitCode ?? p?.eyebrow ?? "TREASURY DISPATCH",
         metric,
+        metricLabel: rows?.[0]?.label,
+        bullets: rows && rows.length >= 2 ? rows.slice(0, 3).map((r) => `${r.label}: ${r.value}`) : undefined,
         sourceCitation: cite,
         paletteMode: mode,
         atFrame: p?.atFrame,
       });
-    case "VisualInvestigationBoard":
+    case "VisualInvestigationBoard": {
+      const evidenceItems =
+        rows && rows.length > 0
+          ? rows.slice(0, 3).map((r, idx) => ({
+              id: `ev-${idx + 1}`,
+              label: r.label,
+              value: r.value,
+              delta: r.delta ?? (idx === 0 ? delta : undefined),
+              isFlagged: Boolean(r.isFlagged ?? idx === 0),
+            }))
+          : [
+              { id: "ev-1", label: "Primary Figure", value: metric, delta: delta ?? "+2.3%", isFlagged: true },
+              { id: "ev-2", label: "Counterpart", value: secMetric, isFlagged: false },
+              { id: "ev-3", label: "Filing", value: exhibit?.effectiveDate ?? cite, isFlagged: true },
+            ];
       return React.createElement(VisualInvestigationBoard, {
         boardTitle: title,
-        caseCode: p?.eyebrow ?? "EXHIBIT BOARD 01",
-        summaryNote: sub,
+        caseCode: exhibit?.exhibitCode ?? p?.eyebrow ?? "EXHIBIT BOARD 01",
+        summaryNote: exhibit?.highlightedClause ?? sub,
         sourceCitation: cite,
         paletteMode: mode,
         atFrame: p?.atFrame,
-        evidenceItems: [
-          { id: "ev-1", label: "Payroll Share", value: metric, delta: p?.delta ?? "+2.3%", isFlagged: true },
-          { id: "ev-2", label: "Corporate Share", value: p?.secondaryMetric ?? "7.1%", delta: "-3.7%" },
-          { id: "ev-3", label: "Net Interest Wall", value: "$1.18T", isFlagged: true },
-        ],
+        evidenceItems,
       });
+    }
     case "ArchiveLightTable":
       return React.createElement(ArchiveLightTable, {
-        folioCode: p?.eyebrow ?? "PLATEN 04 · 5000K DAYLIGHT",
+        folioCode: exhibit?.exhibitCode ?? p?.eyebrow ?? "PLATEN 04 · 5000K DAYLIGHT",
         title,
-        caption: sub,
+        caption: exhibit?.highlightedClause ?? sub,
         sourceCitation: cite,
       });
-    case "LiveCountdownSplit":
+    case "LiveCountdownSplit": {
+      const yr0 = parseLeadingNum(series?.[0]?.xLabel ?? readStrArray(dataRec, "years")?.[0]);
+      const yr1 = parseLeadingNum(
+        series?.[series.length - 1]?.xLabel ??
+          readStrArray(dataRec, "years")?.[readStrArray(dataRec, "years")!.length - 1]
+      );
       return React.createElement(LiveCountdownSplit, {
-        leftTitle: title,
-        rightTitle: sub,
+        leftTitle: rows?.[0]?.label ?? title,
+        rightTitle: rows?.[1]?.label ?? sub,
+        startYear: yr0 && yr0 >= 1900 ? yr0 : undefined,
+        endYear: yr1 && yr1 >= 1900 ? yr1 : undefined,
         metric,
+        leftMetric: rows?.[0]?.value ?? metric,
+        rightMetric: rows?.[1]?.value ?? secMetric,
         sourceCitation: cite,
         paletteMode: mode,
         atFrame: p?.atFrame,
+        duration: p?.duration,
       });
+    }
     case "TelestratorOverlay":
       return React.createElement(TelestratorOverlay, {
-        targetLabel: p?.eyebrow ?? "STATUTORY ANOMALY",
+        targetLabel: exhibit?.stampLabel ?? p?.eyebrow ?? "STATUTORY ANOMALY",
         calloutText: metric,
         evidenceTitle: title,
         evidenceSubtitle: sub,
+        evidenceRows: rows
+          ? rows.slice(0, 3).map((r) => ({ label: r.label, value: r.value, flagged: r.isFlagged }))
+          : undefined,
         sourceCitation: cite,
         showEvidenceBackdrop: mode !== "over-footage",
         atFrame: p?.atFrame,
@@ -917,28 +1214,33 @@ function renderDocBroadcastByComponent(
         numberText: metric,
         headerText: title,
         subtitle: sub,
+        category: p?.eyebrow,
+        deltaText: delta,
         sourceCitation: cite,
         paletteMode: mode,
         atFrame: p?.atFrame,
       });
     case "CitySymphonyFrame":
       return React.createElement(CitySymphonyFrame, {
-        locationTag: p?.eyebrow ?? "WASHINGTON, D.C.",
+        locationTag: p?.geoQuery ? (readStr(dataRec, "highlightLabel") ?? p?.eyebrow) : p?.eyebrow ?? "FEDERAL RECORD",
         title,
         metric,
       });
     case "SplitScreenFrame":
       return React.createElement(SplitScreenFrame, {
-        leftTitle: title,
-        rightTitle: sub,
+        leftTitle: rows?.[0]?.label ?? title,
+        rightTitle: rows?.[1]?.label ?? sub,
+        leftMetric: rows?.[0]?.value ?? metric,
+        rightMetric: rows?.[1]?.value ?? secMetric,
         sourceCitation: cite,
         paletteMode: mode,
         atFrame: p?.atFrame,
       });
     case "QuoteHighlightCard":
       return React.createElement(QuoteHighlightCard, {
-        quote: sub,
+        quote: exhibit?.highlightedClause ?? sub,
         speaker: title,
+        dateLabel: exhibit?.effectiveDate,
         sourceCitation: cite,
         paletteMode: mode,
         atFrame: p?.atFrame,
@@ -946,9 +1248,11 @@ function renderDocBroadcastByComponent(
     case "DataCalloutLowerThird":
       return React.createElement(DataCalloutLowerThird, {
         value: metric,
-        label: title,
-        delta: p?.delta,
+        label: rows?.[0]?.label ?? title,
+        delta,
+        sublabel: sub,
         source: cite,
+        sparklineValues: series && series.length >= 3 ? series.map((pt) => pt.primary) : undefined,
         paletteMode: mode,
         atFrame: p?.atFrame,
       });
@@ -958,6 +1262,7 @@ function renderDocBroadcastByComponent(
         kicker: p?.eyebrow ?? "STATUTORY BULLETIN",
         subheadline: sub,
         keyFigure: metric,
+        tickerItems: rows ? rows.slice(0, 3).map((r) => `${r.label}: ${r.value}`) : undefined,
         paletteMode: mode,
         atFrame: p?.atFrame,
       });
@@ -972,24 +1277,28 @@ function renderVintageEditorialByComponent(
   const sub =
     p?.subtitle ??
     p?.body ??
+    p?.spokenText ??
     "Nominal contracts remained fixed at par while farm and wage receipts contracted sharply.";
-  const cite = p?.sourceCitation ?? "National Archives Primary Collection";
-  const metric = p?.metric ?? "-48% WAGES";
+  const rows = readTableRows(p);
+  const exhibit = readExhibitData(p);
+  const cite = exhibit?.filingTitle ?? p?.sourceCitation ?? "National Archives Primary Collection";
+  const { primary: metric, secondary: secMetric } = resolveMetricTuple(p);
 
   switch (componentName) {
     case "Newsreel1920s":
       return React.createElement(Newsreel1920s, {
         headline: title,
-        tickerCaption: sub,
+        tickerCaption: exhibit?.highlightedClause ?? sub,
         metricBadge: metric,
-        placeDate: p?.eyebrow ?? "NEW YORK · 1929",
+        placeDate: exhibit?.effectiveDate ?? p?.eyebrow ?? "ARCHIVE · 1929",
         atFrame: p?.atFrame,
       });
     case "SilentFilmCard":
       return React.createElement(SilentFilmCard, {
         title,
-        dialogue: sub,
-        actLabel: p?.eyebrow ?? "ACT II",
+        dialogue: exhibit?.highlightedClause ?? sub,
+        actLabel: p?.eyebrow ?? exhibit?.exhibitCode ?? "ACT II",
+        yearTag: exhibit?.effectiveDate,
         sourceNote: cite,
         atFrame: p?.atFrame,
       });
@@ -998,7 +1307,7 @@ function renderVintageEditorialByComponent(
         eyebrow: p?.eyebrow ?? "ARCHIVE CLIPPING",
         title,
         metric,
-        caption: sub,
+        caption: exhibit?.highlightedClause ?? sub,
         sourceCitation: cite,
         paletteMode: p?.paletteMode ?? "page",
         atFrame: p?.atFrame,
@@ -1006,8 +1315,9 @@ function renderVintageEditorialByComponent(
     case "SpyTitleSequence":
       return React.createElement(SpyTitleSequence, {
         title,
-        subtitle: sub,
-        clearance: p?.eyebrow ?? "DECLASSIFIED DOSSIER",
+        subtitle: exhibit?.highlightedClause ?? sub,
+        dossierId: exhibit?.exhibitCode,
+        clearance: exhibit?.stampLabel ?? p?.eyebrow ?? "DECLASSIFIED DOSSIER",
         subjectMetric: metric,
         sourceCitation: cite,
         atFrame: p?.atFrame,
@@ -1020,41 +1330,59 @@ function renderVintageEditorialByComponent(
         metric,
         sourceCitation: cite,
       });
-    case "DepressionLedger1930s":
+    case "DepressionLedger1930s": {
+      const ledgerLines: LedgerLine1930[] | undefined =
+        rows && rows.length >= 2
+          ? rows.slice(0, 4).map((r) => ({
+              account: r.label,
+              debit: r.isFlagged ? r.value : "—",
+              credit: r.isFlagged ? "—" : r.value,
+              isRedInk: Boolean(r.isFlagged),
+            }))
+          : undefined;
       return React.createElement(DepressionLedger1930s, {
         title,
-        summaryCallout: sub,
+        folioYear: exhibit?.effectiveDate,
+        lines: ledgerLines,
+        summaryCallout: exhibit?.highlightedClause ?? sub,
         sourceCitation: cite,
         atFrame: p?.atFrame,
       });
+    }
     case "CompanyScripVoucher":
       return React.createElement(CompanyScripVoucher, {
         issuerName: title,
         denomination: metric,
-        restrictionClause: sub,
+        serialNumber: exhibit?.exhibitCode,
+        restrictionClause: exhibit?.highlightedClause ?? sub,
+        deductionSummary: secMetric,
         sourceCitation: cite,
         atFrame: p?.atFrame,
       });
     case "BrettonWoodsCable":
       return React.createElement(BrettonWoodsCable, {
         subject: title,
+        cableDate: exhibit?.effectiveDate,
+        messageLines: rows ? rows.slice(0, 3).map((r) => `${r.label}: ${r.value}`) : undefined,
         parityFigure: metric,
         sourceCitation: cite,
         atFrame: p?.atFrame,
       });
     case "BroadsheetFrontpage":
       return React.createElement(BroadsheetFrontpage, {
+        editionDate: exhibit?.effectiveDate,
         bannerHeadline: title,
-        leadBody: sub,
+        leadBody: exhibit?.highlightedClause ?? sub,
+        sideMetricLabel: rows?.[0]?.label,
         sideMetricValue: metric,
         sourceCitation: cite,
         atFrame: p?.atFrame,
       });
     default:
       return React.createElement(MicroficheReaderStage, {
-        rollIndex: p?.eyebrow ?? "MICROFILM REEL 88-C",
+        rollIndex: exhibit?.exhibitCode ?? p?.eyebrow ?? "MICROFILM REEL 88-C",
         documentTitle: title,
-        keyExcerpt: sub,
+        keyExcerpt: exhibit?.highlightedClause ?? sub,
         keyFigure: metric,
         sourceCitation: cite,
         atFrame: p?.atFrame,
@@ -1067,8 +1395,10 @@ function renderDiagramMetaphorByComponent(
   p?: StyleRecipeRenderProps
 ): React.ReactElement {
   const title = p?.title ?? p?.headline ?? "Structural Mechanism Schematic";
-  const sub = p?.subtitle ?? p?.body ?? "Step-by-step physical and statutory constraint flow.";
-  const cite = p?.sourceCitation ?? "Reading Room Technical Schematic";
+  const sub = p?.subtitle ?? p?.body ?? p?.spokenText ?? "Step-by-step physical and statutory constraint flow.";
+  const rows = readTableRows(p);
+  const exhibit = readExhibitData(p);
+  const cite = exhibit?.filingTitle ?? p?.sourceCitation ?? "Reading Room Technical Schematic";
   const displayMode = p?.paletteMode === "over-footage" ? "over-footage" : "page";
 
   switch (componentName) {
@@ -1089,26 +1419,40 @@ function renderDiagramMetaphorByComponent(
         eyebrow: p?.eyebrow ?? "HOUSEHOLD MECHANICS",
         title,
         subtitle: sub,
-        metricValue: p?.metric,
+        metricValue: p?.metric ?? rows?.[0]?.value,
+        metricLabel: rows?.[0]?.label,
         caption: cite,
         atFrame: p?.atFrame,
       });
-    case "InstructionManualCard":
+    case "InstructionManualCard": {
+      const steps: ManualStepItem[] | undefined =
+        rows && rows.length >= 2
+          ? rows.slice(0, 3).map((r, idx) => ({
+              stepNumber: idx + 1,
+              label: r.label,
+              fromLabel: r.value,
+              toLabel: r.delta ?? (r.isFlagged ? "LOCKED" : "ROUTED"),
+            }))
+          : undefined;
       return React.createElement(InstructionManualCard, {
         title,
         subtitle: sub,
         eyebrow: p?.eyebrow ?? "SPEC MANUAL · REV 04",
+        leftLabel: rows?.[0]?.label,
+        rightLabel: rows?.[1]?.label ?? rows?.[0]?.value,
+        steps,
         footnote: cite,
         mode: displayMode,
         atFrame: p?.atFrame,
       });
+    }
     case "CollageCutout":
       return React.createElement(DiagramCollageCutout, {
         mode: p?.paletteMode === "over-footage" ? "card" : "page",
         eyebrow: p?.eyebrow ?? "ARCHIVAL CLIPPING",
         title,
         subtitle: sub,
-        stampText: p?.metric ?? "EXHIBIT A",
+        stampText: p?.metric ?? exhibit?.stampLabel ?? "EXHIBIT A",
         atFrame: p?.atFrame,
       });
     case "IsometricScene":
@@ -1118,13 +1462,23 @@ function renderDiagramMetaphorByComponent(
         subtitle: sub,
         footnote: cite,
       });
-    default:
+    default: {
+      const parts: PatentCalloutPart[] | undefined =
+        rows && rows.length >= 2
+          ? rows.slice(0, 4).map((r, idx) => ({
+              refNumber: idx + 1,
+              partName: r.label,
+              specValue: r.value,
+            }))
+          : undefined;
       return React.createElement(PatentExplodedDiagram, {
-        patentNumber: p?.eyebrow ?? "U.S. PATENT SPEC · EXPLODED VIEW",
+        patentNumber: exhibit?.exhibitCode ?? p?.eyebrow ?? "U.S. PATENT SPEC · EXPLODED VIEW",
         title,
         subtitle: sub,
+        parts,
         atFrame: p?.atFrame,
       });
+    }
   }
 }
 
@@ -1134,65 +1488,217 @@ function renderDataMaps3DByComponent(
   forceTransitCorridor?: boolean
 ): React.ReactElement {
   const title = p?.title ?? p?.headline;
-  const sub = p?.subtitle ?? p?.body;
-  const cite = p?.sourceCitation;
+  const sub = p?.subtitle ?? p?.body ?? p?.spokenText;
+  const rows = readTableRows(p);
+  const series = readSeriesData(p);
+  const exhibit = readExhibitData(p);
+  const cite = exhibit?.filingTitle ?? p?.sourceCitation;
   const displayMode = p?.paletteMode === "over-footage" ? "over-footage" : "page";
+  const { primary, hasExplicitPrimary } = resolveMetricTuple(p);
+
+  const geoQueryText = p?.geoQuery ?? p?.spokenText;
+  const hasGeoInputs = Boolean(p?.corridorId || geoQueryText);
+  const geoScene = hasGeoInputs
+    ? resolveGeoQuery({
+        corridorId: p?.corridorId,
+        query: p?.geoQuery,
+        spokenText: p?.spokenText,
+        title,
+      })
+    : undefined;
+  const isRealGeoMatch = Boolean(
+    geoScene && geoScene.matchedBy !== "world-overview-fallback"
+  );
+
+  const buildPhysicalBlocks = (): PhysicalColumnSpec[] | undefined => {
+    if (!rows || rows.length < 2) return undefined;
+    const tones: Array<"navy" | "brick" | "teal" | "slate"> = ["navy", "brick", "teal", "slate"];
+    const blocks: PhysicalColumnSpec[] = [];
+    for (let i = 0; i < Math.min(4, rows.length); i++) {
+      const numVal = parseLeadingNum(rows[i].value);
+      if (numVal !== undefined) {
+        blocks.push({
+          label: rows[i].label,
+          value: Math.abs(numVal),
+          tone: rows[i].isFlagged ? "brick" : tones[i % tones.length],
+        });
+      }
+    }
+    return blocks.length >= 2 ? blocks : undefined;
+  };
 
   switch (componentName) {
-    case "MapExplainer":
+    case "MapExplainer": {
+      if (hasGeoInputs && !isRealGeoMatch) {
+        // Never render world:overview or Texas fallback on non-geographic sentences
+        return React.createElement(DataPhysicalCard, {
+          mode: displayMode,
+          eyebrow: p?.eyebrow ?? "STRUCTURAL TELEMETRY",
+          title,
+          subtitle: sub,
+          blocks: buildPhysicalBlocks(),
+          sourceCitation: cite,
+          atFrame: p?.atFrame,
+        });
+      }
       return React.createElement(MapExplainer, {
-        corridorId: p?.corridorId ?? (forceTransitCorridor ? "PJM_GRID" : undefined),
+        corridorId:
+          p?.corridorId ??
+          geoScene?.corridorId ??
+          (forceTransitCorridor && !geoQueryText ? "PJM_GRID" : undefined),
+        query: p?.geoQuery,
+        spokenText: p?.spokenText,
+        region: geoScene ? (geoScene.atlasDataset === "usa" ? "us" : "world") : undefined,
+        highlightStatesFips: geoScene
+          ? geoScene.atlasDataset === "usa"
+            ? geoScene.primaryStateFips
+            : geoScene.primaryCountryIds
+          : undefined,
+        highlightLabel: isRealGeoMatch ? geoScene?.title : undefined,
         eyebrow: p?.eyebrow,
         title,
         subtitle: sub,
-        metricValue: p?.metric,
+        metricValue: hasExplicitPrimary ? primary : undefined,
         sourceCitation: cite,
         paletteMode: p?.paletteMode ?? "page",
         atFrame: p?.atFrame,
       });
-    case "DataPhysicalCard":
+    }
+    case "DataPhysicalCard": {
+      const blocks = buildPhysicalBlocks();
+      const v1 = series?.[0]?.primary ?? parseLeadingNum(rows?.[0]?.value);
+      const v2 = series?.[1]?.primary ?? parseLeadingNum(rows?.[1]?.value);
       return React.createElement(DataPhysicalCard, {
         mode: displayMode,
         eyebrow: p?.eyebrow,
         title,
         subtitle: sub,
+        ...(blocks ? { blocks } : {}),
+        ...(rows?.[0]?.label ? { label1: rows[0].label } : {}),
+        ...(v1 !== undefined ? { value1: Math.max(1, Math.abs(v1)) } : {}),
+        ...(rows?.[1]?.label ? { label2: rows[1].label } : {}),
+        ...(v2 !== undefined ? { value2: Math.max(1, Math.abs(v2)) } : {}),
         sourceCitation: cite,
         atFrame: p?.atFrame,
       });
-    case "WhiteModel3D":
+    }
+    case "WhiteModel3D": {
+      const tones: Array<"navy" | "brick" | "teal" | "slate" | "paper"> = [
+        "navy",
+        "brick",
+        "teal",
+        "slate",
+      ];
+      let isoBlocks: IsometricModelBlock[] | undefined;
+      if (rows && rows.length >= 2) {
+        const numericRows = rows
+          .slice(0, 4)
+          .map((r) => ({ row: r, num: parseLeadingNum(r.value) }))
+          .filter((item): item is { row: DirectorTableRow; num: number } => item.num !== undefined);
+        if (numericRows.length >= 2) {
+          const maxAbs = Math.max(1, ...numericRows.map((x) => Math.abs(x.num)));
+          isoBlocks = numericRows.map((item, idx) => ({
+            id: `wm-${idx + 1}`,
+            label: item.row.label,
+            valueLabel: item.row.value,
+            gx: -2.4 + idx * 1.6,
+            gy: idx % 2 === 0 ? -0.6 : 0.6,
+            gw: 1.2,
+            gd: 1.2,
+            heightUnits: Math.max(0.8, Number(((Math.abs(item.num) / maxAbs) * 4.5).toFixed(2))),
+            tone: item.row.isFlagged ? "brick" : tones[idx % tones.length],
+          }));
+        }
+      }
       return React.createElement(WhiteModel3D, {
         mode: displayMode,
         eyebrow: p?.eyebrow,
         title,
         subtitle: sub,
-        datumLabel: cite,
+        blocks: isoBlocks,
+        datumLabel: hasExplicitPrimary ? `${primary} · ${cite ?? "PRIMARY RECORD"}` : cite,
         atFrame: p?.atFrame,
       });
+    }
     case "BlobSimulation":
       return React.createElement(BlobSimulation, {
         mode: displayMode,
         eyebrow: p?.eyebrow,
         title,
         subtitle: sub,
-        throughputMetric: p?.metric,
+        inflowLabel: rows?.[0]?.label,
+        outflowLabel: rows?.[1]?.label,
+        throughputMetric: hasExplicitPrimary ? primary : undefined,
         atFrame: p?.atFrame,
       });
-    case "CorridorArcMatrixCard":
+    case "CorridorArcMatrixCard": {
+      const resolvedCorridorId = p?.corridorId ?? geoScene?.corridorId;
+      const corrMetrics: CorridorLedgerMetric[] | undefined =
+        rows && rows.length >= 2
+          ? rows.slice(0, 3).map((r) => ({ label: r.label, value: r.value, delta: r.delta }))
+          : undefined;
+      if (hasGeoInputs && !resolvedCorridorId) {
+        if (isRealGeoMatch) {
+          // Real geographic entity without a named corridor (e.g. Ireland, Japan): render MapExplainer instead of Taiwan fallback
+          return React.createElement(MapExplainer, {
+            query: p?.geoQuery ?? p?.spokenText,
+            spokenText: p?.spokenText,
+            region: geoScene?.atlasDataset === "usa" ? "us" : "world",
+            highlightStatesFips:
+              geoScene?.atlasDataset === "usa"
+                ? geoScene.primaryStateFips
+                : geoScene?.primaryCountryIds,
+            highlightLabel: geoScene?.title,
+            eyebrow: p?.eyebrow,
+            title,
+            subtitle: sub,
+            metricValue: hasExplicitPrimary ? primary : undefined,
+            sourceCitation: cite,
+            paletteMode: p?.paletteMode ?? "page",
+            atFrame: p?.atFrame,
+          });
+        }
+        // Non-geographic sentence: never fall back to TAIWAN_STRAIT_2NM
+        return React.createElement(DataPhysicalCard, {
+          mode: displayMode,
+          eyebrow: p?.eyebrow ?? "STRUCTURAL TELEMETRY",
+          title,
+          subtitle: sub,
+          blocks: buildPhysicalBlocks(),
+          sourceCitation: cite,
+          atFrame: p?.atFrame,
+        });
+      }
       return React.createElement(CorridorArcMatrixCard, {
-        corridorId: p?.corridorId ?? "TAIWAN_STRAIT_2NM",
+        corridorId: resolvedCorridorId,
+        query: p?.geoQuery,
         eyebrow: p?.eyebrow,
         title,
+        metrics: corrMetrics,
         paletteMode: p?.paletteMode ?? "page",
         atFrame: p?.atFrame,
       });
-    default:
+    }
+    default: {
+      const strataTones: Array<"navy" | "brick" | "teal" | "paper"> = ["brick", "navy", "teal", "paper"];
+      const layers: StrataLayerSpec[] | undefined =
+        rows && rows.length >= 3
+          ? rows.slice(0, 4).map((r, idx) => ({
+              label: r.label,
+              share: r.value,
+              note: r.delta ?? "Verified Layer",
+              tone: r.isFlagged ? "brick" : strataTones[idx % strataTones.length],
+            }))
+          : undefined;
       return React.createElement(IsometricStrataCutaway3D, {
         mode: displayMode,
         eyebrow: p?.eyebrow,
         title,
         subtitle: sub,
+        layers,
         atFrame: p?.atFrame,
       });
+    }
   }
 }
 
@@ -1365,17 +1871,27 @@ function buildDocBroadcastRecipes(): UnifiedStyleRecipe[] {
       description: "Full-frame Whisper-synced 32-mode kinetic typography and stenography statement stage.",
       aliases: ["KineticText", "kinetic-statement", "kinetic-thesis"],
       isLegacy24: false,
-      render: (p) =>
-        React.createElement(KineticText, {
-          text: p?.title ?? p?.headline ?? p?.body ?? "Nominal debt holds par while real wages adjust.",
-          mode: "chisel-highlighter-sweep",
+      render: (p) => {
+        const dataRec = readDataRecord(p);
+        const rawMode = readStr(dataRec, "typographyMode");
+        const mode: KineticTextMode =
+          rawMode && isTypographyMode(rawMode) ? rawMode : "chisel-highlighter-sweep";
+        return React.createElement(KineticText, {
+          text:
+            p?.spokenText ??
+            p?.body ??
+            p?.title ??
+            p?.headline ??
+            "Nominal debt holds par while real wages adjust.",
+          mode,
           paletteMode: p?.paletteMode ?? "page",
           atFrame: p?.atFrame,
           duration: p?.duration,
           enableSfx: p?.enableSfx,
           className: p?.className,
           style: p?.style,
-        }),
+        });
+      },
     },
     {
       id: "doc-chapter-headline-card",
@@ -1399,7 +1915,7 @@ function buildDocBroadcastRecipes(): UnifiedStyleRecipe[] {
         React.createElement(EditorialHeadline, {
           variant: "chapter-card",
           title: p?.title ?? p?.headline ?? "Act I · The Tax Plumbing Split",
-          subtitle: p?.subtitle ?? p?.body,
+          subtitle: p?.subtitle ?? p?.body ?? p?.spokenText,
           category: p?.eyebrow ?? "SPECIAL INVESTIGATION",
           paletteMode: p?.paletteMode ?? "page",
           atFrame: p?.atFrame,
@@ -1451,42 +1967,195 @@ function buildVintageEditorialRecipes(): UnifiedStyleRecipe[] {
   });
 }
 
+function renderMacroTelemetryByComponent(
+  componentName: string,
+  p?: StyleRecipeRenderProps
+): React.ReactElement {
+  const dataRec = readDataRecord(p);
+  const rows = readTableRows(p);
+  const series = readSeriesData(p);
+  const exhibit = readExhibitData(p);
+  const { primary, secondary, hasExplicitPrimary } = resolveMetricTuple(p);
+  const validReg = resolveValidRegisterId(p?.register);
+
+  const baseProps: BaseTelemetryProps = {
+    kicker: p?.eyebrow,
+    title: p?.title ?? p?.headline,
+    subtitle: p?.subtitle ?? p?.body ?? p?.spokenText,
+    heroBadge: hasExplicitPrimary ? primary : undefined,
+    sourceCitation: exhibit?.filingTitle ?? p?.sourceCitation,
+    ...(validReg ? { register: validReg } : {}),
+    paletteMode: p?.paletteMode,
+    atFrame: p?.atFrame,
+  };
+
+  const years = readStrArray(dataRec, "years");
+  const upperSeries = readNumArray(dataRec, "upperSeries");
+  const lowerSeries = readNumArray(dataRec, "lowerSeries");
+  const hasMatchedDualSeries = Boolean(
+    years &&
+      upperSeries &&
+      lowerSeries &&
+      years.length >= 2 &&
+      upperSeries.length === years.length &&
+      lowerSeries.length === years.length
+  );
+
+  switch (componentName) {
+    case "DivergingJawsChart": {
+      if (hasMatchedDualSeries && years && upperSeries && lowerSeries) {
+        const minVal = Math.min(...upperSeries, ...lowerSeries);
+        return React.createElement(DivergingJawsChart, {
+          ...baseProps,
+          years,
+          upperSeries,
+          lowerSeries,
+          upperLabel: readStr(dataRec, "upperLabel") ?? rows?.[0]?.label,
+          lowerLabel: readStr(dataRec, "lowerLabel") ?? rows?.[1]?.label,
+          floorValue: readNum(dataRec, "floorValue") ?? minVal,
+          floorLabel: readStr(dataRec, "floorLabel") ?? "BASELINE REFERENCE FLOOR",
+        });
+      }
+      return React.createElement(DivergingJawsChart, baseProps);
+    }
+    case "AuctionPriceShockwave": {
+      if (series && series.length >= 2 && series.every((pt) => pt.primary >= 0 && pt.primary <= 300)) {
+        const auctions: AuctionStepDatum[] = series.slice(0, 5).map((pt) => ({
+          deliveryYear: pt.xLabel,
+          priceMwDay: pt.primary,
+        }));
+        return React.createElement(AuctionPriceShockwave, { ...baseProps, auctions });
+      }
+      return React.createElement(AuctionPriceShockwave, baseProps);
+    }
+    case "JevonsDeflationCurve": {
+      if (
+        hasMatchedDualSeries &&
+        years &&
+        upperSeries &&
+        lowerSeries &&
+        upperSeries.every((v) => v >= 0 && v <= 105) &&
+        lowerSeries.every((v) => v >= 0 && v <= 105)
+      ) {
+        return React.createElement(JevonsDeflationCurve, {
+          ...baseProps,
+          periods: years,
+          unitCostIndex: upperSeries,
+          volumeIndex: lowerSeries,
+        });
+      }
+      return React.createElement(JevonsDeflationCurve, baseProps);
+    }
+    case "SovereignSpreadFlip": {
+      if (
+        hasMatchedDualSeries &&
+        years &&
+        upperSeries &&
+        lowerSeries &&
+        upperSeries.every((v) => v >= 0 && v <= 5.6) &&
+        lowerSeries.every((v) => v >= 0 && v <= 5.6)
+      ) {
+        return React.createElement(SovereignSpreadFlip, {
+          ...baseProps,
+          quarters: years,
+          franceYields: upperSeries,
+          greeceYields: lowerSeries,
+        });
+      }
+      return React.createElement(SovereignSpreadFlip, baseProps);
+    }
+    case "DebtDeflationJaws1933": {
+      if (
+        hasMatchedDualSeries &&
+        years &&
+        upperSeries &&
+        lowerSeries &&
+        upperSeries.every((v) => v >= 40 && v <= 190) &&
+        lowerSeries.every((v) => v >= 40 && v <= 190)
+      ) {
+        return React.createElement(DebtDeflationJaws1933, {
+          ...baseProps,
+          years,
+          nominalWageIndex: lowerSeries,
+          realDebtBurdenIndex: upperSeries,
+        });
+      }
+      return React.createElement(DebtDeflationJaws1933, baseProps);
+    }
+    case "TrustFundDepletionCurve": {
+      if (
+        years &&
+        upperSeries &&
+        years.length >= 2 &&
+        upperSeries.length === years.length &&
+        upperSeries.every((v) => v >= 0 && v <= 3.0)
+      ) {
+        return React.createElement(TrustFundDepletionCurve, {
+          ...baseProps,
+          years,
+          reserveTrillions: upperSeries,
+          automaticCutPct: readStr(dataRec, "deltaLabel") ?? undefined,
+        });
+      }
+      return React.createElement(TrustFundDepletionCurve, baseProps);
+    }
+    case "CostExchangeRatioBar": {
+      const n1 = parseLeadingNum(rows?.[0]?.value ?? primary);
+      const n2 = parseLeadingNum(rows?.[1]?.value ?? secondary);
+      if (n1 !== undefined && n2 !== undefined && n1 > 0 && n2 > 0) {
+        const low = n1 <= n2 ? { lbl: rows?.[0]?.label ?? "Low Cost", val: n1 } : { lbl: rows?.[1]?.label ?? "Low Cost", val: n2 };
+        const high = n1 <= n2 ? { lbl: rows?.[1]?.label ?? "High Cost", val: n2 } : { lbl: rows?.[0]?.label ?? "High Cost", val: n1 };
+        return React.createElement(CostExchangeRatioBar, {
+          ...baseProps,
+          lowCostLabel: low.lbl,
+          lowCostUsd: low.val,
+          highCostLabel: high.lbl,
+          highCostUsd: high.val,
+        });
+      }
+      return React.createElement(CostExchangeRatioBar, baseProps);
+    }
+    case "RealVsNominalShrink": {
+      const nom = readNum(dataRec, "formulaPayout") ?? parseLeadingNum(rows?.[0]?.value);
+      const real = readNum(dataRec, "actualPayout") ?? parseLeadingNum(rows?.[1]?.value);
+      return React.createElement(RealVsNominalShrink, {
+        ...baseProps,
+        ...(nom && nom > 0 ? { nominalAmount: nom } : {}),
+        ...(real && real > 0 ? { realAmount: real } : {}),
+        horizonText: exhibit?.effectiveDate,
+      });
+    }
+    default: {
+      const Comp = MACRO_COMPONENT_BY_NAME[componentName] ?? DivergingJawsChart;
+      return React.createElement(Comp, baseProps);
+    }
+  }
+}
+
 function buildMacroTelemetryRecipes(): UnifiedStyleRecipe[] {
-  const out: UnifiedStyleRecipe[] = MACRO_TELEMETRY_STYLES.map((item) => {
-    const Comp = MACRO_COMPONENT_BY_NAME[item.componentName] ?? DivergingJawsChart;
-    return {
-      id: item.id,
-      name: item.name,
-      styleWorld: "macro-telemetry",
-      legacyStyleFamily: "data-maps-3d",
-      componentName: item.componentName,
-      defaultFraming: "fullscreen-cutaway",
-      defaultPaletteMode: "page",
-      motionAction: "orthographic-extrude -> audit-row-step -> fade-blur-out",
-      typographyMode: "ledger-tabular-rollup",
-      defaultSfx: "odometer-tick",
-      secondarySfx: "basis-point-blip",
-      paceProfile: "calm-hold",
-      domainTags: inferDomainTagsFromText(item.id, item.name, item.description, "fiscal"),
-      emotionalBeat: /shockwave|flip|cliff|jaws|shrink/.test(item.id)
-        ? "hard-reveal"
-        : "clinical-evidence",
-      visualWeight: "heavy",
-      description: item.description,
-      aliases: [item.componentName],
-      isLegacy24: false,
-      render: (p) =>
-        React.createElement(Comp, {
-          kicker: p?.eyebrow,
-          title: p?.title ?? p?.headline,
-          subtitle: p?.subtitle ?? p?.body,
-          heroBadge: p?.metric,
-          sourceCitation: p?.sourceCitation,
-          paletteMode: p?.paletteMode,
-          atFrame: p?.atFrame,
-        }),
-    };
-  });
+  const out: UnifiedStyleRecipe[] = MACRO_TELEMETRY_STYLES.map((item) => ({
+    id: item.id,
+    name: item.name,
+    styleWorld: "macro-telemetry",
+    legacyStyleFamily: "data-maps-3d",
+    componentName: item.componentName,
+    defaultFraming: "fullscreen-cutaway",
+    defaultPaletteMode: "page",
+    motionAction: "orthographic-extrude -> audit-row-step -> fade-blur-out",
+    typographyMode: "ledger-tabular-rollup",
+    defaultSfx: "odometer-tick",
+    secondarySfx: "basis-point-blip",
+    paceProfile: "calm-hold",
+    domainTags: inferDomainTagsFromText(item.id, item.name, item.description, "fiscal"),
+    emotionalBeat: /shockwave|flip|cliff|jaws|shrink/.test(item.id)
+      ? "hard-reveal"
+      : "clinical-evidence",
+    visualWeight: "heavy",
+    description: item.description,
+    aliases: [item.componentName],
+    isLegacy24: false,
+    render: (p) => renderMacroTelemetryByComponent(item.componentName, p),
+  }));
 
   out.push({
     id: "macro-data-ticker-monolith",
@@ -1507,26 +2176,163 @@ function buildMacroTelemetryRecipes(): UnifiedStyleRecipe[] {
     description: "Precision tabular numeric counter supporting negative currencies, ratios, and compound units.",
     aliases: ["DataTicker", "dataviz-ticker"],
     isLegacy24: false,
-    render: (p) =>
-      React.createElement(DataTicker, {
-        value: p?.metric ?? "$40.5T",
+    render: (p) => {
+      const { primary, delta } = resolveMetricTuple(p);
+      return React.createElement(DataTicker, {
+        value: primary,
         label: p?.title ?? p?.headline ?? "Federal Gross Debt",
-        delta: p?.delta ? { value: p.delta } : undefined,
+        delta: delta ? { value: delta } : undefined,
         paletteMode: p?.paletteMode ?? "page",
         atFrame: p?.atFrame,
         duration: p?.duration,
         enableSfx: p?.enableSfx,
         className: p?.className,
         style: p?.style,
-      }),
+      });
+    },
   });
 
   return out;
 }
 
+function renderForensicExhibitByComponent(
+  componentName: string,
+  p?: StyleRecipeRenderProps
+): React.ReactElement {
+  const dataRec = readDataRecord(p);
+  const rows = readTableRows(p);
+  const exhibit = readExhibitData(p);
+  const { primary, secondary, delta, hasExplicitPrimary, hasExplicitSecondary } = resolveMetricTuple(p);
+  const validReg = resolveValidRegisterId(p?.register);
+  const sub = p?.subtitle ?? p?.body ?? p?.spokenText;
+
+  const baseProps: BaseForensicProps = {
+    docketCode: exhibit?.exhibitCode ?? p?.eyebrow,
+    title: p?.title ?? p?.headline,
+    subtitle: sub,
+    verdictBadge: exhibit?.stampLabel ?? (hasExplicitPrimary ? primary : undefined),
+    sourceCitation: exhibit?.filingTitle ?? p?.sourceCitation,
+    ...(validReg ? { register: validReg } : {}),
+    paletteMode: p?.paletteMode,
+    atFrame: p?.atFrame,
+  };
+
+  switch (componentName) {
+    case "FiscalLedgerTableStage": {
+      const ledgerRows: FiscalLedgerRow[] | undefined =
+        rows && rows.length >= 2
+          ? rows.slice(0, 4).map((r, idx) => ({
+              lineCode: `LN 0${idx + 1}`,
+              category: r.label,
+              priorValue: exhibit?.effectiveDate ?? "BASELINE",
+              currentValue: r.value,
+              deltaBadge: r.delta ?? (r.isFlagged ? "FLAGGED" : r.isHighlight ? "PRIMARY" : "AUDITED"),
+              statuteNote: exhibit?.statuteOrDocket,
+              highlighted: Boolean(r.isHighlight || r.isFlagged),
+            }))
+          : undefined;
+      return React.createElement(FiscalLedgerTableStage, {
+        ...baseProps,
+        ...(ledgerRows ? { rows: ledgerRows } : {}),
+      });
+    }
+    case "ClaimVsRealityCollision":
+      return React.createElement(ClaimVsRealityCollision, {
+        ...baseProps,
+        claimText: exhibit?.highlightedClause ?? sub,
+        ...(hasExplicitPrimary ? { realityFigure: primary } : {}),
+        realityDetail: sub,
+      });
+    case "SupremeCourtSyllabusStage": {
+      const formulaPayout = readNum(dataRec, "formulaPayout");
+      const actualPayout = readNum(dataRec, "actualPayout");
+      return React.createElement(SupremeCourtSyllabusStage, {
+        ...baseProps,
+        caseCaption: readStr(dataRec, "caseCaption") ?? p?.title,
+        citationNumber: exhibit?.statuteOrDocket,
+        voteSplit: exhibit?.stampLabel,
+        holdingSummary: readStr(dataRec, "holdingSummary") ?? exhibit?.highlightedClause ?? sub,
+        ...(formulaPayout !== undefined && formulaPayout > 0 ? { formulaPayout } : {}),
+        ...(actualPayout !== undefined && actualPayout >= 0 ? { actualPayout } : {}),
+      });
+    }
+    case "ArchivalRationBook1941": {
+      const totalCoupons = readNum(dataRec, "totalCoupons");
+      const redeemedCoupons = readNum(dataRec, "redeemedCoupons");
+      return React.createElement(ArchivalRationBook1941, {
+        ...baseProps,
+        ...(totalCoupons !== undefined && totalCoupons >= 4 ? { totalCoupons } : {}),
+        ...(redeemedCoupons !== undefined ? { redeemedCoupons } : {}),
+        cashBalanceLabel: exhibit?.highlightedClause,
+      });
+    }
+    case "StatutoryClauseHighlighter":
+      return React.createElement(StatutoryClauseHighlighter, {
+        ...baseProps,
+        statuteHeading: exhibit?.statuteOrDocket ?? exhibit?.filingTitle,
+        clauseText: exhibit?.highlightedClause ?? sub,
+      });
+    case "VetoPenBudgetLedger":
+      return React.createElement(VetoPenBudgetLedger, {
+        ...baseProps,
+        originalLine:
+          readStr(dataRec, "originalLine") ??
+          (rows?.[0] ? `${rows[0].label}: ${rows[0].value}` : undefined),
+        vetoedLine:
+          readStr(dataRec, "vetoedLine") ??
+          (rows?.[1] ? `${rows[1].label}: ${rows[1].value}` : undefined),
+      });
+    case "TreasuryTicLedgerExhibit":
+      return React.createElement(TreasuryTicLedgerExhibit, {
+        ...baseProps,
+        ...(hasExplicitPrimary ? { officialShare: `${rows?.[0]?.label ?? "Primary"}: ${primary}` } : {}),
+        ...(hasExplicitSecondary ? { privateRailShare: `${rows?.[1]?.label ?? "Counterpart"}: ${secondary}` } : {}),
+      });
+    case "InsuranceRateHikeNotice":
+      return React.createElement(InsuranceRateHikeNotice, {
+        ...baseProps,
+        ...(hasExplicitPrimary ? { priorPremium: primary } : {}),
+        ...(hasExplicitSecondary ? { renewalPremium: secondary } : {}),
+        inspectionFlag: exhibit?.highlightedClause,
+      });
+    case "SpvCircularFlowSheet": {
+      const bNodes = readStrArray(dataRec, "bottomNodes");
+      const nodes: [string, string, string] | undefined =
+        bNodes && bNodes.length >= 3 ? [bNodes[0], bNodes[1], bNodes[2]] : undefined;
+      return React.createElement(SpvCircularFlowSheet, {
+        ...baseProps,
+        ...(nodes ? { nodes } : {}),
+      });
+    }
+    case "CongressionalHearingSlate":
+      return React.createElement(CongressionalHearingSlate, {
+        ...baseProps,
+        committee: exhibit?.filingTitle,
+        witnessName: p?.title,
+        swornExcerpt: exhibit?.highlightedClause ?? sub,
+      });
+    case "CreditRatingDowngradeMemo":
+      return React.createElement(CreditRatingDowngradeMemo, {
+        ...baseProps,
+        ratingShift: delta ?? (hasExplicitPrimary ? primary : undefined),
+        rationale: exhibit?.highlightedClause ?? sub,
+      });
+    case "AntitrustMarketExhibit":
+      return React.createElement(AntitrustMarketExhibit, {
+        ...baseProps,
+        exhibitNumber: exhibit?.exhibitCode,
+        internalQuote: exhibit?.highlightedClause ?? sub,
+        ...(hasExplicitPrimary ? { marketShareFigure: primary } : {}),
+      });
+    default: {
+      const Comp = FORENSIC_COMPONENT_BY_NAME[componentName] ?? FiscalLedgerTableStage;
+      return React.createElement(Comp, baseProps);
+    }
+  }
+}
+
 function buildForensicExhibitRecipes(): UnifiedStyleRecipe[] {
   const out: UnifiedStyleRecipe[] = FORENSIC_EXHIBIT_STYLES.map((item) => {
-    const Comp = FORENSIC_COMPONENT_BY_NAME[item.componentName] ?? FiscalLedgerTableStage;
     const extraAliases: string[] = [item.componentName];
     if (item.id === "forensic-archival-ration-book-1941") {
       extraAliases.push("vintage-1941-ration-booklet");
@@ -1552,16 +2358,7 @@ function buildForensicExhibitRecipes(): UnifiedStyleRecipe[] {
       description: item.description,
       aliases: extraAliases,
       isLegacy24: false,
-      render: (p) =>
-        React.createElement(Comp, {
-          docketCode: p?.eyebrow,
-          title: p?.title ?? p?.headline,
-          subtitle: p?.subtitle ?? p?.body,
-          verdictBadge: p?.metric,
-          sourceCitation: p?.sourceCitation,
-          paletteMode: p?.paletteMode,
-          atFrame: p?.atFrame,
-        }),
+      render: (p) => renderForensicExhibitByComponent(item.componentName, p),
     };
   });
 
@@ -1716,9 +2513,133 @@ function buildDataMaps3DRecipes(): UnifiedStyleRecipe[] {
   return out;
 }
 
+function renderSystemSimulatorByComponent(
+  componentName: string,
+  p?: StyleRecipeRenderProps
+): React.ReactElement {
+  const dataRec = readDataRecord(p);
+  const rows = readTableRows(p);
+  const exhibit = readExhibitData(p);
+  const { primary, secondary, hasExplicitPrimary } = resolveMetricTuple(p);
+  const topStream = readStr(dataRec, "topStream");
+  const bottomNodes = readStrArray(dataRec, "bottomNodes");
+
+  const baseProps: SimulatorBaseProps = {
+    eyebrow: p?.eyebrow,
+    title: p?.title ?? p?.headline,
+    subtitle: p?.subtitle ?? p?.body ?? p?.spokenText,
+    summaryMetric: hasExplicitPrimary ? primary : undefined,
+    summaryLabel: rows?.[0]?.label,
+    sourceCitation: exhibit?.filingTitle ?? p?.sourceCitation,
+    paletteMode: p?.paletteMode,
+    atFrame: p?.atFrame,
+  };
+
+  switch (componentName) {
+    case "SupplyChainBomStrip": {
+      const retailPrice = readNum(dataRec, "retailPrice") ?? parseLeadingNum(rows?.[0]?.value);
+      return React.createElement(SupplyChainBomStrip, {
+        ...baseProps,
+        ...(retailPrice && retailPrice > 0 ? { retailPrice } : {}),
+      });
+    }
+    case "PaloAltoWhiteboardFlip":
+      return React.createElement(PaloAltoWhiteboardFlip, {
+        ...baseProps,
+        frontFormula: topStream,
+        backMonthlyPayment: hasExplicitPrimary ? primary : undefined,
+      });
+    case "DualTaxPlumbingSchematic": {
+      const bypassRoutes: readonly [string, string, string] | undefined =
+        bottomNodes && bottomNodes.length >= 3
+          ? [bottomNodes[0], bottomNodes[1], bottomNodes[2]]
+          : undefined;
+      return React.createElement(DualTaxPlumbingSchematic, {
+        ...baseProps,
+        w2GrossLabel: topStream,
+        ...(bypassRoutes ? { bypassRoutes } : {}),
+      });
+    }
+    case "SovereignPrioritySpillway":
+      return React.createElement(SovereignPrioritySpillway, {
+        ...baseProps,
+        tier1Label: bottomNodes?.[0] ?? rows?.[0]?.label,
+        tier1Amount: rows?.[0]?.value,
+        tier2Label: bottomNodes?.[1] ?? rows?.[1]?.label,
+        tier2Amount: rows?.[1]?.value,
+        tier3Label: bottomNodes?.[2] ?? rows?.[2]?.label,
+      });
+    case "SplitEraStrikeDiptych":
+      return React.createElement(SplitEraStrikeDiptych, {
+        ...baseProps,
+        leftEra: bottomNodes?.[0] ?? rows?.[0]?.label,
+        rightEra: bottomNodes?.[1] ?? rows?.[1]?.label,
+      });
+    case "VelocityMismatchChronometer":
+      return React.createElement(VelocityMismatchChronometer, {
+        ...baseProps,
+        fastTrackLabel: rows?.[0] ? `${rows[0].label}: ${rows[0].value}` : undefined,
+        slowTrackLabel: rows?.[1] ? `${rows[1].label}: ${rows[1].value}` : undefined,
+        checkpoints: bottomNodes && bottomNodes.length >= 2 ? bottomNodes : undefined,
+      });
+    case "CircularAccountingLoop":
+      return React.createElement(CircularAccountingLoop, {
+        ...baseProps,
+        nodeA: bottomNodes?.[0],
+        nodeB: bottomNodes?.[1],
+        nodeC: bottomNodes?.[2],
+      });
+    case "AsymmetricExchangeSimulator":
+      return React.createElement(AsymmetricExchangeSimulator, {
+        ...baseProps,
+        droneUnitCost: rows?.[0]?.value,
+        interceptorUnitCost: rows?.[1]?.value,
+        carrierAssetValue: rows?.[2]?.value,
+      });
+    case "SubseaCableCrossSection":
+      return React.createElement(SubseaCableCrossSection, {
+        ...baseProps,
+        cableCountLabel: rows?.[0] ? `${rows[0].value} · ${rows[0].label}` : undefined,
+        dailySettlementLabel: rows?.[1]?.value,
+      });
+    case "LithographyNodeLock":
+      return React.createElement(LithographyNodeLock, {
+        ...baseProps,
+        trailingFabLabel: rows?.[0] ? `${rows[0].label}: ${rows[0].value}` : undefined,
+        frontierFabLabel: rows?.[1] ? `${rows[1].label}: ${rows[1].value}` : undefined,
+      });
+    case "CantileverBalanceScale":
+    case "TransformerQueueBottleneck":
+    case "WaterCoolingEvaporationTower":
+    case "ContainerChokepointLock":
+    case "StrategicReserveCaverns":
+    case "GridFrequencyDroopGovernor":
+    case "FlywheelMomentumClutch":
+    case "HydraulicSiphonValve":
+    case "MarginCallDominoCascade":
+    case "EscapementRatchetPawn":
+    case "EurodollarOffshoreFunnel":
+    case "MineralRefiningBottleneck":
+    case "DemographicDependencyPyramid":
+    case "InsuranceRiskPoolOverflow":
+    case "MunicipalBondTollgate": {
+      const ParamComp = SIMULATOR_COMPONENT_BY_NAME[componentName] ?? TransformerQueueBottleneck;
+      const paramProps = {
+        ...baseProps,
+        ...(hasExplicitPrimary ? { leftMetric: primary } : {}),
+        ...(secondary && p?.secondaryMetric ? { rightMetric: secondary } : rows?.[1]?.value ? { rightMetric: rows[1].value } : {}),
+      };
+      return React.createElement(ParamComp, paramProps);
+    }
+    default: {
+      const Comp = SIMULATOR_COMPONENT_BY_NAME[componentName] ?? SupplyChainBomStrip;
+      return React.createElement(Comp, baseProps);
+    }
+  }
+}
+
 function buildSystemSimulatorRecipes(): UnifiedStyleRecipe[] {
   return SYSTEM_SIMULATOR_STYLES.map((item) => {
-    const Comp = SIMULATOR_COMPONENT_BY_NAME[item.componentName] ?? SupplyChainBomStrip;
     const isOver = item.defaultFraming === "over-footage";
     const aliases: string[] = [item.componentName];
     if (item.id === "dual-tax-plumbing-schematic") {
@@ -1745,23 +2666,117 @@ function buildSystemSimulatorRecipes(): UnifiedStyleRecipe[] {
       description: item.description,
       aliases,
       isLegacy24: false,
-      render: (p) =>
-        React.createElement(Comp, {
-          eyebrow: p?.eyebrow,
-          title: p?.title ?? p?.headline,
-          subtitle: p?.subtitle ?? p?.body,
-          summaryMetric: p?.metric,
-          sourceCitation: p?.sourceCitation,
-          paletteMode: p?.paletteMode,
-          atFrame: p?.atFrame,
-        }),
+      render: (p) => renderSystemSimulatorByComponent(item.componentName, p),
     };
   });
 }
 
+function renderUiSatireByComponent(
+  componentName: string,
+  p?: StyleRecipeRenderProps
+): React.ReactElement {
+  const dataRec = readDataRecord(p);
+  const rows = readTableRows(p);
+  const exhibit = readExhibitData(p);
+  const { primary, secondary, hasExplicitPrimary, hasExplicitSecondary } = resolveMetricTuple(p);
+  const sub = p?.subtitle ?? p?.body ?? p?.spokenText;
+
+  const baseProps: UiSatireBaseProps = {
+    eyebrow: p?.eyebrow,
+    title: p?.title ?? p?.headline,
+    subtitle: sub,
+    badgeText: exhibit?.stampLabel ?? (hasExplicitPrimary ? primary : undefined),
+    sourceCitation: exhibit?.filingTitle ?? p?.sourceCitation,
+    paletteMode: p?.paletteMode,
+    atFrame: p?.atFrame,
+  };
+
+  switch (componentName) {
+    case "LongitudinalHouseholdDossier": {
+      const stage = readNum(dataRec, "activeStage");
+      const activeStage: 0 | 1 | 2 | 3 | undefined =
+        stage === 0 || stage === 1 || stage === 2 || stage === 3 ? stage : undefined;
+      return React.createElement(LongitudinalHouseholdDossier, {
+        ...baseProps,
+        ...(activeStage !== undefined ? { activeStage } : {}),
+      });
+    }
+    case "PerishableSeatVsComputeSplit":
+      return React.createElement(PerishableSeatVsComputeSplit, {
+        ...baseProps,
+        seatCode: rows?.[0]?.label,
+        gpuWindowLabel: rows?.[1]?.label,
+      });
+    case "ClosedComputeScripWallet":
+      return React.createElement(ClosedComputeScripWallet, {
+        ...baseProps,
+        ...(hasExplicitPrimary ? { creditBalance: primary } : {}),
+        ...(hasExplicitSecondary ? { cashHaircutPct: secondary } : {}),
+      });
+    case "CoalScripVsDigitalYuan":
+      return React.createElement(CoalScripVsDigitalYuan, {
+        ...baseProps,
+        leftArtifact: rows?.[0] ? `${rows[0].label}: ${rows[0].value}` : undefined,
+        rightArtifact: rows?.[1] ? `${rows[1].label}: ${rows[1].value}` : undefined,
+      });
+    case "FountainPenVetoSlash":
+      return React.createElement(FountainPenVetoSlash, {
+        ...baseProps,
+        ...(hasExplicitPrimary ? { originalAmount: primary } : {}),
+        ...(hasExplicitSecondary ? { slashedAmount: secondary } : {}),
+        clauseText: exhibit?.highlightedClause,
+      });
+    case "UnwrittenTruceToAllowance":
+      return React.createElement(UnwrittenTruceToAllowance, {
+        ...baseProps,
+        oldTerm: readStr(dataRec, "oldTerm"),
+        newTerm: readStr(dataRec, "newTerm"),
+      });
+    case "RoofDroneEscrowShock":
+    case "ThermalReceiptInflationRoll":
+    case "RefinanceDenialModal":
+    case "HingedBrassJawCutout":
+    case "ViewerGameQuizCard":
+    case "TermsOfServiceScrollTrap":
+    case "DynamicSurgeMeterTag":
+    case "FourEscapeHatchesBoard":
+    case "SubscriptionTrapStack":
+    case "AlgorithmicCreditScoreDrop":
+    case "CompanyTownStoreLedger":
+    case "GeoFencedSpendMapCard":
+    case "ExpirationCountdownToast":
+    case "AutomatedCobraSeveranceForm":
+    case "BuyNowPayLaterMicroLedger":
+    case "CaptivePartnerCatalogGrid":
+    case "ProgrammableRuleBuilderUI":
+    case "CivicDossierRedactionPlate": {
+      const SatireComp = UI_SATIRE_COMPONENT_BY_NAME[componentName] ?? LongitudinalHouseholdDossier;
+      const items: SatireLineItem[] | undefined =
+        rows && rows.length >= 2
+          ? rows.slice(0, 4).map((r, idx) => ({
+              label: r.label,
+              value: r.value,
+              note: r.delta ?? exhibit?.filingTitle ?? "Verified Record",
+              isAlert: Boolean(r.isFlagged ?? idx === 0),
+            }))
+          : undefined;
+      const satProps = {
+        ...baseProps,
+        ...(hasExplicitPrimary ? { heroCallout: primary } : {}),
+        ...(exhibit?.highlightedClause ? { subCallout: exhibit.highlightedClause } : {}),
+        ...(items ? { items } : {}),
+      };
+      return React.createElement(SatireComp, satProps);
+    }
+    default: {
+      const Comp = UI_SATIRE_COMPONENT_BY_NAME[componentName] ?? LongitudinalHouseholdDossier;
+      return React.createElement(Comp, baseProps);
+    }
+  }
+}
+
 function buildUiSatireRecipes(): UnifiedStyleRecipe[] {
   return UI_SATIRE_COLLAGE_STYLES.map((item) => {
-    const Comp = UI_SATIRE_COMPONENT_BY_NAME[item.componentName] ?? LongitudinalHouseholdDossier;
     const isOver = item.defaultFraming === "over-footage";
     return {
       id: item.id,
@@ -1784,16 +2799,7 @@ function buildUiSatireRecipes(): UnifiedStyleRecipe[] {
       description: item.description,
       aliases: [item.componentName],
       isLegacy24: false,
-      render: (p) =>
-        React.createElement(Comp, {
-          eyebrow: p?.eyebrow,
-          title: p?.title ?? p?.headline,
-          subtitle: p?.subtitle ?? p?.body,
-          badgeText: p?.metric,
-          sourceCitation: p?.sourceCitation,
-          paletteMode: p?.paletteMode,
-          atFrame: p?.atFrame,
-        }),
+      render: (p) => renderUiSatireByComponent(item.componentName, p),
     };
   });
 }
@@ -1888,6 +2894,7 @@ function buildGenerativeSetPieceRecipes(): UnifiedStyleRecipe[] {
       React.createElement(SceneBlueprintRenderer, {
         blueprintId: p?.blueprintId ?? sp.defaultBlueprintId,
         paletteMode: p?.paletteMode,
+        themeRegister: resolveBlueprintRegister(p?.register),
         className: p?.className,
         style: p?.style,
       }),
@@ -1917,7 +2924,7 @@ function buildGenerativeSetPieceRecipes(): UnifiedStyleRecipe[] {
         React.createElement(IsometricDiorama3D, {
           eyebrow: p?.eyebrow ?? "AXONOMETRIC TELEMETRY",
           title: p?.title ?? p?.headline ?? "Physical Infrastructure Massing",
-          subtitle: p?.subtitle ?? p?.body,
+          subtitle: p?.subtitle ?? p?.body ?? p?.spokenText,
           overFootage: p?.paletteMode === "over-footage",
         }),
     },
@@ -1941,18 +2948,20 @@ function buildGenerativeSetPieceRecipes(): UnifiedStyleRecipe[] {
       aliases: ["PresenterDepthStage", "presenter-depth-sandwich", "depth-sandwich-stage"],
       isLegacy24: false,
       peakOnly: true,
-      render: (p) =>
-        React.createElement(PresenterDepthStage, {
+      render: (p) => {
+        const { primary } = resolveMetricTuple(p);
+        return React.createElement(PresenterDepthStage, {
           preset: "behind-shoulder-billboard",
           heroBackdropFigure: {
-            figure: p?.metric ?? "$40.5T",
+            figure: primary,
             eyebrow: p?.eyebrow ?? "SOVEREIGN DEBT MONOLITH",
             sublabel: p?.title ?? p?.headline ?? "Compounding Faster Than Payroll Receipts",
             tone: "liability",
           },
           className: p?.className,
           style: p?.style,
-        }),
+        });
+      },
     }
   );
 

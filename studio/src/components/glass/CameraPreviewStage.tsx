@@ -23,7 +23,7 @@ export interface CameraPreviewStageProps {
 /**
  * CameraPreviewStage provides multi-mode backdrops for previewing overlays.
  * - 'transparent': Zero background; pure alpha for DaVinci Resolve ProRes 4444 / WebM renders.
- * - 'simulated-room': Photorealistic creator studio lighting with warm key/cool fill & bokeh for testing optical glass refraction.
+ * - 'simulated-room': Photorealistic creator studio lighting with architectural bookshelves, warm key/cool fill & mullions for testing optical glass refraction.
  * - 'camera-video': Live creator video feed via cameraSrc, with presenter framing fallback.
  * - 'dark-desk': High-contrast investigative coordinate desk.
  */
@@ -128,114 +128,222 @@ export const CameraPreviewStage: React.FC<CameraPreviewStageProps> = ({
 
       {previewMode === "simulated-room" && (
         <AbsoluteFill style={{ pointerEvents: "none" }}>
-          {/* Room Base: Deep cinematic slate */}
+          {/* Room Base: Deep Reading Room nocturne slate (zero pure #000000) */}
           <div
             style={{
               position: "absolute",
               inset: 0,
               background:
-                "linear-gradient(145deg, #0e1117 0%, #161b22 45%, #0d1015 100%)",
+                "linear-gradient(142deg, #0C131C 0%, #152130 48%, #0B111A 100%)",
             }}
           />
 
-          {/* Warm Key Light Gradient (Left: warm amber/golden rim) */}
+          {/* Subtle Receding 1px Architectural Perspective & Coordinate Grid */}
           <div
             style={{
               position: "absolute",
-              top: "-15%",
-              left: "-10%",
-              width: "60%",
-              height: "90%",
+              inset: "-80px",
+              backgroundImage: `
+                linear-gradient(to right, rgba(191, 214, 234, 0.055) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(191, 214, 234, 0.05) 1px, transparent 1px)
+              `,
+              backgroundSize: "96px 96px",
+              transform: `translate3d(${(driftX * 0.35).toFixed(2)}px, ${(
+                driftY * 0.35
+              ).toFixed(2)}px, 0)`,
+            }}
+          />
+
+          {/* Subtle Diagonal Architectural Window-Light Beams (Crisp Refraction Signal) */}
+          <div
+            style={{
+              position: "absolute",
+              inset: "-120px",
+              backgroundImage:
+                "repeating-linear-gradient(122deg, rgba(191, 214, 234, 0.025) 0px, rgba(191, 214, 234, 0.025) 38px, transparent 38px, transparent 116px)",
+              transform: `translate3d(${(driftX * 0.25).toFixed(2)}px, 0, 0)`,
+            }}
+          />
+
+          {/* Reading Room Bookshelf Bays & Warm Brass-Lit Architectural Paneling (Left) */}
+          <div
+            style={{
+              position: "absolute",
+              left: "4%",
+              top: "8%",
+              width: "44%",
+              height: "78%",
+              transform: `translate3d(${(driftX * 0.45).toFixed(2)}px, ${(
+                driftY * 0.3
+              ).toFixed(2)}px, 0)`,
+              filter: "blur(1.5px)",
+              opacity: 0.92,
+            }}
+          >
+            {/* Vertical Dark Walnut / Slate Architectural Uprights */}
+            {[0, 1, 2, 3, 4].map((colIdx) => (
+              <div
+                key={`upright-${colIdx}`}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: `${colIdx * 23}%`,
+                  width: "12px",
+                  background:
+                    "linear-gradient(90deg, rgba(14, 21, 30, 0.92) 0%, rgba(30, 44, 60, 0.78) 65%, rgba(250, 236, 212, 0.14) 100%)",
+                  borderRight: "1px solid rgba(250, 236, 212, 0.10)",
+                }}
+              />
+            ))}
+
+            {/* Horizontal Brass-Lit Shelf Bays */}
+            {[16, 38, 60, 82].map((topPct, shelfIdx) => (
+              <div
+                key={`shelf-${shelfIdx}`}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: "8%",
+                  top: `${topPct}%`,
+                  height: "14px",
+                  background:
+                    "linear-gradient(180deg, rgba(250, 236, 212, 0.26) 0%, rgba(212, 168, 102, 0.16) 24%, rgba(16, 24, 34, 0.92) 100%)",
+                  boxShadow: "0 4px 16px rgba(250, 236, 212, 0.12)",
+                }}
+              />
+            ))}
+
+            {/* Fluted Acoustic Wainscot Vertical Ribbing */}
+            <div
+              style={{
+                position: "absolute",
+                inset: "0 8% 0 0",
+                backgroundImage:
+                  "repeating-linear-gradient(90deg, rgba(250, 236, 212, 0.03) 0px, rgba(250, 236, 212, 0.03) 2px, transparent 2px, transparent 22px)",
+              }}
+            />
+          </div>
+
+          {/* Cool Architectural Window Mullions & Daylight Sheen (Right Third Behind Glass) */}
+          <div
+            style={{
+              position: "absolute",
+              right: "4%",
+              top: "7%",
+              width: "36%",
+              height: "76%",
+              transform: `translate3d(${(-driftX * 0.4).toFixed(2)}px, ${(
+                driftY * 0.25
+              ).toFixed(2)}px, 0)`,
+              border: "1px solid rgba(191, 214, 234, 0.16)",
+              borderRadius: "6px",
+              background:
+                "linear-gradient(155deg, rgba(79, 179, 174, 0.12) 0%, rgba(62, 106, 148, 0.08) 48%, rgba(15, 25, 35, 0.25) 100%)",
+              filter: "blur(1px)",
+            }}
+          >
+            {/* Window Mullion Crossbars — give backdrop-filter luminous crisp bands to refract */}
+            <div
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: 0,
+                bottom: 0,
+                width: "2px",
+                background:
+                  "linear-gradient(180deg, rgba(191, 214, 234, 0.26) 0%, rgba(79, 179, 174, 0.18) 100%)",
+              }}
+            />
+            {[28, 56, 80].map((pct) => (
+              <div
+                key={`mullion-${pct}`}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: `${pct}%`,
+                  height: "2px",
+                  background:
+                    "linear-gradient(90deg, rgba(191, 214, 234, 0.14) 0%, rgba(250, 248, 243, 0.24) 55%, rgba(79, 179, 174, 0.16) 100%)",
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Warm Tungsten Practical Desk Lamp Rim (Left Key Accent) */}
+          <div
+            style={{
+              position: "absolute",
+              top: "-8%",
+              left: "-6%",
+              width: "50%",
+              height: "78%",
               borderRadius: "50%",
               background:
-                "radial-gradient(circle, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.04) 55%, transparent 75%)",
-              filter: "blur(60px)",
-              transform: `translate3d(${driftX * 0.8}px, ${driftY * 0.8}px, 0)`,
+                "radial-gradient(circle, rgba(250, 236, 212, 0.16) 0%, rgba(217, 152, 68, 0.07) 44%, transparent 72%)",
+              transform: `translate3d(${(driftX * 0.65).toFixed(2)}px, ${(
+                driftY * 0.65
+              ).toFixed(2)}px, 0)`,
             }}
           />
 
-          {/* Cool Practical Backlight Gradient (Right: deep cyan/indigo) */}
+          {/* Cool Practical Backlight Gradient (Right: crisp cyan/slate fill) */}
           <div
             style={{
               position: "absolute",
-              bottom: "-10%",
-              right: "-5%",
-              width: "55%",
-              height: "85%",
+              bottom: "-6%",
+              right: "-4%",
+              width: "48%",
+              height: "74%",
               borderRadius: "50%",
               background:
-                "radial-gradient(circle, rgba(59, 130, 246, 0.18) 0%, rgba(37, 99, 235, 0.05) 55%, transparent 75%)",
-              filter: "blur(70px)",
-              transform: `translate3d(${-driftX * 0.6}px, ${-driftY * 0.6}px, 0)`,
+                "radial-gradient(circle, rgba(79, 179, 174, 0.14) 0%, rgba(62, 106, 148, 0.07) 48%, transparent 74%)",
+              transform: `translate3d(${(-driftX * 0.5).toFixed(2)}px, ${(
+                -driftY * 0.5
+              ).toFixed(2)}px, 0)`,
             }}
           />
 
-          {/* Blurred Studio Background Elements (Acoustic panels & shelving) */}
+          {/* Studio Desk Horizon Line & Subtle Brass Edge Glint */}
           <div
             style={{
               position: "absolute",
-              left: "8%",
-              top: "18%",
-              width: "360px",
-              height: "520px",
-              borderRadius: "16px",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: "148px",
               background:
-                "linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)",
-              border: "1px solid rgba(255, 255, 255, 0.04)",
-              filter: "blur(14px)",
-              opacity: 0.6,
+                "linear-gradient(180deg, rgba(22, 34, 48, 0.72) 0%, rgba(12, 19, 28, 0.94) 100%)",
+              borderTop: "1px solid rgba(250, 236, 212, 0.20)",
             }}
           />
 
-          {/* Studio Bokeh Light Orbs */}
-          <div
-            style={{
-              position: "absolute",
-              top: "24%",
-              left: "32%",
-              width: "140px",
-              height: "140px",
-              borderRadius: "50%",
-              background: "rgba(251, 191, 36, 0.08)",
-              filter: "blur(24px)",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              top: "40%",
-              right: "28%",
-              width: "180px",
-              height: "180px",
-              borderRadius: "50%",
-              background: "rgba(96, 165, 250, 0.07)",
-              filter: "blur(32px)",
-            }}
-          />
-
-          {/* Presenter Silhouette Placeholder (Left 60% of frame, leaving right third open) */}
+          {/* Soft-Focus Atmospheric Presenter Shoulder Framing (Left Third, Clean Depth) */}
           <div
             style={{
               position: "absolute",
               bottom: 0,
-              left: "12%",
-              width: "520px",
-              height: "760px",
+              left: "11%",
+              width: "460px",
+              height: "680px",
               background:
-                "radial-gradient(ellipse 55% 85% at 50% 90%, rgba(18, 22, 28, 0.95) 0%, rgba(12, 14, 18, 0.88) 70%, transparent 100%)",
-              borderRadius: "280px 280px 0 0",
-              filter: "blur(36px)",
-              opacity: 0.82,
+                "linear-gradient(160deg, rgba(26, 38, 52, 0.72) 0%, rgba(14, 21, 30, 0.88) 65%, rgba(11, 17, 25, 0.94) 100%)",
+              borderRadius: "230px 230px 0 0",
+              borderTop: "1.5px solid rgba(250, 236, 212, 0.18)",
+              borderRight: "1px solid rgba(79, 179, 174, 0.16)",
+              filter: "blur(8px)",
+              opacity: 0.78,
             }}
           />
 
-          {/* Cinematic Vignette */}
+          {/* Refined Studio Vignette */}
           <div
             style={{
               position: "absolute",
               inset: 0,
               background:
-                "radial-gradient(ellipse 95% 85% at 50% 50%, transparent 40%, rgba(6, 8, 10, 0.88) 100%)",
+                "radial-gradient(ellipse 96% 88% at 50% 48%, transparent 46%, rgba(8, 13, 20, 0.72) 100%)",
             }}
           />
         </AbsoluteFill>

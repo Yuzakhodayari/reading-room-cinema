@@ -25,7 +25,10 @@ import type {
   DepthSandwichConfig,
   DepthSandwichSpec,
   DirectorBeat as CanonicalDirectorBeat,
+  DirectorExhibitData,
+  DirectorSeriesPoint,
   DirectorSfxCue,
+  DirectorTableRow,
 } from "../director/schema";
 import { BlueprintThemeRegister, SceneBlueprint } from "../generative/blueprintTypes";
 import { SceneBlueprintRenderer } from "../generative/SceneBlueprintRenderer";
@@ -132,6 +135,9 @@ export interface FlexibleBeatInput {
   musicTrackId?: string;
   cameraAction?: string;
   cameraTrajectory?: string;
+  tableRows?: DirectorTableRow[];
+  seriesData?: DirectorSeriesPoint[];
+  exhibitData?: DirectorExhibitData;
   data?: Record<string, unknown>;
 }
 
@@ -195,20 +201,45 @@ export const DEFAULT_DIRECTOR_BEAT: DirectorBeat = {
 
 const LEGACY_24_SET = new Set<string>(LEGACY_24_STYLE_IDS as readonly string[]);
 
-const EXTENDED_GLASS_RIG_SET = new Set<string>([
-  "dossier-stack",
-  "evidence-rail",
-  "magnifier-card",
-  "telemetry-strip",
-  "verdict-seal",
-  "compare-scale",
-  "timeline-scrubber",
-  "receipt-ticker",
-  "terminal-console",
-  "map-callout",
-  "stat-triptych",
-  "quote-citation",
-]);
+const GLASS_PRESET_KEY_ALIAS: Readonly<Record<string, string>> = {
+  card: "card",
+  glasscard: "card",
+  "liquidglassobject:card": "card",
+  pill: "corner-pill",
+  "corner-pill": "corner-pill",
+  glasscornerpill: "corner-pill",
+  "liquidglassobject:pill": "corner-pill",
+  dock: "bottom-dock",
+  "bottom-dock": "bottom-dock",
+  glassbottomdock: "bottom-dock",
+  "liquidglassobject:dock": "bottom-dock",
+  toolbar: "floating-toolbar",
+  "floating-toolbar": "floating-toolbar",
+  glassfloatingtoolbar: "floating-toolbar",
+  "liquidglassobject:toolbar": "floating-toolbar",
+  toast: "toast-alert",
+  "toast-alert": "toast-alert",
+  glasstoastalert: "toast-alert",
+  "liquidglassobject:toast": "toast-alert",
+  split: "split-modal",
+  "split-modal": "split-modal",
+  glasssplitmodal: "split-modal",
+  "liquidglassobject:split-modal": "split-modal",
+  "dossier-stack": "dossier-stack",
+  "evidence-rail": "evidence-rail",
+  "magnifier-card": "magnifier-card",
+  "telemetry-strip": "telemetry-strip",
+  "verdict-seal": "verdict-seal",
+  "compare-scale": "compare-scale",
+  "timeline-scrubber": "timeline-scrubber",
+  "receipt-ticker": "receipt-ticker",
+  "terminal-console": "terminal-console",
+  "map-callout": "map-callout",
+  "stat-triptych": "stat-triptych",
+  "quote-citation": "quote-citation",
+};
+
+const ALL_18_GLASS_RIG_SET = new Set<string>(Object.keys(GLASS_PRESET_KEY_ALIAS));
 
 const AI_DIRECTOR_RECIPE_ALIAS_MAP: Readonly<Record<string, string>> = {
   "macro-diverging-jaws": "DivergingJawsChart",
@@ -344,6 +375,31 @@ export function normalizeDirectorBeat(
   const musicStemId = raw.musicStemId || raw.musicTrackId;
   const cameraAction = raw.cameraAction || raw.cameraTrajectory;
 
+  const dataRec =
+    raw.data && typeof raw.data === "object" && !Array.isArray(raw.data)
+      ? (raw.data as Record<string, unknown>)
+      : undefined;
+  const tableRows =
+    raw.tableRows ??
+    (Array.isArray(dataRec?.tableRows) ? (dataRec.tableRows as DirectorTableRow[]) : undefined);
+  const seriesData =
+    raw.seriesData ??
+    (Array.isArray(dataRec?.seriesData) ? (dataRec.seriesData as DirectorSeriesPoint[]) : undefined);
+  const exhibitData =
+    raw.exhibitData ??
+    (dataRec?.exhibitData &&
+    typeof dataRec.exhibitData === "object" &&
+    !Array.isArray(dataRec.exhibitData)
+      ? (dataRec.exhibitData as DirectorExhibitData)
+      : undefined);
+  const propIds =
+    raw.propIds ??
+    (Array.isArray(dataRec?.propIds)
+      ? (dataRec.propIds as unknown[]).filter((x): x is string => typeof x === "string")
+      : undefined);
+  const geoQuery =
+    raw.geoQuery ?? (typeof dataRec?.geoQuery === "string" ? dataRec.geoQuery : undefined);
+
   return {
     ...raw,
     id: raw.id || "beat-001",
@@ -365,13 +421,21 @@ export function normalizeDirectorBeat(
     ...(register ? { register } : {}),
     ...(musicStemId ? { musicStemId } : {}),
     ...(cameraAction ? { cameraAction } : {}),
+    ...(tableRows && tableRows.length > 0 ? { tableRows } : {}),
+    ...(seriesData && seriesData.length > 0 ? { seriesData } : {}),
+    ...(exhibitData ? { exhibitData } : {}),
+    ...(propIds && propIds.length > 0 ? { propIds } : {}),
+    ...(geoQuery ? { geoQuery } : {}),
   };
 }
 
 function formatCategoryLabel(category: string): string {
   const key = (category || "").trim().toLowerCase();
-  if (CATEGORY_LABELS[key]) return CATEGORY_LABELS[key];
-  return (category || "Note").replace(/[-_]+/g, " ");
+  const label = CATEGORY_LABELS[key] ?? (category || "Note").replace(/[-_]+/g, " ").trim();
+  if (label.length <= 18) return label;
+  const cut = label.slice(0, 18);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 4 ? cut.slice(0, lastSpace) : cut).trim();
 }
 
 function formatStyleLabel(styleFamily: string, styleWorld?: string): string {
@@ -382,59 +446,242 @@ function formatStyleLabel(styleFamily: string, styleWorld?: string): string {
   return (styleFamily || "Editorial").replace(/[-_]+/g, " ");
 }
 
+const SPELLED_NUMBER_VALUES: Readonly<Record<string, number>> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+};
+
+function parseSpelledNumberWords(rawWords: string): number | null {
+  const cleaned = rawWords
+    .toLowerCase()
+    .replace(/\b(a|an|and)\b/g, " ")
+    .replace(/[-]+/g, " ")
+    .trim();
+  if (!cleaned) return null;
+  if (cleaned === "half" || cleaned === "one half") return 50;
+  if (cleaned === "one third" || cleaned === "a third") return 33;
+  if (cleaned === "two thirds") return 67;
+  if (cleaned === "one quarter" || cleaned === "a quarter") return 25;
+  if (cleaned === "three quarters") return 75;
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  let total = 0;
+  let matchedAny = false;
+  for (const tok of tokens) {
+    if (tok === "hundred") {
+      total = (total > 0 ? total : 1) * 100;
+      matchedAny = true;
+    } else if (SPELLED_NUMBER_VALUES[tok] !== undefined) {
+      total += SPELLED_NUMBER_VALUES[tok];
+      matchedAny = true;
+    } else {
+      return null;
+    }
+  }
+  return matchedAny ? total : null;
+}
+
+interface ExtractedMetricToken {
+  raw: string;
+  numeric: number;
+  prefix: string;
+  suffix: string;
+  index: number;
+}
+
 function extractAllMetrics(text: string): Array<{
   raw: string;
   numeric: number;
   prefix: string;
   suffix: string;
 }> {
-  const regex =
-    /([$€£])?\s*(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(%|percent\b|trillion\b|billion\b|million\b|thousand\b)|([TBMK]\b))?/gi;
-  const results: Array<{
-    raw: string;
-    numeric: number;
-    prefix: string;
-    suffix: string;
-  }> = [];
+  const found: ExtractedMetricToken[] = [];
 
-  let match: RegExpExecArray | null = regex.exec(text);
+  // 1. Numeric expressions including optional sign, currency, decimals, and unit/rate suffix
+  const numericRegex =
+    /([+-])?\s*([$€£])?\s*(\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(?:(trillion|billion|million|thousand|percent|percentage points?|gigawatts?|megawatts?|kilowatts?|ration points?|basis points?|weeks?|years?)\b|(%)|([TBMK])\b)?(\/[A-Za-z-]+(?:\s+dollars)?)?/gi;
+
+  let match: RegExpExecArray | null = numericRegex.exec(text);
   while (match !== null) {
-    const prefix = match[1] ?? "";
-    const numRaw = match[2];
+    const sign = match[1] ?? "";
+    const prefix = match[2] ?? "";
+    const numRaw = match[3];
     const numStr = numRaw.replace(/,/g, "");
-    const numeric = Number(numStr);
-    if (Number.isFinite(numeric)) {
-      const unitWord = match[3] ? match[3].toLowerCase() : undefined;
-      const unitAbbr = match[4] ? match[4].toUpperCase() : undefined;
+    const absNumeric = Number(numStr);
+    if (Number.isFinite(absNumeric)) {
+      const unitWord = match[4] ? match[4].toLowerCase() : undefined;
+      const pctSym = match[5];
+      const unitAbbr = match[6] ? match[6].toUpperCase() : undefined;
+      const rateSuffix = match[7] ?? "";
       const hasCurrency = Boolean(prefix);
-      const hasUnit = Boolean(unitWord || unitAbbr);
+      const hasUnit = Boolean(unitWord || pctSym || unitAbbr || rateSuffix);
       const isYear =
+        !sign &&
         !hasCurrency &&
         !hasUnit &&
-        Math.floor(numeric) === numeric &&
-        numeric >= 1900 &&
-        numeric <= 2099;
+        Math.floor(absNumeric) === absNumeric &&
+        absNumeric >= 1900 &&
+        absNumeric <= 2099;
 
       if (!isYear && (hasCurrency || hasUnit)) {
         let suffix = "";
-        if (unitWord === "%" || unitWord === "percent") suffix = "%";
-        else if (unitWord === "trillion" || unitAbbr === "T") suffix = "T";
-        else if (unitWord === "billion" || unitAbbr === "B") suffix = "B";
-        else if (unitWord === "million" || unitAbbr === "M") suffix = "M";
-        else if (unitWord === "thousand" || unitAbbr === "K") suffix = "K";
+        if (pctSym === "%" || unitWord === "percent" || unitWord?.startsWith("percentage point")) {
+          suffix = "%";
+        } else if (unitWord === "trillion" || unitAbbr === "T") {
+          suffix = "T";
+        } else if (unitWord === "billion" || unitAbbr === "B") {
+          suffix = "B";
+        } else if (unitWord === "million" || unitAbbr === "M") {
+          suffix = "M";
+        } else if (unitWord === "thousand" || unitAbbr === "K") {
+          suffix = "K";
+        } else if (unitWord?.startsWith("gigawatt")) {
+          suffix = " GW";
+        } else if (unitWord?.startsWith("megawatt")) {
+          suffix = " MW";
+        } else if (unitWord?.startsWith("kilowatt")) {
+          suffix = " kW";
+        } else if (unitWord?.startsWith("ration point")) {
+          suffix = " pts";
+        } else if (unitWord?.startsWith("basis point")) {
+          suffix = " bps";
+        } else if (unitWord?.startsWith("week")) {
+          suffix = " wks";
+        } else if (unitWord?.startsWith("year")) {
+          suffix = " yrs";
+        }
+        if (rateSuffix && rateSuffix.startsWith("/")) {
+          suffix = `${suffix}${rateSuffix.trim()}`;
+        }
 
-        results.push({
-          raw: prefix + numRaw + suffix,
+        const numeric = sign === "-" ? -absNumeric : absNumeric;
+        found.push({
+          raw: `${sign}${prefix}${numRaw}${suffix}`,
           numeric,
-          prefix,
+          prefix: `${sign}${prefix}`,
           suffix,
+          index: match.index,
         });
       }
     }
-    match = regex.exec(text);
+    match = numericRegex.exec(text);
   }
 
-  return results;
+  // 2. Spelled-out English fractions & quantified numbers (e.g. "eighty-six percent", "two-thirds", "forty trillion", "five gigawatts", "sixteen ration points")
+  const wordUnit =
+    "(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)";
+  const spelledRegex = new RegExp(
+    `\\b(negative\\s+|minus\\s+|up\\s+|down\\s+)?(?:(two[- ]thirds|one[- ]third|three[- ]quarters|one[- ]quarter|one[- ]half)|((?:(?:a\\s+)?hundred(?:\\s+and)?\\s+)?${wordUnit}(?:[-\\s]+${wordUnit}){0,2})\\s+(percent(?:age\\s+points?)?|trillion(?:\\s+dollars)?|billion(?:\\s+dollars)?|million(?:\\s+dollars)?|gigawatts?|megawatts?|kilowatts?|ration\\s+points?|basis\\s+points?|dollars))\\b`,
+    "gi"
+  );
+
+  let sMatch: RegExpExecArray | null = spelledRegex.exec(text);
+  while (sMatch !== null) {
+    const dirWord = (sMatch[1] ?? "").toLowerCase();
+    const fractionWords = sMatch[2];
+    const numberWords = sMatch[3];
+    const unitRaw = (sMatch[4] ?? "").toLowerCase();
+    const isNeg = dirWord.includes("negative") || dirWord.includes("minus");
+    const sign = isNeg ? "-" : "";
+
+    if (fractionWords) {
+      const fracVal = parseSpelledNumberWords(fractionWords);
+      if (fracVal !== null) {
+        found.push({
+          raw: `${sign}${fracVal}%`,
+          numeric: isNeg ? -fracVal : fracVal,
+          prefix: sign,
+          suffix: "%",
+          index: sMatch.index,
+        });
+      }
+    } else if (numberWords && unitRaw) {
+      const val = parseSpelledNumberWords(numberWords);
+      if (val !== null) {
+        let prefix = "";
+        let suffix = "";
+        const trailingCtx = text.slice(sMatch.index, sMatch.index + sMatch[0].length + 28).toLowerCase();
+        const isNonCurrencyMacro =
+          /\b(tokens?|watts?|bytes?|people|jobs?|workers?|citizens?|ration)\b/.test(trailingCtx);
+        if (unitRaw.startsWith("percent")) {
+          suffix = "%";
+        } else if (unitRaw.startsWith("trillion")) {
+          prefix = unitRaw.includes("dollar") || !isNonCurrencyMacro ? "$" : "";
+          suffix = "T";
+        } else if (unitRaw.startsWith("billion")) {
+          prefix = unitRaw.includes("dollar") || !isNonCurrencyMacro ? "$" : "";
+          suffix = "B";
+        } else if (unitRaw.startsWith("million")) {
+          prefix = unitRaw.includes("dollar") || !isNonCurrencyMacro ? "$" : "";
+          suffix = "M";
+        } else if (unitRaw.startsWith("gigawatt")) {
+          suffix = " GW";
+        } else if (unitRaw.startsWith("megawatt")) {
+          suffix = " MW";
+        } else if (unitRaw.startsWith("kilowatt")) {
+          suffix = " kW";
+        } else if (unitRaw.startsWith("ration")) {
+          suffix = " pts";
+        } else if (unitRaw.startsWith("basis")) {
+          suffix = " bps";
+        } else if (unitRaw === "dollars") {
+          prefix = "$";
+        }
+        found.push({
+          raw: `${sign}${prefix}${val}${suffix}`,
+          numeric: isNeg ? -val : val,
+          prefix: `${sign}${prefix}`,
+          suffix,
+          index: sMatch.index,
+        });
+      }
+    }
+    sMatch = spelledRegex.exec(text);
+  }
+
+  // Sort by order of appearance in spoken prose and deduplicate identical normalized values at close indices
+  found.sort((a, b) => a.index - b.index);
+  const deduped: Array<{ raw: string; numeric: number; prefix: string; suffix: string }> = [];
+  const seenKeys = new Set<string>();
+  for (const item of found) {
+    const key = `${item.numeric}:${item.suffix}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      deduped.push({
+        raw: item.raw,
+        numeric: item.numeric,
+        prefix: item.prefix,
+        suffix: item.suffix,
+      });
+    }
+  }
+  return deduped;
 }
 
 function extractPrimaryMetric(text: string): {
@@ -444,6 +691,57 @@ function extractPrimaryMetric(text: string): {
   suffix: string;
 } | null {
   return extractAllMetrics(text)[0] ?? null;
+}
+
+function sanitizeCompactBadgeCandidate(raw: string): string | undefined {
+  const clean = raw.replace(/\s+/g, " ").trim();
+  if (!clean) return undefined;
+
+  if (clean.length <= 18) {
+    const wordCount = clean.split(/\s+/).length;
+    if (wordCount >= 3 && !/\d/.test(clean)) {
+      return undefined;
+    }
+    if (/[,;]$/.test(clean) && wordCount >= 3) {
+      return undefined;
+    }
+    return clean;
+  }
+
+  const extracted = extractPrimaryMetric(clean);
+  if (!extracted) return undefined;
+  const compacted = extracted.raw
+    .replace(/\/megawatt-day/i, "/MW-d")
+    .replace(/\/kilowatt-hour/i, "/kWh")
+    .replace(/\/gigawatt/i, "/GW")
+    .replace(/\s+dollars$/i, "")
+    .trim();
+  return compacted.length <= 18 ? compacted : undefined;
+}
+
+export function extractCompactMetricBadge(beat: DirectorBeat): string | undefined {
+  const dataRec =
+    beat.data && typeof beat.data === "object" && !Array.isArray(beat.data)
+      ? (beat.data as Record<string, unknown>)
+      : undefined;
+  const dsObj =
+    typeof beat.depthSandwich === "object" && beat.depthSandwich !== null
+      ? beat.depthSandwich
+      : undefined;
+
+  const candidates: Array<string | undefined> = [
+    typeof dataRec?.primaryMetric === "string" ? dataRec.primaryMetric : undefined,
+    beat.tableRows?.[0]?.value,
+    dsObj?.heroFigure,
+    extractPrimaryMetric(beat.spokenText)?.raw,
+  ];
+
+  for (const cand of candidates) {
+    if (!cand) continue;
+    const compact = sanitizeCompactBadgeCandidate(cand);
+    if (compact) return compact;
+  }
+  return undefined;
 }
 
 function extractFirstSentence(clean: string): string {
@@ -622,6 +920,27 @@ function resolveDynamicMapProps(
   };
 }
 
+function hasBeatGeoTarget(beat: DirectorBeat): boolean {
+  if (beat.mapTarget) {
+    const resolvedTarget = resolveGeoQuery(beat.mapTarget);
+    if (resolvedTarget.matchedBy !== "world-overview-fallback") return true;
+    if (
+      (beat.mapTarget.pins && beat.mapTarget.pins.length > 0) ||
+      (beat.mapTarget.arcs && beat.mapTarget.arcs.length > 0)
+    ) {
+      return true;
+    }
+  }
+  if (beat.geoCorridor) {
+    const resolvedCorridor = resolveGeoQuery({ corridorId: beat.geoCorridor as CorridorId });
+    if (resolvedCorridor.matchedBy !== "world-overview-fallback") return true;
+  }
+  const candidate = (beat.geoQuery || beat.spokenText || beat.text || "").trim();
+  if (!candidate) return false;
+  const resolved = resolveGeoQuery({ query: candidate });
+  return resolved.matchedBy !== "world-overview-fallback";
+}
+
 function resolveBlueprintThemeRegister(raw?: string): BlueprintThemeRegister {
   if (!raw) return "paper_editorial";
   const norm = raw.trim().toLowerCase();
@@ -653,7 +972,7 @@ function softenActionToken(tok: string, isPunchline: boolean): string {
 }
 
 function normalizeComponentHint(beat: DirectorBeat): string {
-  const raw = (beat.glassPreset || beat.componentHint || "GlassCard").trim();
+  const raw = (beat.glassRig || beat.glassPreset || beat.componentHint || "GlassCard").trim();
   const map: Record<string, string> = {
     card: "GlassCard",
     LiquidGlassObject: "GlassCard",
@@ -670,6 +989,7 @@ function normalizeComponentHint(beat: DirectorBeat): string {
     toast: "GlassToastAlert",
     "toast-alert": "GlassToastAlert",
     "LiquidGlassObject:toast": "GlassToastAlert",
+    split: "GlassSplitModal",
     "split-modal": "GlassSplitModal",
     "LiquidGlassObject:split-modal": "GlassSplitModal",
   };
@@ -1026,6 +1346,32 @@ function renderBeatComponent(
   const metrics = extractAllMetrics(beat.spokenText);
   const metric = metrics[0] ?? null;
   const secondMetric = metrics[1] ?? null;
+  const dataRec =
+    beat.data && typeof beat.data === "object" && !Array.isArray(beat.data)
+      ? (beat.data as Record<string, unknown>)
+      : undefined;
+  const compactMetric = extractCompactMetricBadge(beat);
+  const secondaryMetricRaw =
+    (secondMetric ? sanitizeCompactBadgeCandidate(secondMetric.raw) : undefined) ??
+    (typeof dataRec?.secondaryMetric === "string"
+      ? sanitizeCompactBadgeCandidate(dataRec.secondaryMetric)
+      : undefined) ??
+    (beat.tableRows?.[1]?.value
+      ? sanitizeCompactBadgeCandidate(beat.tableRows[1].value)
+      : undefined);
+  const sanitizedData = dataRec
+    ? {
+        ...dataRec,
+        primaryMetric:
+          typeof dataRec.primaryMetric === "string"
+            ? sanitizeCompactBadgeCandidate(dataRec.primaryMetric) ?? compactMetric
+            : compactMetric,
+        secondaryMetric:
+          typeof dataRec.secondaryMetric === "string"
+            ? sanitizeCompactBadgeCandidate(dataRec.secondaryMetric) ?? secondaryMetricRaw
+            : secondaryMetricRaw,
+      }
+    : undefined;
   const categoryLabel = formatCategoryLabel(beat.category);
   const styleLabel = formatStyleLabel(beat.styleFamily, beat.styleWorld);
 
@@ -1046,6 +1392,34 @@ function renderBeatComponent(
   const kineticMode: KineticTextMode = isTypographyMode(beat.typographyMode ?? "")
     ? (beat.typographyMode as KineticTextMode)
     : "word-pop";
+  const deltaRaw =
+    (typeof dataRec?.delta === "string" ? dataRec.delta : undefined) ??
+    beat.tableRows?.[0]?.delta ??
+    (isWarning ? "Risk Signal" : undefined);
+
+  const commonRecipeProps = {
+    title: headline,
+    subtitle: beat.spokenText,
+    eyebrow: categoryLabel,
+    headline,
+    body: beat.spokenText,
+    spokenText: beat.spokenText,
+    metric: compactMetric,
+    secondaryMetric: secondaryMetricRaw,
+    delta: deltaRaw,
+    sourceCitation: beat.sourceCitation,
+    paletteMode: isPageCutaway ? ("page" as const) : ("over-footage" as const),
+    atFrame: 0,
+    duration: beatFrames,
+    enableSfx: false,
+    blueprintId: beat.setPieceId,
+    register: beat.register ?? beat.visualRegister,
+    propIds: beat.propIds,
+    tableRows: beat.tableRows,
+    seriesData: beat.seriesData,
+    exhibitData: beat.exhibitData,
+    data: sanitizedData,
+  };
 
   // 0A. Declarative Custom SceneBlueprint or 24 Signature Set-Pieces (Pillar #13)
   const blueprintTarget = beat.sceneBlueprint || beat.setPieceId || beat.setPieceSlug;
@@ -1067,33 +1441,47 @@ function renderBeatComponent(
     };
   }
 
-  // 0B. Extended 18-Preset Smoked-Navy Liquid Glass Rigs (Pillar #1)
-  const rawGlassRig = (beat.glassRig || beat.glassPreset || "").trim().toLowerCase();
-  if (!isPageCutaway && EXTENDED_GLASS_RIG_SET.has(rawGlassRig)) {
-    const presetMeta = resolveGlassPreset(rawGlassRig);
+  // 0B. All 18 Smoked-Navy Liquid Glass Rigs (6 Core + 12 Extended)
+  const explicitNonGlassStyle =
+    Boolean(beat.recipeId && !beat.recipeId.startsWith("liquid-glass-")) ||
+    (Boolean(beat.styleFamily) && beat.styleFamily !== "liquid-glass");
+  const rawGlassRig = (
+    beat.glassRig ||
+    (!explicitNonGlassStyle ? beat.glassPreset : "") ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+  if (!isPageCutaway && ALL_18_GLASS_RIG_SET.has(rawGlassRig)) {
+    const canonicalRigId = GLASS_PRESET_KEY_ALIAS[rawGlassRig] ?? rawGlassRig;
+    const presetMeta = resolveGlassPreset(canonicalRigId);
+    const beatHasGeoForGlass = hasBeatGeoTarget(beat);
+    const dynGlassMap = beatHasGeoForGlass
+      ? resolveDynamicMapProps(beat, headline, "over-footage", isWarning)
+      : undefined;
+    const hideEmptyMetric =
+      presetMeta.id === "card" ||
+      presetMeta.id === "corner-pill" ||
+      presetMeta.id === "floating-toolbar" ||
+      presetMeta.id === "verdict-seal" ||
+      presetMeta.id === "map-callout";
     return {
       wrapperStyle: resolveGlassSafeWrapperStyle(presetMeta.safePlacement, isFullscreen),
       node: renderStyleRecipe("liquid-glass-" + presetMeta.id, {
-        title: headline,
-        subtitle: beat.spokenText,
-        eyebrow: categoryLabel,
-        headline,
-        body: beat.spokenText,
-        metric: metric ? metric.raw : undefined,
-        secondaryMetric: secondMetric ? secondMetric.raw : undefined,
-        delta: isWarning ? "Risk Signal" : undefined,
-        sourceCitation: beat.sourceCitation,
+        ...commonRecipeProps,
+        metric: hideEmptyMetric ? (compactMetric ?? "") : compactMetric,
         paletteMode: "over-footage",
-        atFrame: 0,
-        duration: beatFrames,
-        enableSfx: false,
+        corridorId: dynGlassMap?.corridorId,
+        geoQuery: beatHasGeoForGlass ? (beat.geoQuery ?? dynGlassMap?.query) : undefined,
       }),
     };
   }
 
   // 0C. Unified 162-Recipe Style Worlds Dispatch (Macro Telemetry, Forensic Exhibits,
   // System Simulators, UI Satire, Corridor Cartography, Generative Set-Pieces)
-  const rawRecipeKey = beat.recipeId ? (AI_DIRECTOR_RECIPE_ALIAS_MAP[beat.recipeId] || beat.recipeId) : undefined;
+  const rawRecipeKey = beat.recipeId
+    ? AI_DIRECTOR_RECIPE_ALIAS_MAP[beat.recipeId] || beat.recipeId
+    : undefined;
   const matchedExtendedRecipe =
     rawRecipeKey && !LEGACY_24_SET.has(rawRecipeKey)
       ? findStyleRecipe(rawRecipeKey)
@@ -1104,11 +1492,24 @@ function renderBeatComponent(
   if (
     matchedExtendedRecipe &&
     !matchedExtendedRecipe.isLegacy24 &&
-    matchedExtendedRecipe.styleWorld !== "liquid-glass" &&
-    matchedExtendedRecipe.componentName !== "MapExplainer"
+    matchedExtendedRecipe.styleWorld !== "liquid-glass"
   ) {
+    const isMapRecipe =
+      matchedExtendedRecipe.componentName === "MapExplainer" ||
+      matchedExtendedRecipe.componentName === "CorridorArcMatrixCard";
+    const beatHasGeo = hasBeatGeoTarget(beat);
+
+    if (isMapRecipe && !beatHasGeo) {
+      return {
+        fullCanvas: isPageCutaway || isFullscreen,
+        wrapperStyle:
+          isPageCutaway || isFullscreen ? undefined : { position: "absolute", right: "68px", top: "150px" },
+        node: renderStyleRecipe("data-physical-card", commonRecipeProps),
+      };
+    }
+
     const dynMap =
-      matchedExtendedRecipe.styleWorld === "data-maps-3d"
+      matchedExtendedRecipe.styleWorld === "data-maps-3d" && beatHasGeo
         ? resolveDynamicMapProps(beat, headline, isPageCutaway ? "page" : "over-footage", isWarning)
         : undefined;
 
@@ -1117,21 +1518,9 @@ function renderBeatComponent(
       wrapperStyle:
         isPageCutaway || isFullscreen ? undefined : { position: "absolute", right: "68px", top: "150px" },
       node: renderStyleRecipe(matchedExtendedRecipe.id, {
-        title: headline,
-        subtitle: beat.spokenText,
-        eyebrow: categoryLabel,
-        headline,
-        body: beat.spokenText,
-        metric: metric ? metric.raw : undefined,
-        secondaryMetric: secondMetric ? secondMetric.raw : undefined,
-        delta: isWarning ? "Risk Signal" : undefined,
-        sourceCitation: beat.sourceCitation,
-        paletteMode: isPageCutaway ? "page" : "over-footage",
-        atFrame: 0,
-        duration: beatFrames,
-        enableSfx: false,
-        blueprintId: beat.setPieceId,
+        ...commonRecipeProps,
         corridorId: dynMap?.corridorId,
+        geoQuery: beatHasGeo ? (beat.geoQuery ?? dynMap?.query) : undefined,
       }),
     };
   }
@@ -1152,7 +1541,7 @@ function renderBeatComponent(
             badge={categoryLabel}
             subtitle={styleLabel}
             title={headline}
-            metric={metric ? { value: metric.raw, label: "Key Figure" } : undefined}
+            metric={compactMetric ? { value: compactMetric, label: "Key Figure" } : undefined}
             body={beat.spokenText}
             citation={beat.sourceCitation}
             isWarning={isWarning}
@@ -1179,9 +1568,9 @@ function renderBeatComponent(
           subtitle={styleLabel}
           title={headline}
           metric={
-            metric
+            compactMetric
               ? {
-                  value: metric.raw,
+                  value: compactMetric,
                   label: "Key Figure",
                   delta: isWarning ? "Risk Signal" : undefined,
                   deltaPositive: !isWarning,
@@ -1205,7 +1594,7 @@ function renderBeatComponent(
         <GlassCornerPill
           badge={categoryLabel}
           label={headline}
-          value={metric ? metric.raw : undefined}
+          value={compactMetric}
           tint={overFootageGlassTint}
           lifecycle={glassLifecycle}
           enableSfx={false}
@@ -1234,7 +1623,7 @@ function renderBeatComponent(
             { label: "Format", value: styleLabel, icon: "01" },
             {
               label: trimToWholeWords(headline, 26),
-              value: metric ? metric.raw : "Key Point",
+              value: compactMetric ?? "Key Point",
               icon: "02",
               active: true,
             },
@@ -1267,7 +1656,7 @@ function renderBeatComponent(
             { tag: "02", label: trimToWholeWords(headline, 24) },
             { tag: "03", label: "Impact" },
           ]}
-          rightSlot={metric ? metric.raw : undefined}
+          rightSlot={compactMetric}
           enableSfx={false}
         />
       ),
@@ -1359,6 +1748,13 @@ function renderBeatComponent(
           dateline={categoryLabel}
           headline={headline}
           body={beat.spokenText}
+          metric={compactMetric}
+          metricLabel={beat.tableRows?.[0]?.label ?? "KEY FIGURE"}
+          tableRows={beat.tableRows}
+          propIds={beat.propIds}
+          sourceCitation={beat.sourceCitation}
+          paletteMode={isPageCutaway ? "page" : "over-footage"}
+          fullScene={isFullscreen}
           atFrame={0}
         />
       ),
@@ -1377,7 +1773,7 @@ function renderBeatComponent(
             {
               id: "e2",
               label: categoryLabel,
-              value: metric ? metric.raw : "Risk Flag",
+              value: compactMetric ?? "Risk Flag",
               isFlagged: true,
             },
             {
@@ -1412,7 +1808,7 @@ function renderBeatComponent(
         <TelestratorOverlay
           atFrame={0}
           duration={Math.min(30, beatFrames)}
-          circleTarget={{ cx: 1320, cy: 480, r: 160, label: metric ? metric.raw : headline }}
+          circleTarget={{ cx: 1320, cy: 480, r: 160, label: compactMetric ?? headline }}
         />
       ),
     };
@@ -1426,7 +1822,7 @@ function renderBeatComponent(
         : { position: "absolute", left: "80px", bottom: "140px" },
       node: (
         <KinoMontageStrip
-          numberText={metric ? metric.raw : "01"}
+          numberText={compactMetric ?? "01"}
           headerText={headline}
           subtitle={beat.spokenText}
           category={categoryLabel}
@@ -1519,7 +1915,7 @@ function renderBeatComponent(
               badge={categoryLabel}
               subtitle={styleLabel}
               title={headline}
-              metric={metric ? { value: metric.raw, label: "Key Figure" } : undefined}
+              metric={compactMetric ? { value: compactMetric, label: "Key Figure" } : undefined}
               body={beat.spokenText}
               citation={beat.sourceCitation}
               isWarning={isWarning}
@@ -1666,8 +2062,8 @@ function renderBeatComponent(
     };
   }
 
-  // 4. Data, Maps & 3D Components (Dynamic Cartography — Zero Hardcoded Texas)
-  if (hint === "MapExplainer") {
+  // 4. Data, Maps & 3D Components (Dynamic Cartography — Zero Hardcoded Texas, Never Map Non-Geo)
+  if (hint === "MapExplainer" && hasBeatGeoTarget(beat)) {
     const mapCfg = resolveDynamicMapProps(
       beat,
       headline,
@@ -1687,7 +2083,7 @@ function renderBeatComponent(
           subtitle={beat.subtitle}
           spokenText={beat.spokenText}
           sourceCitation={beat.sourceCitation}
-          metricValue={metric ? metric.raw : undefined}
+          metricValue={compactMetric}
           routeTone={mapCfg.routeTone}
           paletteMode={isPageCutaway ? "page" : "over-footage"}
           atFrame={0}
@@ -1696,7 +2092,7 @@ function renderBeatComponent(
     };
   }
 
-  if (hint === "DataPhysicalCard") {
+  if (hint === "DataPhysicalCard" || hint === "MapExplainer") {
     const val1 = metrics[0] ? metrics[0].numeric : 84;
     const hasSecond = metrics.length >= 2;
     const val2 = hasSecond
@@ -2086,6 +2482,11 @@ export const DirectorBeatRenderer: React.FC<DirectorBeatRendererProps> = ({
     beat.propIds && beat.propIds.length > 0 && !beat.sceneBlueprint && !beat.setPieceId
       ? beat.propIds[0]
       : undefined;
+  const beatHasSelfContainedFullCanvasSource =
+    Boolean(slot.fullCanvas) &&
+    ["macro-telemetry", "forensic-exhibits", "system-simulators", "ui-satire-collage", "data-maps-3d"].includes(
+      beat.styleWorld || beat.styleFamily
+    );
 
   const animatedForegroundNode = slot.fullCanvas ? (
     <ObjectAnimator
@@ -2124,7 +2525,11 @@ export const DirectorBeatRenderer: React.FC<DirectorBeatRendererProps> = ({
 
   if (useDepthStage) {
     const headline = deriveHeadline(beat);
-    const metric = extractPrimaryMetric(beat.spokenText);
+    const compactDepthMetric = extractCompactMetricBadge(beat);
+    const depthFigure =
+      (depthCfg.heroFigure ? sanitizeCompactBadgeCandidate(depthCfg.heroFigure) : undefined) ||
+      compactDepthMetric ||
+      trimToWholeWords(headline, 18);
     const isWarning =
       beat.category.toLowerCase().indexOf("warn") !== -1 ||
       beat.category.toLowerCase().indexOf("risk") !== -1;
@@ -2144,7 +2549,7 @@ export const DirectorBeatRenderer: React.FC<DirectorBeatRendererProps> = ({
           presenterAlphaSrc={effectivePersonAlphaSrc}
           personMaskSrc={effectivePersonMaskSrc}
           heroBackdropFigure={{
-            figure: depthCfg.heroFigure || (metric ? metric.raw : headline),
+            figure: depthFigure,
             eyebrow: depthCfg.eyebrow || formatCategoryLabel(beat.category),
             sublabel: depthCfg.sublabel || headline,
             tone: isWarning ? "liability" : "cream",
@@ -2176,26 +2581,31 @@ export const DirectorBeatRenderer: React.FC<DirectorBeatRendererProps> = ({
       <AbsoluteFill style={{ pointerEvents: "none" }}>
         {animatedForegroundNode}
 
-        {primaryPropId && beat.framing === "fullscreen-cutaway" && (
-          <div style={{ position: "absolute", right: "76px", bottom: "76px", zIndex: 24 }}>
-            <PropVaultRenderer
-              propId={primaryPropId}
-              width={260}
-              height={190}
-              paletteMode="page"
-            />
-          </div>
-        )}
+        {primaryPropId &&
+          beat.framing === "fullscreen-cutaway" &&
+          !beatHasSelfContainedFullCanvasSource &&
+          normalizedHint !== "CaptionNewsCard" && (
+            <div style={{ position: "absolute", right: "76px", bottom: "76px", zIndex: 24 }}>
+              <PropVaultRenderer
+                propId={primaryPropId}
+                width={260}
+                height={190}
+                paletteMode="page"
+              />
+            </div>
+          )}
       </AbsoluteFill>
 
       {beat.sourceCitation &&
         beat.framing === "fullscreen-cutaway" &&
         !beat.sceneBlueprint &&
         !beat.setPieceId &&
+        !beatHasSelfContainedFullCanvasSource &&
         ![
           "GlassCard",
           "GlassSplitModal",
           "NewsPackageLowerThird",
+          "CaptionNewsCard",
           "ArchiveLightTable",
           "StainedGlassFrame",
         ].includes(normalizedHint) && (
